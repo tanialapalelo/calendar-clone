@@ -7,9 +7,13 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "format": "turbo run format",
+    "format:write": "prettier . --write",
+    "format:check": "prettier . --check",
     "clean": "turbo run clean"
   },
   "devDependencies": {
+    "prettier": "^3.7.4",
+    "prettier-plugin-tailwindcss": "^0.7.2",
     "turbo": "^2.7.2"
   }
 }
