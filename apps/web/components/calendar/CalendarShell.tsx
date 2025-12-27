@@ -4,8 +4,6 @@ import { DayView } from './views/DayView';
 import { MonthView } from './views/MonthView';
 import { YearView } from './views/YearView';
 
-type CalendarView = 'year' | 'month' | 'day';
-
 export function CalendarShell(props: {
   view: CalendarView;
   date: Date;
@@ -41,7 +39,15 @@ export function CalendarShell(props: {
 
       <main className="mx-auto max-w-6xl p-4">
         {view === 'year' && <YearView />}
-        {view === 'month' && <MonthView />}
+        {view === 'month' && (
+          <MonthView
+            date={date}
+            onSelectDate={(d) => {
+              onChangeDate(d);
+              onChangeView('day')
+            }}
+          />
+        )}
         {view === 'day' && <DayView />}
       </main>
     </div>

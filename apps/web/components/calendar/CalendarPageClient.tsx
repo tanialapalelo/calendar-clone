@@ -5,8 +5,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {formatIsoDate, parseIsoDateOrToday} from "@/lib/date";
 import {CalendarShell} from "@/components/calendar/CalendarShell";
 
-type CalendarView = 'year' | 'month' | 'day';
-
 function parseView(value: string | null): CalendarView {
   if (value === 'year' || value === 'month' || value === 'day') return value;
   return 'month';

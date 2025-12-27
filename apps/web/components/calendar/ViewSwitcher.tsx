@@ -1,5 +1,3 @@
-type CalendarView = 'year' | 'month' | 'day';
-
 export function ViewSwitcher(props: { view: CalendarView; onChange: (v: CalendarView) => void }) {
   const { view, onChange } = props;
 
