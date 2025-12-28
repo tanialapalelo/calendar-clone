@@ -15,8 +15,8 @@ export function YearMiniView(props: { monthDate: Date; onPickMonth?: (date: Date
     >
       <div className="mb-2 text-sm font-semibold text-gray-900">{format(monthDate, 'MMM')}</div>
       <div className="grid grid-cols-7 gap-y-1 text-[10px] text-gray-600">
-        {daysOfWeek.map((d) => (
-          <div key={d} className="text-center font-semibold">
+        {daysOfWeek.map((d, i) => (
+          <div key={`${d}-${i}`} className="text-center font-semibold">
             {d}
           </div>
         ))}
