@@ -2,10 +2,8 @@
 
 import { useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import {formatIsoDate, parseIsoDateOrToday} from "@/lib/date";
-import {CalendarShell} from "@/components/calendar/CalendarShell";
-
-type CalendarView = 'year' | 'month' | 'day';
+import { formatIsoDate, parseIsoDateOrToday } from '@/lib/date';
+import { CalendarShell } from '@/components/calendar/CalendarShell';
 
 function parseView(value: string | null): CalendarView {
   if (value === 'year' || value === 'month' || value === 'day') return value;
@@ -29,12 +27,15 @@ export default function CalendarPageClient() {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
+  const onNavigate = (next: { view?: CalendarView; date?: Date }) => setQuery(next);
+
   return (
     <CalendarShell
       view={view}
       date={date}
-      onChangeView={(v) => setQuery({ view: v })}
-      onChangeDate={(d) => setQuery({ date: d })}
+      onChangeView={(v) => onNavigate({ view: v })}
+      onChangeDate={(d) => onNavigate({ date: d })}
+      onNavigate={onNavigate}
     />
   );
 }

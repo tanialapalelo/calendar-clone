@@ -1,8 +1,6 @@
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 
-type CalendarView = 'year' | 'month' | 'day';
-
 export function CalendarHeader(props: {
   view: CalendarView;
   date: Date;
