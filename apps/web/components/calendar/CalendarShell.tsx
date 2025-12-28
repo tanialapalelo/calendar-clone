@@ -3,15 +3,18 @@ import { CalendarHeader } from './CalendarHeader';
 import { DayView } from './views/DayView';
 import { MonthView } from './views/MonthView';
 import { YearView } from './views/YearView';
+import * as events from 'node:events';
 
 export function CalendarShell(props: {
   view: CalendarView;
   date: Date;
+  events: CalendarEvent[];
   onChangeView: (v: CalendarView) => void;
   onChangeDate: (d: Date) => void;
   onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
+  onCreateEvent: () => void;
 }) {
-  const { view, date, onChangeView, onChangeDate, onNavigate } = props;
+  const { view, date, events, onChangeView, onChangeDate, onNavigate, onCreateEvent } = props;
 
   const onToday = () => onChangeDate(new Date());
 
@@ -36,6 +39,7 @@ export function CalendarShell(props: {
         onPrev={onPrev}
         onNext={onNext}
         onChangeView={onChangeView}
+        onCreate={onCreateEvent}
       />
 
       <main className="mx-auto max-w-6xl p-4">
@@ -50,6 +54,7 @@ export function CalendarShell(props: {
         {view === 'month' && (
           <MonthView
             date={date}
+            events={events}
             onSelectDate={(d) => {
               onNavigate({ date: d, view: 'day' });
             }}
