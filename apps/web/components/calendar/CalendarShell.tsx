@@ -9,8 +9,9 @@ export function CalendarShell(props: {
   date: Date;
   onChangeView: (v: CalendarView) => void;
   onChangeDate: (d: Date) => void;
+  onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
 }) {
-  const { view, date, onChangeView, onChangeDate } = props;
+  const { view, date, onChangeView, onChangeDate, onNavigate } = props;
 
   const onToday = () => onChangeDate(new Date());
 
@@ -38,13 +39,19 @@ export function CalendarShell(props: {
       />
 
       <main className="mx-auto max-w-6xl p-4">
-        {view === 'year' && <YearView date={date} onPickMonth={(d) => {onChangeDate(d); onChangeView('month')}}/>}
+        {view === 'year' && (
+          <YearView
+            date={date}
+            onPickMonth={(d) => {
+              onNavigate({ date: d, view: 'month' });
+            }}
+          />
+        )}
         {view === 'month' && (
           <MonthView
             date={date}
             onSelectDate={(d) => {
-              onChangeDate(d);
-              onChangeView('day')
+              onNavigate({ date: d, view: 'day' });
             }}
           />
         )}
