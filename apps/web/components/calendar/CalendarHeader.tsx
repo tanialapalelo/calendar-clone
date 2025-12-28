@@ -8,8 +8,9 @@ export function CalendarHeader(props: {
   onPrev: () => void;
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
+  onCreate: () => void;
 }) {
-  const { view, date, onToday, onPrev, onNext, onChangeView } = props;
+  const { view, date, onToday, onPrev, onNext, onChangeView, onCreate } = props;
 
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
@@ -50,7 +51,16 @@ export function CalendarHeader(props: {
         <h1 className="ml-2 text-base font-semibold text-gray-900">{title}</h1>
       </div>
 
-      <ViewSwitcher view={view} onChange={onChangeView} />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800"
+          onClick={onCreate}
+        >
+          Create
+        </button>
+        <ViewSwitcher view={view} onChange={onChangeView} />
+      </div>
     </header>
   );
 }
