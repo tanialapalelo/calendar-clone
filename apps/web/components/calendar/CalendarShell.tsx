@@ -38,7 +38,7 @@ export function CalendarShell(props: {
       />
 
       <main className="mx-auto max-w-6xl p-4">
-        {view === 'year' && <YearView />}
+        {view === 'year' && <YearView date={date} onPickMonth={(d) => {onChangeDate(d); onChangeView('month')}}/>}
         {view === 'month' && (
           <MonthView
             date={date}
