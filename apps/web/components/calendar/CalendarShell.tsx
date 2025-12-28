@@ -60,7 +60,7 @@ export function CalendarShell(props: {
             }}
           />
         )}
-        {view === 'day' && <DayView date={date} />}
+        {view === 'day' && <DayView date={date} events={events} />}
       </main>
     </div>
   );
