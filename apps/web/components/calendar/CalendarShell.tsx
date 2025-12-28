@@ -48,7 +48,7 @@ export function CalendarShell(props: {
             }}
           />
         )}
-        {view === 'day' && <DayView />}
+        {view === 'day' && <DayView date={date} />}
       </main>
     </div>
   );
