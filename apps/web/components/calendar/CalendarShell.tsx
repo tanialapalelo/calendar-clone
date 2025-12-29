@@ -3,7 +3,6 @@ import { CalendarHeader } from './CalendarHeader';
 import { DayView } from './views/DayView';
 import { MonthView } from './views/MonthView';
 import { YearView } from './views/YearView';
-import * as events from 'node:events';
 
 export function CalendarShell(props: {
   view: CalendarView;

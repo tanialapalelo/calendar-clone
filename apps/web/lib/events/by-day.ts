@@ -1,7 +1,7 @@
-import { isSameDay, parseISO } from 'date-fns';
+import { eventIntersectsDay } from './interval';
 
 export function eventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
   return events
-    .filter((event) => isSameDay(parseISO(event.start), day))
+    .filter((e) => eventIntersectsDay(e, day))
     .sort((a, b) => a.start.localeCompare(b.start));
 }
