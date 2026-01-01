@@ -6,14 +6,15 @@ export function MonthView(props: {
   date: Date;
   events: CalendarEvent[];
   onSelectDate?: (d: Date) => void;
+  onCreate: (d: Date) => void;
 }) {
-  const { date, events, onSelectDate } = props;
+  const { date, events, onSelectDate, onCreate } = props;
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const cells = generateMonthGrid(date);
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="rounded-3xl bg-white p-4">
       {/* Days of week header */}
-      <div className="grid grid-cols-7 border-b bg-gray-50">
+      <div className="grid w-full grid-cols-7 text-center">
         {daysOfWeek.map((day) => (
           <div key={day}>
             <span className="px-3 py-2 text-sm font-semibold text-gray-600">{day}</span>
@@ -30,23 +31,30 @@ export function MonthView(props: {
           const remaining = dayEvents.length - visible.length;
 
           const base =
-            'min-h-[96px] border-b border-r p-2 text-sm hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-900';
-          const muted = cell.inCurrentMonth ? 'text-gray-900' : 'text-gray-400';
+            'min-h-[96px] border-b border-r border-[#E1E3E1] p-2 text-sm hover:bg-gray-50 cursor-pointer flex flex-col';
           const today = cell.isToday
-            ? 'inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-900 text-white'
+            ? 'inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#0B57D0] text-white'
             : '';
           return (
-            <button
+            <div
               key={cell.date.toISOString()}
-              type="button"
-              className={`${base} ${muted} text-left`}
-              onClick={() => onSelectDate?.(cell.date)}
+              role="button"
+              className={`${base}`}
+              onClick={() => onCreate(cell.date)}
             >
-              <div className="flex items-center justify-between">
-                <span className={today}>{label}</span>
+              <div className="flex items-center justify-center">
+                <button
+                  className={today}
+                  onClick={(e) => {
+                    e.stopPropagation(); // CRITICAL: prevents triggering onCreate
+                    onSelectDate?.(cell.date);
+                  }}
+                >
+                  {label}
+                </button>
               </div>
 
-              <div>
+              <div className="text-left">
                 {visible.map((e) => (
                   <div
                     key={e.id}
@@ -60,7 +68,7 @@ export function MonthView(props: {
                   <div className="mt-1 text-xs text-gray-500">+{remaining} more</div>
                 )}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>

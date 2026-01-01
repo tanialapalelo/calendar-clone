@@ -1,7 +1,7 @@
 'use client';
 
 import { addMinutes, format } from 'date-fns';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 function toLocalDateTimeInputValue(d: Date) {
   return format(d, "yyyy-MM-dd'T'HH:mm");
@@ -21,6 +21,14 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
   const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
+
+  useEffect(() => {
+    if (!open) return;
+
+    setTitle('');
+    setStart(toLocalDateTimeInputValue(initialStart));
+    setEnd(toLocalDateTimeInputValue(initialEnd));
+  }, [open, initialStart, initialEnd]);
 
   if (!open) return null;
 

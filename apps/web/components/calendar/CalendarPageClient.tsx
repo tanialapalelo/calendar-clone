@@ -19,6 +19,7 @@ export default function CalendarPageClient() {
 
   const { events, addEvent } = useEventsStorage();
   const [createOpen, setCreateOpen] = useState(false);
+  const [createDate, setCreateDate] = useState<Date | null>(null);
 
   const view = useMemo(() => parseView(searchParams.get('view')), [searchParams]);
   const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
@@ -34,6 +35,11 @@ export default function CalendarPageClient() {
 
   const onNavigate = (next: { view?: CalendarView; date?: Date }) => setQuery(next);
 
+  const openCreateForDate = (d: Date) => {
+    setCreateDate(d);
+    setCreateOpen(true);
+  };
+
   return (
     <>
       <CalendarShell
@@ -43,11 +49,11 @@ export default function CalendarPageClient() {
         onChangeView={(v) => onNavigate({ view: v })}
         onChangeDate={(d) => onNavigate({ date: d })}
         onNavigate={onNavigate}
-        onCreateEvent={() => setCreateOpen(true)}
+        onCreateEvent={openCreateForDate}
       />
       <CreateEventModal
         open={createOpen}
-        initialDate={date}
+        initialDate={createDate ?? date}
         onClose={() => setCreateOpen(false)}
         onCreate={addEvent}
       />
