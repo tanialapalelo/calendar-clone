@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
 
 export function CalendarHeader(props: {
   view: CalendarView;
@@ -8,22 +9,22 @@ export function CalendarHeader(props: {
   onPrev: () => void;
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
-  onCreate: () => void;
+  onCreate: (d: Date) => void;
 }) {
   const { view, date, onToday, onPrev, onNext, onChangeView, onCreate } = props;
 
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
     if (view === 'month') return format(date, 'MMMM yyyy');
-    return format(date, 'EEE, MMM d, yyyy');
+    return format(date, 'MMMM d, yyyy');
   })();
 
   return (
-    <header className="flex flex-col gap-3 border-b bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <header className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="rounded-full border border-black px-3 py-1.5 text-sm hover:bg-gray-100"
           onClick={onToday}
         >
           Today
@@ -32,19 +33,19 @@ export function CalendarHeader(props: {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+            className="rounded-full border-none p-1 text-sm hover:bg-gray-50"
             onClick={onPrev}
             aria-label="Previous"
           >
-            Prev
+            <ChevronLeftIcon />
           </button>
           <button
             type="button"
-            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+            className="rounded-full border-none p-1 text-sm hover:bg-gray-50"
             onClick={onNext}
             aria-label="Next"
           >
-            Next
+            <ChevronRightIcon />
           </button>
         </div>
 
@@ -54,10 +55,11 @@ export function CalendarHeader(props: {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800"
-          onClick={onCreate}
+          className="flex items-center justify-center rounded-xl border bg-white px-3 py-1.5 text-sm font-semibold hover:bg-gray-100"
+          onClick={() => onCreate(date)}
         >
-          Create
+          <PlusIcon size={16} />
+          <span>Create</span>
         </button>
         <ViewSwitcher view={view} onChange={onChangeView} />
       </div>
