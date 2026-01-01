@@ -11,7 +11,11 @@ function getGmtOffsetLabel(d: Date) {
   return tz ?? '';
 }
 
-export function DayView(props: { date: Date; events: CalendarEvent[] }) {
+export function DayView(props: {
+  date: Date;
+  events: CalendarEvent[];
+  onOpenEvent: (id: string, rect: DOMRect) => void;
+}) {
   const { date, events } = props;
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -75,7 +79,7 @@ export function DayView(props: { date: Date; events: CalendarEvent[] }) {
         </div>
 
         {/* Events overlay */}
-        <div className="pointer-events-none absolute inset-0" style={{ left: GUTTER_PX }}>
+        <div className="absolute inset-0" style={{ left: GUTTER_PX }}>
           <div className="relative h-full">
             {positioned.map((p) => {
               const top = p.startMin * PX_PER_MIN;
@@ -99,6 +103,10 @@ export function DayView(props: { date: Date; events: CalendarEvent[] }) {
                     parseISO(p.event.end),
                     'MMM d HH:mm',
                   )})`}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    props.onOpenEvent(p.event.id, rect);
+                  }}
                 >
                   <div className="truncate font-semibold">{p.event.title}</div>
                   <div className="truncate text-[11px] text-blue-800/80">

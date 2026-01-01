@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
 
 export function CalendarHeader(props: {
   view: CalendarView;
@@ -16,7 +16,7 @@ export function CalendarHeader(props: {
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
     if (view === 'month') return format(date, 'MMMM yyyy');
-    return format(date, 'EEE, MMM d, yyyy');
+    return format(date, 'MMMM d, yyyy');
   })();
 
   return (
@@ -55,10 +55,11 @@ export function CalendarHeader(props: {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800"
+          className="flex items-center justify-center rounded-xl border bg-white px-3 py-1.5 text-sm font-semibold hover:bg-gray-100"
           onClick={() => onCreate(date)}
         >
-          Create
+          <PlusIcon size={16} />
+          <span>Create</span>
         </button>
         <ViewSwitcher view={view} onChange={onChangeView} />
       </div>

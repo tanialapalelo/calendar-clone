@@ -12,8 +12,20 @@ export function CalendarShell(props: {
   onChangeDate: (d: Date) => void;
   onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
   onCreateEvent: (d: Date) => void;
+  onOpenEvent: (id: string, rect: DOMRect) => void;
+  onOpenDayPopover: (d: Date, rect: DOMRect) => void;
 }) {
-  const { view, date, events, onChangeView, onChangeDate, onNavigate, onCreateEvent } = props;
+  const {
+    view,
+    date,
+    events,
+    onChangeView,
+    onChangeDate,
+    onNavigate,
+    onCreateEvent,
+    onOpenEvent,
+    onOpenDayPopover,
+  } = props;
 
   const onToday = () => onChangeDate(new Date());
 
@@ -45,9 +57,11 @@ export function CalendarShell(props: {
         {view === 'year' && (
           <YearView
             date={date}
+            events={events}
             onPickMonth={(d) => {
               onNavigate({ date: d, view: 'month' });
             }}
+            onOpenDayPopover={onOpenDayPopover}
           />
         )}
         {view === 'month' && (
@@ -58,9 +72,10 @@ export function CalendarShell(props: {
               onNavigate({ date: d, view: 'day' });
             }}
             onCreate={(d) => onCreateEvent(d)}
+            onOpenEvent={onOpenEvent}
           />
         )}
-        {view === 'day' && <DayView date={date} events={events} />}
+        {view === 'day' && <DayView date={date} events={events} onOpenEvent={onOpenEvent} />}
       </main>
     </div>
   );

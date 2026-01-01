@@ -7,8 +7,9 @@ export function MonthView(props: {
   events: CalendarEvent[];
   onSelectDate?: (d: Date) => void;
   onCreate: (d: Date) => void;
+  onOpenEvent: (id: string, rect: DOMRect) => void;
 }) {
-  const { date, events, onSelectDate, onCreate } = props;
+  const { date, events, onSelectDate, onCreate, onOpenEvent } = props;
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const cells = generateMonthGrid(date);
   return (
@@ -55,13 +56,18 @@ export function MonthView(props: {
               </div>
 
               <div className="text-left">
-                {visible.map((e) => (
+                {visible.map((ev) => (
                   <div
-                    key={e.id}
-                    title={e.title}
-                    className="truncate rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900"
+                    key={ev.id}
+                    title={ev.title}
+                    className="mt-1 truncate rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      e.stopPropagation();
+                      onOpenEvent(ev.id, rect);
+                    }}
                   >
-                    {e.title}
+                    {ev.title}
                   </div>
                 ))}
                 {remaining > 0 && (

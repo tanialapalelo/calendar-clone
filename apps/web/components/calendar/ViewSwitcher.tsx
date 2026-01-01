@@ -1,6 +1,10 @@
 export function ViewSwitcher(props: { view: CalendarView; onChange: (v: CalendarView) => void }) {
   const { view, onChange } = props;
-
+  const options = [
+    { value: 'year', label: 'Year' },
+    { value: 'month', label: 'Month' },
+    { value: 'day', label: 'Day' },
+  ];
   return (
     <div className="inline-flex gap-2">
       <select
@@ -8,9 +12,11 @@ export function ViewSwitcher(props: { view: CalendarView; onChange: (v: Calendar
         value={view}
         onChange={(e) => onChange(e.target.value as CalendarView)}
       >
-        <option value="year">Year</option>
-        <option value="month">Month</option>
-        <option value="day">Day</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
       </select>
     </div>
   );
