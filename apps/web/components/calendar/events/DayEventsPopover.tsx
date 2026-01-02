@@ -82,11 +82,17 @@ export function DayEventsPopover({
 
   if (!open || !anchorRect || !date || !position) return null;
 
-  // all-day first, then start time
+  // cross-day first, then all-day, then start time
   const sorted = [...events].sort((a, b) => {
-    if (a.allDay && !b.allDay) return -1;
-    if (!a.allDay && b.allDay) return 1;
-    return a.start.localeCompare(b.start);
+    const aCross = isCrossDayTimedEvent(a) ? 1 : 0;
+    const bCross = isCrossDayTimedEvent(b) ? 1 : 0;
+    if (aCross !== bCross) return bCross - aCross;
+
+    const aAllDay = a.allDay ? 1 : 0;
+    const bAllDay = b.allDay ? 1 : 0;
+    if (aAllDay !== bAllDay) return bAllDay - aAllDay;
+
+    return parseISO(a.start).getTime() - parseISO(b.start).getTime();
   });
 
   const today = new Date();
@@ -102,7 +108,7 @@ export function DayEventsPopover({
         role="dialog"
         aria-modal="true"
       >
-        <div className="max-h-[260px] overflow-auto px-2 py-2">
+        <div className="max-h-fit overflow-auto px-2 py-2">
           <div className="flex w-full items-center justify-between px-3 pb-2">
             <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700">
               <span className="uppercase">{format(date, 'EEE')}</span>
