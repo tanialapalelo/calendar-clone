@@ -13,3 +13,7 @@ export function parseIsoDateOrToday(value: string | null): Date {
 export function formatIsoDate(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }
+
+export function toLocalDateTimeInputValue(d: Date) {
+  return format(d, "yyyy-MM-dd'T'HH:mm");
+}

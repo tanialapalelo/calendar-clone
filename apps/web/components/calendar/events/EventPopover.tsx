@@ -3,6 +3,7 @@
 import { format, parseISO } from 'date-fns';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
+import { toLocalDateTimeInputValue } from '@/lib/date';
 
 type Props = {
   open: boolean;
@@ -12,10 +13,6 @@ type Props = {
   onUpdate: (event: CalendarEvent) => void;
   onDelete: (id: string) => void;
 };
-
-function toLocalDateTimeInputValue(d: Date) {
-  return format(d, "yyyy-MM-dd'T'HH:mm");
-}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -96,6 +93,14 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     onClose();
   };
 
+  const formattedDate = event.allDay
+    ? format(parseISO(event.start), 'MMMM d · HH:mm') +
+      ' – ' +
+      format(parseISO(event.end), 'MMMM d · HH:mm')
+    : format(parseISO(event.start), 'EEE, MMM d · HH:mm') +
+      ' - ' +
+      format(parseISO(event.end), 'HH:mm');
+
   return (
     <div className="fixed inset-0 z-[60]">
       <div
@@ -136,10 +141,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
         <div className="items-start justify-between gap-3 border-b border-gray-100 px-4 py-2">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-gray-900">{event.title}</div>
-            <div className="mt-0.5 text-xs text-gray-500">
-              {format(parseISO(event.start), 'EEE, MMM d · HH:mm')} –{' '}
-              {format(parseISO(event.end), 'HH:mm')}
-            </div>
+            <div className="mt-0.5 text-xs text-gray-500">{formattedDate}</div>
           </div>
         </div>
 
