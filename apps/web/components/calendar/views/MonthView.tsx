@@ -1,6 +1,6 @@
 import { generateMonthGrid } from '@/lib/month-grid';
 import { format } from 'date-fns';
-import { eventsForDay } from '@/lib/events/by-day';
+import { eventsForDay } from '@/lib/events/day';
 import { daysOfWeek } from '@/constants';
 
 export function MonthView(props: {

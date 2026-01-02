@@ -7,3 +7,8 @@ export const viewOptions = [
   { value: 'month', label: 'Month' },
   { value: 'day', label: 'Day' },
 ];
+
+export const DAY_VIEW_PX_PER_HOUR = 48;
+export const DAY_VIEW_GUTTER_PX = 64;
+export const DAY_VIEW_COLUMN_GAP_PX = 6;
+export const DAY_VIEW_PX_PER_MIN = DAY_VIEW_PX_PER_HOUR / 60;
