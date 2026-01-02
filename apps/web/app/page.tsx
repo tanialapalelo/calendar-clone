@@ -40,7 +40,7 @@ export function generateMetadata(props: {
 
     let title: string;
     if (view === 'year') title = format(date, 'yyyy');
-    else if (view === 'day') title = format(date, 'EEE, MMM d, yyyy');
+    else if (view === 'day') title = format(date, 'EEEE, MMMM d, yyyy');
     else title = format(date, 'MMMM yyyy'); // month default
 
     return { title };

@@ -1,6 +1,7 @@
 import { generateMonthGrid } from '@/lib/month-grid';
 import { format } from 'date-fns';
 import { eventsForDay } from '@/lib/events/by-day';
+import { daysOfWeek } from '@/constants';
 
 export function MonthView(props: {
   date: Date;
@@ -10,8 +11,12 @@ export function MonthView(props: {
   onOpenEvent: (id: string, rect: DOMRect) => void;
 }) {
   const { date, events, onSelectDate, onCreate, onOpenEvent } = props;
-  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const cells = generateMonthGrid(date);
+  // group 42 cells into 6 weeks
+  const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) =>
+    cells.slice(w * 7, w * 7 + 7),
+  );
+
   return (
     <div className="rounded-3xl bg-white p-4">
       {/* Days of week header */}
@@ -34,7 +39,7 @@ export function MonthView(props: {
           const base =
             'min-h-[96px] border-b border-r border-[#E1E3E1] p-2 text-sm hover:bg-gray-50 cursor-pointer flex flex-col';
           const today = cell.isToday
-            ? 'inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#0B57D0] text-white'
+            ? 'inline-flex items-center justify-center rounded-full bg-[#0B57D0] text-white'
             : '';
           return (
             <div
@@ -45,7 +50,7 @@ export function MonthView(props: {
             >
               <div className="flex items-center justify-center">
                 <button
-                  className={today}
+                  className={`${today} h-7 w-7`}
                   onClick={(e) => {
                     e.stopPropagation(); // CRITICAL: prevents triggering onCreate
                     onSelectDate?.(cell.date);

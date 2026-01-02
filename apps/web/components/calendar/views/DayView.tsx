@@ -1,5 +1,5 @@
 import { format, isSameDay, parseISO } from 'date-fns';
-import { eventsForDayLayout } from '../../../lib/events/day-layout';
+import { eventsForDayLayout } from '@/lib/events/day-layout';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 
 function getGmtOffsetLabel(d: Date) {
@@ -9,6 +9,17 @@ function getGmtOffsetLabel(d: Date) {
 
   const tz = parts.find((p) => p.type === 'timeZoneName')?.value;
   return tz ?? '';
+}
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfDayExclusive(d: Date) {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() + 1);
+  return x;
 }
 
 export function DayView(props: {
@@ -57,14 +68,21 @@ export function DayView(props: {
               </div>
             </div>
           </div>
-
-          <div className="text-xs text-gray-500">{tzLabel}</div>
         </div>
       </div>
 
       {/* Timeline */}
       <div className="relative">
         <div className="divide-y divide-gray-200">
+          <div className="grid" style={{ gridTemplateColumns: `${GUTTER_PX}px 1fr` }}>
+            <div className="border-r border-gray-200 pt-2 pr-2 text-right text-[11px] text-gray-500">
+              <div className="text-xs text-gray-500">{tzLabel}</div>
+            </div>
+
+            <div className="" style={{ height: PX_PER_HOUR }}>
+              <div className="absolute top-1/2 right-0 left-0 border-t border-gray-100" />
+            </div>
+          </div>
           {hours.map((h) => (
             <div key={h} className="grid" style={{ gridTemplateColumns: `${GUTTER_PX}px 1fr` }}>
               <div className="border-r border-gray-200 pt-2 pr-2 text-right text-[11px] text-gray-500">
@@ -81,9 +99,23 @@ export function DayView(props: {
         {/* Events overlay */}
         <div className="absolute inset-0" style={{ left: GUTTER_PX }}>
           <div className="relative h-full">
-            {positioned.map((p) => {
-              const top = p.startMin * PX_PER_MIN;
-              const height = Math.max(18, (p.endMin - p.startMin) * PX_PER_MIN);
+            {positioned.map((p, i) => {
+              const allDay = p.event.allDay;
+              const crossDay = !isSameDay(parseISO(p.event.start), parseISO(p.event.end));
+              const dayStart = startOfDay(date).getTime();
+              const dayEnd = endOfDayExclusive(date).getTime();
+
+              const evStart = parseISO(p.event.start).getTime();
+              const evEnd = parseISO(p.event.end).getTime();
+
+              const continuesFromPrev = evStart < dayStart;
+              const continuesToNext = evEnd > dayEnd;
+
+              const top = allDay || crossDay ? 0 : p.startMin * PX_PER_MIN + PX_PER_HOUR;
+              const height =
+                allDay || crossDay
+                  ? PX_PER_HOUR / 2
+                  : Math.max(18, (p.endMin - p.startMin) * PX_PER_MIN);
 
               const GAP_PX = 6; // space between columns (Google-ish)
               const leftPct = (p.col / p.colCount) * 100;
@@ -92,7 +124,7 @@ export function DayView(props: {
               return (
                 <div
                   key={p.event.id}
-                  className="absolute overflow-hidden rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-900"
+                  className="absolute"
                   style={{
                     top,
                     height,
@@ -108,10 +140,21 @@ export function DayView(props: {
                     props.onOpenEvent(p.event.id, rect);
                   }}
                 >
-                  <div className="truncate font-semibold">{p.event.title}</div>
-                  <div className="truncate text-[11px] text-blue-800/80">
-                    {format(parseISO(p.event.start), 'HH:mm')} –{' '}
-                    {format(parseISO(p.event.end), 'HH:mm')}
+                  {/* Main body */}
+                  <div
+                    className={[
+                      'relative h-full overflow-hidden border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-900',
+                      continuesFromPrev ? 'rounded-l-full' : 'rounded-md',
+                      continuesToNext ? 'rounded-r-full' : 'rounded-md',
+                    ].join(' ')}
+                  >
+                    <div className="truncate font-semibold">{p.event.title}</div>
+                    {!allDay && !crossDay && (
+                      <div className="truncate text-[11px] text-blue-800/80">
+                        {format(parseISO(p.event.start), 'HH:mm')} –{' '}
+                        {format(parseISO(p.event.end), 'HH:mm')}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

@@ -1,10 +1,13 @@
 'use client';
 
-import { addMinutes, format } from 'date-fns';
+import { addDays, addMinutes, format } from 'date-fns';
 import { useMemo, useState, useEffect } from 'react';
+import { toLocalDateTimeInputValue } from '@/lib/date';
 
-function toLocalDateTimeInputValue(d: Date) {
-  return format(d, "yyyy-MM-dd'T'HH:mm");
+function startOfDayLocal(d: Date) {
+  const dt = new Date(d);
+  dt.setHours(0, 0, 0, 0);
+  return dt;
 }
 
 type Props = {
@@ -21,6 +24,7 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
   const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
+  const [allDay, setAllDay] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -28,16 +32,22 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
     setTitle('');
     setStart(toLocalDateTimeInputValue(initialStart));
     setEnd(toLocalDateTimeInputValue(initialEnd));
+    setAllDay(false);
   }, [open, initialStart, initialEnd]);
 
   if (!open) return null;
 
   const submit = () => {
+    const startDate = allDay ? startOfDayLocal(new Date(start)) : new Date(start);
+    const endDate = allDay ? addDays(startOfDayLocal(new Date(end)), 1) : new Date(end);
+
+    console.log('create event', { title, startDate, endDate });
     onCreate({
       id: crypto.randomUUID(),
       title,
-      start: new Date(start).toISOString(),
-      end: new Date(end).toISOString(),
+      start: startDate.toISOString(),
+      end: endDate.toISOString(),
+      allDay,
     });
     setTitle('');
     onClose();
@@ -72,24 +82,33 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
               autoFocus
             />
           </div>
-
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+            All day
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">Start</label>
               <input
-                type="datetime-local"
+                type={allDay ? 'date' : 'datetime-local'}
                 className="w-full rounded border px-3 py-2 text-sm"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
+                value={allDay ? start.slice(0, 10) : start}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setStart(allDay ? `${v}T00:00` : v);
+                }}
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">End</label>
               <input
-                type="datetime-local"
+                type={allDay ? 'date' : 'datetime-local'}
                 className="w-full rounded border px-3 py-2 text-sm"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
+                value={allDay ? end.slice(0, 10) : end}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEnd(allDay ? `${v}T00:00` : v);
+                }}
               />
             </div>
           </div>
