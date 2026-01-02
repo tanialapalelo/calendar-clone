@@ -9,8 +9,9 @@ export function MonthView(props: {
   onSelectDate?: (d: Date) => void;
   onCreate: (d: Date) => void;
   onOpenEvent: (id: string, rect: DOMRect) => void;
+  onOpenDayPopover: (d: Date, rect: DOMRect) => void;
 }) {
-  const { date, events, onSelectDate, onCreate, onOpenEvent } = props;
+  const { date, events, onSelectDate, onCreate, onOpenEvent, onOpenDayPopover } = props;
   const cells = generateMonthGrid(date);
   // group 42 cells into 6 weeks
   const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) =>
@@ -65,7 +66,7 @@ export function MonthView(props: {
                   <div
                     key={ev.id}
                     title={ev.title}
-                    className="mt-1 truncate rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900"
+                    className="mt-1 cursor-pointer truncate rounded bg-[#039BE5] px-2 py-0.5 text-xs font-medium text-white hover:bg-[#0090d6]"
                     onClick={(e) => {
                       const rect = e.currentTarget.getBoundingClientRect();
                       e.stopPropagation();
@@ -76,7 +77,16 @@ export function MonthView(props: {
                   </div>
                 ))}
                 {remaining > 0 && (
-                  <div className="mt-1 text-xs text-gray-500">+{remaining} more</div>
+                  <div
+                    className="mt-1 rounded px-2 py-0.5 text-xs font-semibold text-gray-900 hover:bg-gray-200"
+                    onClick={(clickEvt) => {
+                      clickEvt.stopPropagation(); // CRITICAL: prevents triggering onCreate
+                      const rect = clickEvt.currentTarget.getBoundingClientRect();
+                      onOpenDayPopover?.(cell.date, rect);
+                    }}
+                  >
+                    {remaining} more
+                  </div>
                 )}
               </div>
             </div>

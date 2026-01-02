@@ -73,6 +73,7 @@ export function CalendarShell(props: {
             }}
             onCreate={(d) => onCreateEvent(d)}
             onOpenEvent={onOpenEvent}
+            onOpenDayPopover={onOpenDayPopover}
           />
         )}
         {view === 'day' && <DayView date={date} events={events} onOpenEvent={onOpenEvent} />}
