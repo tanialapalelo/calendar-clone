@@ -7,6 +7,7 @@ import {
   DAY_VIEW_PX_PER_HOUR,
   DAY_VIEW_PX_PER_MIN,
 } from '@/constants';
+import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
 
 function getGmtOffsetLabel(d: Date) {
   const parts = new Intl.DateTimeFormat(undefined, {
@@ -15,17 +16,6 @@ function getGmtOffsetLabel(d: Date) {
 
   const tz = parts.find((p) => p.type === 'timeZoneName')?.value;
   return tz ?? '';
-}
-
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function endOfDayExclusive(d: Date) {
-  const x = startOfDay(d);
-  x.setDate(x.getDate() + 1);
-  return x;
 }
 
 export function DayView(props: {
@@ -108,7 +98,7 @@ export function DayView(props: {
             {positioned.map((p, i) => {
               const allDay = p.event.allDay;
               const crossDay = !isSameDay(parseISO(p.event.start), parseISO(p.event.end));
-              const dayStart = startOfDay(date).getTime();
+              const dayStart = startOfDayDefaultHour(date).getTime();
               const dayEnd = endOfDayExclusive(date).getTime();
 
               const evStart = parseISO(p.event.start).getTime();

@@ -1,6 +1,6 @@
 'use client';
 
-import { format, parseISO } from 'date-fns';
+import { addDays, format, isSameDay, parseISO, startOfDay, subMilliseconds } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
 
@@ -16,6 +16,14 @@ type Props = {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+// End-exclusive safe cross-day check (handles all-day stored as [start, nextDayStart))
+function isCrossDayTimedEvent(ev: CalendarEvent) {
+  if (ev.allDay) return false;
+  const start = parseISO(ev.start);
+  const endInclusive = subMilliseconds(parseISO(ev.end), 1);
+  return !isSameDay(start, endInclusive);
 }
 
 export function DayEventsPopover({
@@ -74,55 +82,87 @@ export function DayEventsPopover({
 
   if (!open || !anchorRect || !date || !position) return null;
 
-  const sorted = [...events].sort(
-    (a, b) => parseISO(a.start).getTime() - parseISO(b.start).getTime(),
-  );
+  // all-day first, then start time
+  const sorted = [...events].sort((a, b) => {
+    if (a.allDay && !b.allDay) return -1;
+    if (!a.allDay && b.allDay) return 1;
+    return a.start.localeCompare(b.start);
+  });
+
+  const today = new Date();
+  const dayStart = startOfDay(date);
+  const dayEnd = addDays(dayStart, 1); // exclusive
 
   return (
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[320px] rounded-3xl bg-white shadow-xl"
-        style={{ left: position!.left, top: position!.top }}
+        className="fixed w-[250px] rounded-3xl bg-white shadow-xl"
+        style={{ left: position.left, top: position.top }}
         role="dialog"
         aria-modal="true"
       >
         <div className="max-h-[260px] overflow-auto px-2 py-2">
-          <div className="flex w-full items-center justify-between border-b px-3 pb-2">
-            <div className="flex flex-col text-gray-700">
+          <div className="flex w-full items-center justify-between px-3 pb-2">
+            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700">
               <span className="uppercase">{format(date, 'EEE')}</span>
-              <span className="font-bold">{format(date, 'd')}</span>
+              <span
+                className={[
+                  'px-3 py-1.5 font-bold',
+                  isSameDay(today, date) ? 'rounded-full bg-[#0B57D0] text-white' : '',
+                ].join(' ')}
+              >
+                {format(date, 'd')}
+              </span>
             </div>
             <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-gray-100">
-              <XIcon className="h-6 w-6 text-gray-400" />
+              <XIcon size={16} />
             </button>
           </div>
+
           {sorted.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-gray-500">
               There are no events scheduled on this day.
             </div>
           ) : (
-            <div>
-              <ul className="space-y-1">
-                {sorted.map((ev) => (
+            <ul className="space-y-1">
+              {sorted.map((ev) => {
+                const evStart = parseISO(ev.start);
+                const evEnd = parseISO(ev.end);
+
+                const continuesFromPrev = evStart.getTime() < dayStart.getTime();
+                const continuesToNext = evEnd.getTime() > dayEnd.getTime();
+
+                const isBar = ev.allDay || isCrossDayTimedEvent(ev);
+
+                // Rounded only if the event actually starts/ends on this day.
+                // If it continues, make that side flat so it looks "connected".
+                const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
+                const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
+
+                const containerClass = isBar
+                  ? `bg-[#039BE5] text-white hover:bg-[#0090d6] ${leftCap} ${rightCap}`
+                  : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
+
+                return (
                   <li key={ev.id}>
                     <button
                       type="button"
-                      className="w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50"
+                      className={`w-full px-3 py-1 text-left ${containerClass}`}
                       onClick={(clickEvt) => {
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
                         onPickEvent(ev.id, rect);
                       }}
                     >
-                      <div className="truncate text-sm font-medium text-gray-900">{ev.title}</div>
-                      <div className="text-xs text-gray-500">
-                        {format(parseISO(ev.start), 'HH:mm')} – {format(parseISO(ev.end), 'HH:mm')}
+                      <div className="truncate text-xs font-medium">
+                        {!isBar && `${format(evStart, 'hh:mm a')} `}
+                        {ev.title}
                       </div>
                     </button>
                   </li>
-                ))}
-              </ul>
-            </div>
+                );
+              })}
+            </ul>
           )}
         </div>
       </div>
