@@ -5,5 +5,11 @@ type CalendarEvent = {
   title: string;
   start: string;
   end: string;
-  allDay?: boolean;
+  allDay: boolean;
+};
+
+type WeekEventSegment = {
+  event: CalendarEvent;
+  startCol: number; // 0–6
+  endCol: number; // 0–6
 };
