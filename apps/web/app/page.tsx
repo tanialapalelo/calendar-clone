@@ -39,7 +39,7 @@ export function generateMetadata(props: {
     const date = parseIsoDateOnly(getFirst(sp, 'date'));
 
     let title: string;
-    if (view === 'year') title = format(date, 'yyyy');
+    if (view === 'year') title = format(date, 'yyyy') + ' year';
     else if (view === 'day') title = format(date, 'EEEE, MMMM d, yyyy');
     else title = format(date, 'MMMM yyyy'); // month default
 

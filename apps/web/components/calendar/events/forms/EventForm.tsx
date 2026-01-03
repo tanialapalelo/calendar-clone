@@ -1,9 +1,10 @@
 'use client';
 
-import { addDays, addMinutes, parseISO } from 'date-fns';
+import { addDays, addMinutes, format, parseISO } from 'date-fns';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { MapPinIcon, UsersIcon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 function startOfDayLocal(d: Date) {
   const dt = new Date(d);
@@ -43,6 +44,8 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
   const [guestInput, setGuestInput] = useState('');
   const [location, setLocation] = useState('');
 
+  const router = useRouter();
+
   useEffect(() => {
     const s = startOfDayLocal(initialStart);
     const e = addDays(startOfDayLocal(initialEnd), 1);
@@ -56,7 +59,7 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
     setTitle('');
   }, [initialStart, initialEnd]);
 
-  function submit() {
+  const submit = () => {
     let startDate: Date;
     let endDate: Date;
     if (allDay) {
@@ -77,30 +80,30 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
       location: location || undefined,
     });
     onClose();
-  }
+  };
 
-  function addGuest() {
+  const addGuest = () => {
     const trimmed = guestInput.trim();
     if (!trimmed) return;
     setGuests((prev) => [...prev, trimmed]);
     setGuestInput('');
-  }
+  };
 
-  function onGuestInputKey(e: KeyboardEvent<HTMLInputElement>) {
+  const onGuestInputKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       addGuest();
     }
-  }
+  };
 
-  function onClickAddTime() {
+  const onClickAddTime = () => {
     setShowTime(true);
     setAllDay(false);
     setStart((prev) => ensureDateTimeInputValueFrom(prev, 9));
     setEnd((prev) => ensureDateTimeInputValueFrom(prev, 10));
-  }
+  };
 
-  function onToggleAllDayWhenShown(checked: boolean) {
+  const onToggleAllDayWhenShown = (checked: boolean) => {
     setAllDay(checked);
     if (checked) {
       const s = startOfDayLocal(new Date(start));
@@ -113,7 +116,15 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
       setStart((prev) => ensureDateTimeInputValueFrom(prev, 9));
       setEnd((prev) => ensureDateTimeInputValueFrom(prev, 10));
     }
-  }
+  };
+
+  const onMoreOptions = () => {
+    // navigate to full editor and pass initial date as YYYY-MM-DD
+    const dateStr = format(initialDate, 'yyyy-MM-dd');
+    // close modal then navigate
+    onClose();
+    router.push(`/events/new?date=${encodeURIComponent(dateStr)}`);
+  };
 
   return (
     <div className="space-y-3 bg-[#F0F4F9] px-4 py-4">
@@ -233,6 +244,7 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
         <button
           type="button"
           className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100"
+          onClick={onMoreOptions}
         >
           More Options
         </button>
