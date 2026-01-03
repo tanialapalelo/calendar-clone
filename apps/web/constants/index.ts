@@ -8,6 +8,12 @@ export const viewOptions = [
   { value: 'day', label: 'Day' },
 ];
 
+export const modeOptions = [
+  { value: 'event', label: 'Event' },
+  { value: 'task', label: 'Task' },
+  { value: 'appointment', label: 'Appointment Schedule' },
+];
+
 export const DAY_VIEW_PX_PER_HOUR = 48;
 export const DAY_VIEW_GUTTER_PX = 64;
 export const DAY_VIEW_COLUMN_GAP_PX = 6;

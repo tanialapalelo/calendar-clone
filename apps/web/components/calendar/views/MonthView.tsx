@@ -4,6 +4,7 @@ import { eventsForDay } from '@/lib/events/day';
 import { daysOfWeek } from '@/constants';
 import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
 import { isBarEventInMonth } from '@/lib/events/month-classify';
+import { CircleIcon, Grid2X2Icon } from 'lucide-react';
 
 export function MonthView(props: {
   date: Date;
@@ -101,24 +102,35 @@ export function MonthView(props: {
 
                       {/* Timed single-day list */}
                       <div className="relative mt-1 space-y-1 text-left">
-                        {visibleTimed.map((ev) => (
-                          <div
-                            key={ev.id}
-                            className="flex cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200"
-                            title={ev.title}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              onOpenEvent(ev.id, rect);
-                            }}
-                          >
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />
-                            <span className="shrink-0 text-gray-600">
-                              {format(parseISO(ev.start), 'h:mma').toLowerCase()}
-                            </span>
-                            <span className="truncate">{ev.title}</span>
-                          </div>
-                        ))}
+                        {visibleTimed.map((ev) => {
+                          // icon for task and appointment
+                          const isNotEvent = ev.isTask ? (
+                            <CircleIcon size={8} />
+                          ) : ev.isAppointment ? (
+                            <Grid2X2Icon size={8} />
+                          ) : null;
+                          return (
+                            <div
+                              key={ev.id}
+                              className="flex cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200"
+                              title={ev.title}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                onOpenEvent(ev.id, rect);
+                              }}
+                            >
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />
+                              <span className="shrink-0 text-gray-600">
+                                {format(parseISO(ev.start), 'h:mma').toLowerCase()}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {isNotEvent}
+                                <span className="truncate">{ev.title}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
 
                         {hiddenTotal > 0 && (
                           // Render the "+N more" as an interactive control with hover style and open popover behavior
