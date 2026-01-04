@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { format } from 'date-fns';
 import CalendarPageClient from '@/components/calendar/CalendarPageClient';
 
@@ -39,5 +40,9 @@ export function generateMetadata({ searchParams }: { searchParams: SearchParams 
 }
 
 export default function HomePage() {
-  return <CalendarPageClient />;
+  return (
+    <Suspense fallback={null}>
+      <CalendarPageClient />
+    </Suspense>
+  );
 }
