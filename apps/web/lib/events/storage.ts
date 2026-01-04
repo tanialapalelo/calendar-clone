@@ -16,7 +16,10 @@ function safeParse(json: string | null): CalendarEvent[] {
 }
 
 export function useEventsStorage() {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return safeParse(localStorage.getItem(STORAGE_KEY));
+  });
 
   //   load once on mount
   useEffect(() => {

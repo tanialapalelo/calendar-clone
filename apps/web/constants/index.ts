@@ -8,6 +8,40 @@ export const viewOptions = [
   { value: 'day', label: 'Day' },
 ];
 
+export const modeOptions = [
+  { value: 'event', label: 'Event' },
+  { value: 'task', label: 'Task' },
+  { value: 'appointment', label: 'Appointment Schedule' },
+];
+
+export const eventFormOption = [
+  { value: 'detail', label: 'Event details' },
+  { value: 'time', label: 'Find a time' },
+];
+
+export const notificationOption = [
+  { value: 'notification', label: 'Notification' },
+  { value: 'email', label: 'Email' },
+];
+
+export const statusOptions = [
+  { value: 'busy', label: 'Busy' },
+  { value: 'free', label: 'Free' },
+];
+
+export const eventVisibilityOptions = [
+  { value: 'default', label: 'Default Visibility' },
+  { value: 'public', label: 'Public' },
+  { value: 'private', label: 'Private' },
+];
+
+export const unitOfTimeOptions = [
+  { value: 'minutes', label: 'Minutes' },
+  { value: 'hours', label: 'Hours' },
+  { value: 'days', label: 'Days' },
+  { value: 'weeks', label: 'Weeks' },
+];
+
 export const DAY_VIEW_PX_PER_HOUR = 48;
 export const DAY_VIEW_GUTTER_PX = 64;
 export const DAY_VIEW_COLUMN_GAP_PX = 6;
