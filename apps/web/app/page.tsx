@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
 import { format } from 'date-fns';
 import CalendarPageClient from '@/components/calendar/CalendarPageClient';
 
@@ -12,7 +11,6 @@ function getFirst(sp: SearchParams, key: string) {
 }
 
 function parseIsoDateOnly(value: string | undefined): Date {
-  // expects YYYY-MM-DD; fall back to today if missing/invalid
   if (!value) return new Date();
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!m) return new Date();
@@ -28,34 +26,18 @@ function parseView(value: string | undefined): CalendarView {
   return 'month';
 }
 
-export function generateMetadata(props: {
-  searchParams: Promise<SearchParams> | SearchParams;
-}): Metadata | Promise<Metadata> {
-  // Next may pass searchParams as an object; in some versions/types it can be Promise-like
-  const maybePromise = props.searchParams as any;
+export function generateMetadata({ searchParams }: { searchParams: SearchParams }): Metadata {
+  const view = parseView(getFirst(searchParams, 'view'));
+  const date = parseIsoDateOnly(getFirst(searchParams, 'date'));
 
-  const compute = (sp: SearchParams): Metadata => {
-    const view = parseView(getFirst(sp, 'view'));
-    const date = parseIsoDateOnly(getFirst(sp, 'date'));
+  let title: string;
+  if (view === 'year') title = format(date, 'yyyy') + ' year';
+  else if (view === 'day') title = format(date, 'EEEE, MMMM d, yyyy');
+  else title = format(date, 'MMMM yyyy');
 
-    let title: string;
-    if (view === 'year') title = format(date, 'yyyy') + ' year';
-    else if (view === 'day') title = format(date, 'EEEE, MMMM d, yyyy');
-    else title = format(date, 'MMMM yyyy'); // month default
-
-    return { title };
-  };
-
-  if (typeof maybePromise?.then === 'function') {
-    return maybePromise.then((sp: SearchParams) => compute(sp));
-  }
-  return compute(props.searchParams as SearchParams);
+  return { title };
 }
 
 export default function HomePage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <CalendarPageClient />
-    </Suspense>
-  );
+  return <CalendarPageClient />;
 }

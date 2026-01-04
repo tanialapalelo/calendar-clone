@@ -35,12 +35,22 @@ function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
 }
 
 type Props = {
+  event?: CalendarEvent;
   initialDate: Date;
   onClose: () => void;
-  onCreate: (event: CalendarEvent & { guests?: string[]; location?: string }) => void;
+  onCreate?: (event: CalendarEvent) => void;
+  onSave?: (event: CalendarEvent) => void;
+  onDelete?: (id: string) => void;
 };
 
-export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
+export function EventFullscreenForm({
+  event,
+  initialDate,
+  onClose,
+  onCreate,
+  onSave,
+  onDelete,
+}: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => new Date(initialDate), [initialDate]);
 
@@ -59,14 +69,8 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
 
   const [tab, setTab] = useState('detail');
 
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: crypto.randomUUID(),
-      method: 'notification',
-      amount: 30,
-      unit: 'minutes',
-    },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState<'busy' | 'free'>('busy');
   const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>('default');
@@ -74,31 +78,61 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
-    const s = startOfDayDefaultHour(initialStart);
-    const e = startOfDayDefaultHour(initialEnd);
-    setStart(toLocalDateTimeInputValue(s));
-    setEnd(toLocalDateTimeInputValue(e));
-    setAllDay(true);
-    setShowTime(false);
-    setGuests([]);
-    setGuestInput('');
-    setGuestError(null);
-    setLocation('');
-    setLocationPlace(null);
-    setNotifications([
-      {
-        id: crypto.randomUUID(),
-        method: 'notification',
-        amount: 30,
-        unit: 'minutes',
-      },
-    ]);
-    setDescription('');
-    setBusy('busy');
-    setVisibility('default');
-    setTitle('');
-    setSubmitError(null);
-  }, [initialStart, initialEnd]);
+    if (event) {
+      console.log('load event into form', event);
+      setTitle(event.title ?? '');
+      setStart(toLocalDateTimeInputValue(new Date(event.start)));
+      setEnd(toLocalDateTimeInputValue(new Date(event.end)));
+      setAllDay(event.allDay);
+      setShowTime(!event.allDay);
+      setGuests((event as any).guests ?? []);
+      setGuestInput('');
+      setGuestError(null);
+      // if the stored location is JSON, try to parse and set place
+      try {
+        const parsed = typeof event.location === 'string' ? JSON.parse(event.location) : null;
+        if (parsed && parsed.display_name) {
+          setLocation(parsed.display_name ?? '');
+          setLocationPlace(parsed);
+        } else {
+          setLocationPlace(null);
+        }
+      } catch {
+        setLocationPlace(null);
+      }
+      setNotifications(event.notifications ?? []);
+      setDescription(event.description ?? '');
+      setBusy(event.busyStatus ?? 'busy');
+      setVisibility(event.visibility ?? 'default');
+      setSubmitError(null);
+    } else {
+      // reset to initial
+      const s = startOfDayDefaultHour(initialStart);
+      const e = startOfDayDefaultHour(initialEnd);
+      setStart(toLocalDateTimeInputValue(s));
+      setEnd(toLocalDateTimeInputValue(e));
+      setAllDay(true);
+      setShowTime(false);
+      setGuests([]);
+      setGuestInput('');
+      setGuestError(null);
+      setLocation('');
+      setLocationPlace(null);
+      setNotifications([
+        {
+          id: crypto.randomUUID(),
+          method: 'notification',
+          amount: 30,
+          unit: 'minutes',
+        },
+      ]);
+      setDescription('');
+      setBusy('busy');
+      setVisibility('default');
+      setTitle('');
+      setSubmitError(null);
+    }
+  }, [event, initialDate]);
 
   // simple email validator
   function isValidEmail(email: string) {
@@ -205,7 +239,7 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
 
     console.log('submit', allDay, startDate, endDate);
 
-    const payload: any = {
+    const payload: CalendarEvent = {
       id: crypto.randomUUID(),
       title,
       start: startDate.toISOString(),
@@ -221,7 +255,13 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
     };
 
     console.log('payload', payload);
-    onCreate(payload);
+    if (event) {
+      // existing event, call onSave
+      onSave?.({ ...payload, id: event.id });
+    } else {
+      // new event, call onCreate
+      onCreate?.(payload);
+    }
   };
   return (
     <div className="space-y-3 px-4 py-4">
@@ -424,6 +464,7 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
                 <select
                   className="rounded-md bg-gray-200 p-3 text-sm"
                   onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
+                  value={busy}
                 >
                   {statusOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -437,6 +478,7 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
                   onChange={(e) =>
                     setVisibility(e.target.value as 'default' | 'public' | 'private')
                   }
+                  value={visibility}
                 >
                   {eventVisibilityOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -547,6 +589,15 @@ export function EventFullscreenForm({ initialDate, onClose, onCreate }: Props) {
         >
           Save
         </button>
+        {event && (
+          <button
+            type="button"
+            className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
+            onClick={() => onDelete?.(event.id)}
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+'use client';
+
 import { generateMonthGrid } from '@/lib/month-grid';
 import { format, parseISO } from 'date-fns';
 import { eventsForDay } from '@/lib/events/day';

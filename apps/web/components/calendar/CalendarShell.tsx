@@ -1,3 +1,5 @@
+'use client';
+
 import { addDays, addMonths, addYears } from 'date-fns';
 import { CalendarHeader } from './CalendarHeader';
 import { DayView } from './views/DayView';

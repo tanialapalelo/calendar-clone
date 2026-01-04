@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { formatIsoDate, parseIsoDateOrToday } from '@/lib/date';
 import { CalendarShell } from '@/components/calendar/CalendarShell';
@@ -20,6 +20,9 @@ export default function CalendarPageClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // isMounted flag, but do NOT early-return before other hooks
+  const [isMounted, setIsMounted] = useState(false);
+
   const { events, addEvent, updateEvent, removeEvent } = useEventsStorage();
   const [createOpen, setCreateOpen] = useState(false);
   const [createDate, setCreateDate] = useState<Date | null>(null);
@@ -38,6 +41,15 @@ export default function CalendarPageClient() {
     if (!dayPopoverDate) return [];
     return eventsForDay(events, dayPopoverDate);
   }, [events, dayPopoverDate]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    // While mounting, render nothing but keep hook order stable
+    return null;
+  }
 
   const setQuery = (next: { view?: CalendarView; date?: Date }) => {
     const params = new URLSearchParams(searchParams.toString());

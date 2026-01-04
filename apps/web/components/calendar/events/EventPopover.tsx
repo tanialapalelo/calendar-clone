@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
+import { useRouter } from 'next/navigation';
 
 type Props = {
   open: boolean;
@@ -26,6 +27,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
 
+  const router = useRouter();
   // Reset form whenever we open on a new event
   useEffect(() => {
     if (!open || !event) return;
@@ -82,6 +84,14 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
   if (!open || !event || !anchorRect || !position) return null;
 
+  const editEvent = () => {
+    if (event.isAppointment || event.isTask) {
+      setEditing(true);
+    } else {
+      router.push('/events/edit/' + event.id);
+    }
+  };
+
   const submitEdit = () => {
     onUpdate({
       ...event,
@@ -114,7 +124,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
           <button
             type="button"
             className="rounded-full p-1 text-sm text-gray-600 hover:bg-gray-100"
-            onClick={() => setEditing(true)}
+            onClick={editEvent}
           >
             <PencilIcon size={16} />
           </button>
