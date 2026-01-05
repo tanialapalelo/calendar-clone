@@ -1,13 +1,5 @@
 import { eventMinutesWithinDay } from './day-layout';
 
-export type PositionedEvent = {
-  event: CalendarEvent;
-  startMin: number;
-  endMin: number;
-  col: number;
-  colCount: number;
-};
-
 /**
  * Greedy column assignment for overlapping events.
  * - Only considers the event's portion within the given day (via eventMinutesWithinDay).

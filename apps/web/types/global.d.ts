@@ -14,6 +14,18 @@ type CalendarEvent = {
   notifications?: NotificationItem[];
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
+  recurrence?: string | null;
+  color?: string;
+  visibility?: 'public' | 'private' | 'default';
+  busyStatus?: 'free' | 'busy';
+};
+
+type PositionedEvent = {
+  event: CalendarEvent;
+  startMin: number;
+  endMin: number;
+  col: number;
+  colCount: number;
 };
 
 type NotificationItem = {
@@ -21,4 +33,9 @@ type NotificationItem = {
   method: string; // e.g. 'notification' | 'email'
   amount: number;
   unit: 'minutes' | 'hours' | 'days' | 'weeks';
+  anchor?: 'start' | 'end';
+};
+
+type RecurrenceValue = {
+  rrule?: string | null;
 };

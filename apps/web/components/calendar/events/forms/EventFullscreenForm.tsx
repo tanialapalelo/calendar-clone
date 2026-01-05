@@ -1,6 +1,6 @@
 'use client';
 
-import { addDays, addMinutes, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
@@ -21,6 +21,8 @@ import {
 import LocationAutocomplete, {
   PlaceSuggestion,
 } from '@/components/calendar/events/LocationAutoComplete';
+import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
+import ColorPicker from '@/components/calendar/events/ColorPicker';
 
 function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   try {
@@ -74,18 +76,21 @@ export function EventFullscreenForm({
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState<'busy' | 'free'>('busy');
   const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>('default');
+  const [recurrence, setRecurrence] = useState<RecurrenceValue>({
+    rrule: event?.recurrence ?? null,
+  });
+  const [color, setColor] = useState<string | undefined>(event?.color);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (event) {
-      console.log('load event into form', event);
       setTitle(event.title ?? '');
       setStart(toLocalDateTimeInputValue(new Date(event.start)));
       setEnd(toLocalDateTimeInputValue(new Date(event.end)));
       setAllDay(event.allDay);
       setShowTime(!event.allDay);
-      setGuests((event as any).guests ?? []);
+      setGuests(event.guests ?? []);
       setGuestInput('');
       setGuestError(null);
       // if the stored location is JSON, try to parse and set place
@@ -104,6 +109,7 @@ export function EventFullscreenForm({
       setDescription(event.description ?? '');
       setBusy(event.busyStatus ?? 'busy');
       setVisibility(event.visibility ?? 'default');
+      setColor(event.color ?? undefined);
       setSubmitError(null);
     } else {
       // reset to initial
@@ -118,6 +124,7 @@ export function EventFullscreenForm({
       setGuestError(null);
       setLocation('');
       setLocationPlace(null);
+      setColor(undefined);
       setNotifications([
         {
           id: crypto.randomUUID(),
@@ -200,18 +207,6 @@ export function EventFullscreenForm({
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  // construct selection for repetition options according to date chosen
-  const repetitionOptions = () => {
-    const options = [];
-    const startDate = new Date(start);
-    const dayOfWeek = format(startDate, 'EEEE'); // e.g., 'Monday'
-    const dayOfMonth = startDate.getDate(); // e.g., 15
-    options.push('Daily');
-    options.push(`Weekly on ${dayOfWeek}`);
-    options.push(`Annually on ${dayOfMonth} ${format(startDate, 'MMMM')}`);
-    options.push('Every weekday (Monday to Friday)');
-    return options;
-  };
   const validateBeforeSubmit = () => {
     // ensure end > start
     const s = new Date(start).getTime();
@@ -249,9 +244,11 @@ export function EventFullscreenForm({
       // store structured location if available, otherwise the string
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
+      recurrence: recurrence?.rrule ?? null,
       description: description || undefined,
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
+      color: color || undefined,
     };
 
     console.log('payload', payload);
@@ -326,14 +323,11 @@ export function EventFullscreenForm({
           )}
           {/*  selections for repetition event */}
           <div>
-            <select className="rounded border p-3 text-sm text-gray-700 hover:bg-gray-100">
-              <option value="">Does not repeat</option>
-              {repetitionOptions().map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <RecurrencePicker
+              value={recurrence}
+              onChange={setRecurrence}
+              startDate={new Date(start)}
+            />
           </div>
         </div>
       </div>
@@ -455,6 +449,15 @@ export function EventFullscreenForm({
             >
               Add notification
             </button>
+
+            {/* Color */}
+            <div className="flex items-center gap-2">
+              <div className="w-5" />
+              <div className="flex-1">
+                <label className="text-xs font-medium text-gray-700">Event color</label>
+                <ColorPicker value={color} onChange={setColor} />
+              </div>
+            </div>
 
             {/* Status + Visibility */}
             <div className="flex items-center gap-2 pt-3">

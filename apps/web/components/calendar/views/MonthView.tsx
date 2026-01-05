@@ -122,7 +122,10 @@ export function MonthView(props: {
                                 onOpenEvent(ev.id, rect);
                               }}
                             >
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />
+                              <span
+                                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{ background: ev.color ?? '#039BE5' }}
+                              />
                               <span className="shrink-0 text-gray-600">
                                 {format(parseISO(ev.start), 'h:mma').toLowerCase()}
                               </span>
@@ -180,6 +183,7 @@ export function MonthView(props: {
                           style={{
                             gridColumn: `${s.startCol + 1} / ${s.endColExclusive + 1}`,
                             gridRow: `${s.lane + 1}`,
+                            background: s.event.color ?? '#039BE5',
                           }}
                           title={s.event.title}
                           onClick={(e) => {
