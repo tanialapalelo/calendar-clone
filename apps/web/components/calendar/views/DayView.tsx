@@ -139,14 +139,15 @@ export function DayView(props: {
                   {/* Main body */}
                   <div
                     className={[
-                      'relative h-full overflow-hidden border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-900',
+                      'relative h-full overflow-hidden px-2 py-1 text-xs text-white',
                       continuesFromPrev ? 'rounded-l-full' : 'rounded-md',
                       continuesToNext ? 'rounded-r-full' : 'rounded-md',
                     ].join(' ')}
+                    style={{ background: p.event.color ?? '#039BE5' }}
                   >
                     <div className="truncate font-semibold">{p.event.title}</div>
                     {!allDay && !crossDay && (
-                      <div className="truncate text-[11px] text-blue-800/80">
+                      <div className="truncate text-[11px]">
                         {format(parseISO(p.event.start), 'HH:mm')} –{' '}
                         {format(parseISO(p.event.end), 'HH:mm')}
                       </div>

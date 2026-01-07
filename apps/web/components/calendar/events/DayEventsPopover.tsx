@@ -2,7 +2,7 @@
 
 import { addDays, format, isSameDay, parseISO, startOfDay, subMilliseconds } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
-import { XIcon } from 'lucide-react';
+import { CircleIcon, XIcon } from 'lucide-react';
 
 type Props = {
   open: boolean;
@@ -146,8 +146,9 @@ export function DayEventsPopover({
                 const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
                 const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
 
+                const eventColor = ev.color || '#0090d6';
                 const containerClass = isBar
-                  ? `bg-[#039BE5] text-white hover:bg-[#0090d6] ${leftCap} ${rightCap}`
+                  ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
                 return (
@@ -159,9 +160,20 @@ export function DayEventsPopover({
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
                         onPickEvent(ev.id, rect);
                       }}
+                      style={{
+                        background: !isBar ? '' : eventColor,
+                      }}
                     >
-                      <div className="truncate text-xs font-medium">
-                        {!isBar && `${format(evStart, 'hh:mm a')} `}
+                      <div className="flex items-center gap-2 truncate text-xs font-medium">
+                        {!isBar && (
+                          <>
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full"
+                              style={{ background: ev.color ?? '#039BE5' }}
+                            />
+                            <span>{format(evStart, 'hh:mm a')}</span>
+                          </>
+                        )}
                         {ev.title}
                       </div>
                     </button>

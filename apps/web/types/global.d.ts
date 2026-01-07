@@ -15,7 +15,7 @@ type CalendarEvent = {
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
   recurrence?: string | null;
-  color?: string;
+  color: string;
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
 };

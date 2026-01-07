@@ -79,7 +79,7 @@ export function EventFullscreenForm({
   const [recurrence, setRecurrence] = useState<RecurrenceValue>({
     rrule: event?.recurrence ?? null,
   });
-  const [color, setColor] = useState<string | undefined>(event?.color);
+  const [color, setColor] = useState('');
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -109,7 +109,7 @@ export function EventFullscreenForm({
       setDescription(event.description ?? '');
       setBusy(event.busyStatus ?? 'busy');
       setVisibility(event.visibility ?? 'default');
-      setColor(event.color ?? undefined);
+      setColor(event.color ?? '#0B57D0');
       setSubmitError(null);
     } else {
       // reset to initial
@@ -124,7 +124,7 @@ export function EventFullscreenForm({
       setGuestError(null);
       setLocation('');
       setLocationPlace(null);
-      setColor(undefined);
+      setColor('#0B57D0');
       setNotifications([
         {
           id: crypto.randomUUID(),
@@ -248,7 +248,7 @@ export function EventFullscreenForm({
       description: description || undefined,
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
-      color: color || undefined,
+      color: color || '#0B57D0',
     };
 
     console.log('payload', payload);
