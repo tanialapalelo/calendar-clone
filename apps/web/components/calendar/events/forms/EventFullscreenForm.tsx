@@ -390,7 +390,7 @@ export function EventFullscreenForm({
                   <div key={n.id} className="mb-2 flex items-center gap-2">
                     {/* selection */}
                     <select
-                      className="rounded-md bg-gray-200 p-3 text-sm"
+                      className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                       onChange={(e) =>
                         updateNotification(n.id, {
                           method: e.target.value,
@@ -411,7 +411,7 @@ export function EventFullscreenForm({
                       min={1}
                       value={n.amount}
                       max={60}
-                      className="w-16 rounded-md bg-gray-200 p-3 text-sm"
+                      className="w-16 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                       onChange={(e) => updateNotification(n.id, { amount: Number(e.target.value) })}
                     />
 
@@ -423,7 +423,7 @@ export function EventFullscreenForm({
                           unit: e.target.value as NotificationItem['unit'],
                         })
                       }
-                      className="rounded bg-gray-200 p-3 text-sm"
+                      className="rounded bg-gray-100 p-3 text-sm hover:bg-gray-200"
                     >
                       {unitOfTimeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -454,7 +454,6 @@ export function EventFullscreenForm({
             <div className="flex items-center gap-2">
               <div className="w-5" />
               <div className="flex-1">
-                <label className="text-xs font-medium text-gray-700">Event color</label>
                 <ColorPicker value={color} onChange={setColor} />
               </div>
             </div>
@@ -465,7 +464,7 @@ export function EventFullscreenForm({
               <div className="flex-1">
                 {/* Status */}
                 <select
-                  className="rounded-md bg-gray-200 p-3 text-sm"
+                  className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
                   value={busy}
                 >
@@ -477,7 +476,7 @@ export function EventFullscreenForm({
                 </select>
                 {/* Visibility */}
                 <select
-                  className="ml-3 rounded-md bg-gray-200 p-3 text-sm"
+                  className="ml-3 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) =>
                     setVisibility(e.target.value as 'default' | 'public' | 'private')
                   }
