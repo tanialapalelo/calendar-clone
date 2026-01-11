@@ -86,14 +86,13 @@ export function EventFullscreenForm({
   useEffect(() => {
     if (event) {
       setTitle(event.title ?? '');
-      setStart(toLocalDateTimeInputValue(new Date(event.start)));
-      setEnd(toLocalDateTimeInputValue(new Date(event.end)));
+      setStart(toLocalDateTimeInputValue(parseISO(event.start)));
+      setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
       setAllDay(event.allDay);
       setShowTime(!event.allDay);
       setGuests(event.guests ?? []);
       setGuestInput('');
       setGuestError(null);
-      // if the stored location is JSON, try to parse and set place
       try {
         const parsed = typeof event.location === 'string' ? JSON.parse(event.location) : null;
         if (parsed && parsed.display_name) {
@@ -110,9 +109,9 @@ export function EventFullscreenForm({
       setBusy(event.busyStatus ?? 'busy');
       setVisibility(event.visibility ?? 'default');
       setColor(event.color ?? '#0B57D0');
+      setRecurrence({ rrule: event.recurrence ?? null });
       setSubmitError(null);
     } else {
-      // reset to initial
       const s = startOfDayDefaultHour(initialStart);
       const e = startOfDayDefaultHour(initialEnd);
       setStart(toLocalDateTimeInputValue(s));
@@ -126,22 +125,17 @@ export function EventFullscreenForm({
       setLocationPlace(null);
       setColor('#0B57D0');
       setNotifications([
-        {
-          id: crypto.randomUUID(),
-          method: 'notification',
-          amount: 30,
-          unit: 'minutes',
-        },
+        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
       ]);
       setDescription('');
       setBusy('busy');
       setVisibility('default');
       setTitle('');
+      setRecurrence({ rrule: null });
       setSubmitError(null);
     }
   }, [event, initialDate]);
 
-  // simple email validator
   function isValidEmail(email: string) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email.trim());
@@ -176,8 +170,8 @@ export function EventFullscreenForm({
   const onToggleAllDayWhenShown = (checked: boolean) => {
     setAllDay(checked);
     if (checked) {
-      const s = startOfDayDefaultHour(new Date(start));
-      const e = startOfDayDefaultHour(new Date(start));
+      const s = startOfDayDefaultHour(parseISO(start));
+      const e = startOfDayDefaultHour(parseISO(start));
       setStart(toLocalDateTimeInputValue(s));
       setEnd(toLocalDateTimeInputValue(e));
       setShowTime(false);
@@ -188,7 +182,7 @@ export function EventFullscreenForm({
     }
   };
 
-  // Notifications
+  // Notifications handlers...
   const addNotification = () => {
     const id = crypto.randomUUID();
     const defaultUnit: NotificationItem['unit'] = 'minutes';
@@ -198,19 +192,15 @@ export function EventFullscreenForm({
       { id, method: defaultMethod, amount: 30, unit: defaultUnit },
     ]);
   };
-
   const updateNotification = (id: string, updates: Partial<NotificationItem>) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, ...updates } : n)));
   };
-
-  const removeNotification = (id: string) => {
+  const removeNotification = (id: string) =>
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
 
   const validateBeforeSubmit = () => {
-    // ensure end > start
-    const s = new Date(start).getTime();
-    const e = new Date(end).getTime();
+    const s = parseISO(start).getTime();
+    const e = parseISO(end).getTime();
     if (e <= s && !allDay) {
       setSubmitError('End must be after start');
       return false;
@@ -225,14 +215,12 @@ export function EventFullscreenForm({
     let startDate: Date;
     let endDate: Date;
     if (allDay) {
-      startDate = startOfDayDefaultHour(new Date(start));
-      endDate = addDays(startOfDayDefaultHour(new Date(end)), 1);
+      startDate = startOfDayDefaultHour(parseISO(start));
+      endDate = addDays(startOfDayDefaultHour(parseISO(end)), 1);
     } else {
-      startDate = new Date(start);
-      endDate = new Date(end);
+      startDate = parseISO(start);
+      endDate = parseISO(end);
     }
-
-    console.log('submit', allDay, startDate, endDate);
 
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
@@ -241,7 +229,6 @@ export function EventFullscreenForm({
       end: endDate.toISOString(),
       allDay,
       guests: guests.length ? guests : undefined,
-      // store structured location if available, otherwise the string
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
       recurrence: recurrence?.rrule ?? null,
@@ -251,20 +238,24 @@ export function EventFullscreenForm({
       color: color || '#0B57D0',
     };
 
-    console.log('payload', payload);
-    if (event) {
-      // existing event, call onSave
-      onSave?.({ ...payload, id: event.id });
-    } else {
-      // new event, call onCreate
-      onCreate?.(payload);
-    }
+    if (event) onSave?.({ ...payload, id: event.id });
+    else onCreate?.(payload);
   };
+
+  const recurrencePickerStartDate = (() => {
+    try {
+      return parseISO(start);
+    } catch {
+      return undefined;
+    }
+  })();
+
   return (
     <div className="space-y-3 px-4 py-4">
       <button onClick={onClose}>
         <XIcon size={16} />
       </button>
+
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -321,12 +312,12 @@ export function EventFullscreenForm({
               All day
             </label>
           )}
-          {/*  selections for repetition event */}
+
           <div>
             <RecurrencePicker
               value={recurrence}
               onChange={setRecurrence}
-              startDate={new Date(start)}
+              startDate={recurrencePickerStartDate}
             />
           </div>
         </div>
@@ -350,9 +341,10 @@ export function EventFullscreenForm({
             </button>
           ))}
         </div>
+
         {tab === 'detail' && (
           <>
-            {/* Location */}
+            {/* Location, Notifications, Color, Status, Description, Guests */}
             <div className="flex items-center gap-2 pt-3">
               <MapPinIcon size={16} />
               <div className="flex-1">
@@ -360,7 +352,6 @@ export function EventFullscreenForm({
                   value={location}
                   onChange={(v) => {
                     setLocation(v);
-                    // clear place details when user types
                     setLocationPlace(null);
                   }}
                   onSelect={(place) => {
@@ -382,20 +373,14 @@ export function EventFullscreenForm({
               </div>
             </div>
 
-            {/*  Notification */}
             <div className="mt-3 flex items-start gap-2">
               <BellIcon size={16} />
               <div className="flex-1">
                 {notifications.map((n) => (
                   <div key={n.id} className="mb-2 flex items-center gap-2">
-                    {/* selection */}
                     <select
                       className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                      onChange={(e) =>
-                        updateNotification(n.id, {
-                          method: e.target.value,
-                        })
-                      }
+                      onChange={(e) => updateNotification(n.id, { method: e.target.value })}
                       value={n.method}
                     >
                       {notificationOption.map((option) => (
@@ -405,7 +390,6 @@ export function EventFullscreenForm({
                       ))}
                     </select>
 
-                    {/* time to ring */}
                     <input
                       type="number"
                       min={1}
@@ -415,7 +399,6 @@ export function EventFullscreenForm({
                       onChange={(e) => updateNotification(n.id, { amount: Number(e.target.value) })}
                     />
 
-                    {/* unit of time (minutes, etc) */}
                     <select
                       value={n.unit}
                       onChange={(e) =>
@@ -432,7 +415,6 @@ export function EventFullscreenForm({
                       ))}
                     </select>
 
-                    {/* remove notification */}
                     <button onClick={() => removeNotification(n.id)}>
                       <XIcon
                         size={25}
@@ -443,6 +425,7 @@ export function EventFullscreenForm({
                 ))}
               </div>
             </div>
+
             <button
               className="my-1 ml-6 rounded-full p-2 text-sm text-[#0B57D0] hover:bg-blue-100"
               onClick={addNotification}
@@ -450,7 +433,6 @@ export function EventFullscreenForm({
               Add notification
             </button>
 
-            {/* Color */}
             <div className="flex items-center gap-2">
               <div className="w-5" />
               <div className="flex-1">
@@ -458,11 +440,9 @@ export function EventFullscreenForm({
               </div>
             </div>
 
-            {/* Status + Visibility */}
             <div className="flex items-center gap-2 pt-3">
               <BriefcaseBusinessIcon size={16} />
               <div className="flex-1">
-                {/* Status */}
                 <select
                   className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
@@ -474,7 +454,7 @@ export function EventFullscreenForm({
                     </option>
                   ))}
                 </select>
-                {/* Visibility */}
+
                 <select
                   className="ml-3 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) =>
@@ -491,7 +471,6 @@ export function EventFullscreenForm({
               </div>
             </div>
 
-            {/* Description */}
             <div className="flex items-center gap-2 pt-3">
               <NotebookPenIcon size={16} />
               <div className="flex-1">
@@ -560,7 +539,6 @@ export function EventFullscreenForm({
             )}
           </div>
         </div>
-
         {/* right column: guest permissions, simple preview */}
         <div>
           <div className="mb-2 text-sm font-semibold">Guest permissions</div>
@@ -579,10 +557,8 @@ export function EventFullscreenForm({
         </div>
       </div>
 
-      {/* submit error */}
       {submitError && <div className="text-sm text-red-600">{submitError}</div>}
 
-      {/* Actions */}
       <div className="flex items-center justify-end gap-2 px-4 py-3">
         <button
           type="button"
@@ -604,3 +580,5 @@ export function EventFullscreenForm({
     </div>
   );
 }
+
+export default EventFullscreenForm;

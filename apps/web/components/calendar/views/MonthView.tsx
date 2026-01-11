@@ -1,12 +1,13 @@
 'use client';
 
 import { generateMonthGrid } from '@/lib/month-grid';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, startOfDay, addDays } from 'date-fns';
 import { eventsForDay } from '@/lib/events/day';
 import { daysOfWeek } from '@/constants';
 import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
 import { isBarEventInMonth } from '@/lib/events/month-classify';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
+import { expandRecurringEvents } from '@/lib/events/recurrence';
 
 export function MonthView(props: {
   date: Date;
@@ -23,9 +24,9 @@ export function MonthView(props: {
   );
   const ROW_HEIGHT = 18;
   const ROW_GAP = 4;
-  const BAR_ROWS = 2; // fixed number of bar lanes to reserve per week (tweak as desired)
+  const BAR_ROWS = 2; // fixed number of bar lanes to reserve per week
   const TOTAL_ROWS = 4; // total vertical rows per day (bars + timed)
-  const OVERLAY_TOP = 44; // same as before
+  const OVERLAY_TOP = 44;
 
   return (
     <div className="rounded-3xl bg-white p-4">
@@ -42,15 +43,19 @@ export function MonthView(props: {
       <div className="grid grid-cols-1">
         {weeks.map((weekCells, weekIdx) => {
           const weekDates = weekCells.map((c) => c.date);
-          const { segments, laneCount } = buildWeekBarLayout(weekDates, events);
 
-          // show up to BAR_ROWS lanes (fixed)
+          // compute week window [weekStart, weekEnd) for expansion
+          const weekStart = startOfDay(weekDates[0]);
+          const weekEnd = addDays(startOfDay(weekDates[6]), 1); // exclusive
+
+          // expand recurring events into concrete instances within this week window
+          const eventsForWeek = expandRecurringEvents(events, weekStart, weekEnd);
+
+          // layout using the expanded list
+          const { segments, laneCount } = buildWeekBarLayout(weekDates, eventsForWeek);
+
           const lanesShown = Math.min(laneCount, BAR_ROWS);
-
-          // timed rows per day (available fixed budget)
           const timedRowsPerDay = Math.max(0, TOTAL_ROWS - lanesShown);
-
-          // Reserve exactly BAR_ROWS worth of height for the overlay
           const reservedOverlayHeight = BAR_ROWS * ROW_HEIGHT + Math.max(0, BAR_ROWS) * ROW_GAP;
 
           return (
@@ -63,9 +68,9 @@ export function MonthView(props: {
                     ? 'inline-flex items-center justify-center rounded-full bg-[#0B57D0] text-white'
                     : '';
 
-                  const dayAll = eventsForDay(events, cell.date);
+                  const dayAll = eventsForDay(eventsForWeek, cell.date);
 
-                  // timed single-day events only (exclude bar events)
+                  // timed single-day events only (exclude bars)
                   const timed = dayAll
                     .filter((ev) => !isBarEventInMonth(ev))
                     .sort((a, b) => parseISO(a.start).getTime() - parseISO(b.start).getTime());
@@ -99,18 +104,21 @@ export function MonthView(props: {
                         </button>
                       </div>
 
-                      {/* Reserve vertical space for bars overlay if only there's bars */}
+                      {/* reserved overlay space */}
                       <div style={{ height: reservedOverlayHeight }} />
 
                       {/* Timed single-day list */}
                       <div className="relative mt-1 space-y-1 text-left">
                         {visibleTimed.map((ev) => {
-                          // icon for task and appointment
                           const isNotEvent = ev.isTask ? (
                             <CircleIcon size={8} />
                           ) : ev.isAppointment ? (
                             <Grid2X2Icon size={8} />
                           ) : null;
+
+                          // prefer parent id when present so the parent can open the series
+                          const openId = ev.id;
+
                           return (
                             <div
                               key={ev.id}
@@ -119,7 +127,7 @@ export function MonthView(props: {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const rect = e.currentTarget.getBoundingClientRect();
-                                onOpenEvent(ev.id, rect);
+                                onOpenEvent(openId, rect);
                               }}
                             >
                               <span
@@ -138,7 +146,6 @@ export function MonthView(props: {
                         })}
 
                         {hiddenTotal > 0 && (
-                          // Render the "+N more" as an interactive control with hover style and open popover behavior
                           <button
                             type="button"
                             className="relative mt-1 w-full rounded px-1 py-0.5 text-left text-xs font-semibold text-gray-900 hover:bg-gray-200"
@@ -176,14 +183,16 @@ export function MonthView(props: {
                       const leftCapClass = roundedLeft ? 'rounded-l-full' : 'rounded-l-none';
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
+                      const openId = (s.event as any).originalEventId ?? (s.event as any).id;
+
                       return (
                         <div
                           key={`${s.event.id}-${weekIdx}-${s.startCol}-${s.lane}`}
-                          className={`pointer-events-auto relative flex items-center truncate bg-[#039BE5] px-2 text-[11px] font-medium text-white hover:bg-[#0090d6] ${leftCapClass} ${rightCapClass}`}
+                          className={`pointer-events-auto relative flex items-center truncate px-2 text-[11px] font-medium text-white hover:bg-[#0090d6] ${leftCapClass} ${rightCapClass}`}
                           style={{
                             gridColumn: `${s.startCol + 1} / ${s.endColExclusive + 1}`,
                             gridRow: `${s.lane + 1}`,
-                            background: s.event.color ?? '#039BE5',
+                            background: (s.event as any).color ?? '#039BE5',
                           }}
                           title={s.event.title}
                           onClick={(e) => {
@@ -191,7 +200,7 @@ export function MonthView(props: {
                             const rect = (
                               e.currentTarget as HTMLDivElement
                             ).getBoundingClientRect();
-                            onOpenEvent(s.event.id, rect);
+                            onOpenEvent(openId, rect);
                           }}
                         >
                           <span className="truncate">{s.event.title}</span>

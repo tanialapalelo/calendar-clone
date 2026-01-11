@@ -26,6 +26,21 @@ export default function RecurrencePicker(props: {
     RRule.SA, // 6 -> Saturday
   ];
 
+  // Helper to produce a "local anchored" Date from startDate
+  // This avoids timezone/UTC shifts when using dtstart with rrule.
+  function localStartDate(sd?: Date) {
+    if (!sd) return undefined;
+    return new Date(
+      sd.getFullYear(),
+      sd.getMonth(),
+      sd.getDate(),
+      sd.getHours(),
+      sd.getMinutes(),
+      sd.getSeconds(),
+      sd.getMilliseconds(),
+    );
+  }
+
   // compute next occurrences preview
   useEffect(() => {
     if (!value?.rrule || !startDate) {
@@ -33,7 +48,11 @@ export default function RecurrencePicker(props: {
       return;
     }
     try {
-      const rule = RRule.fromString(value.rrule);
+      // parse rrule into options then attach dtstart anchored to local date/time
+      const opts = RRule.parseString(value.rrule);
+      const dt = localStartDate(startDate);
+      if (dt) opts.dtstart = dt;
+      const rule = new RRule(opts);
       const dates = rule.all((d, i) => i < 5);
       setPreview(dates.map((d) => format(d, 'EEE, MMM d, yyyy')));
     } catch {
@@ -48,9 +67,10 @@ export default function RecurrencePicker(props: {
 
   function setDaily() {
     if (!startDate) return;
+    const dt = localStartDate(startDate);
     const r = new RRule({
       freq: RRule.DAILY,
-      dtstart: startDate,
+      dtstart: dt,
     }).toString();
     setPreset('daily');
     onChange({ rrule: r });
@@ -60,9 +80,10 @@ export default function RecurrencePicker(props: {
     if (!startDate) return;
     const jsWeekday = startDate.getDay(); // 0..6 (Sunday..Saturday)
     const byweekday = [jsDayToRRule[jsWeekday]];
+    const dt = localStartDate(startDate);
     const r = new RRule({
       freq: RRule.WEEKLY,
-      dtstart: startDate,
+      dtstart: dt,
       byweekday,
     }).toString();
     setPreset('weekly');
@@ -72,9 +93,10 @@ export default function RecurrencePicker(props: {
   function setEveryWeekday() {
     if (!startDate) return;
     const byweekday = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
+    const dt = localStartDate(startDate);
     const r = new RRule({
       freq: RRule.WEEKLY,
-      dtstart: startDate,
+      dtstart: dt,
       byweekday,
     }).toString();
     setPreset('weekday');
@@ -83,9 +105,10 @@ export default function RecurrencePicker(props: {
 
   function setMonthly() {
     if (!startDate) return;
+    const dt = localStartDate(startDate);
     const r = new RRule({
       freq: RRule.MONTHLY,
-      dtstart: startDate,
+      dtstart: dt,
       bymonthday: startDate.getDate(),
     }).toString();
     setPreset('monthly');
@@ -94,9 +117,10 @@ export default function RecurrencePicker(props: {
 
   function setYearly() {
     if (!startDate) return;
+    const dt = localStartDate(startDate);
     const r = new RRule({
       freq: RRule.YEARLY,
-      dtstart: startDate,
+      dtstart: dt,
     }).toString();
     setPreset('yearly');
     onChange({ rrule: r });
