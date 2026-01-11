@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RRule } from 'rrule';
+import { RRule, type Weekday } from 'rrule';
 import { format } from 'date-fns';
 
 type RecurrenceValue = { rrule?: string | null };
@@ -12,7 +12,8 @@ export default function RecurrencePicker(props: {
   startDate?: Date;
 }) {
   const { value, onChange, startDate } = props;
-  const [preset, setPreset] = useState<string>(value?.rrule ? 'custom' : 'none');
+
+  const [preset, setPreset] = useState<string>(() => (value?.rrule ? 'custom' : 'none'));
   const [preview, setPreview] = useState<string[]>([]);
 
   // helper: map JS getDay() (0 = Sun) to RRule weekdays safely
@@ -41,6 +42,50 @@ export default function RecurrencePicker(props: {
     );
   }
 
+  // When value.rrule or startDate changes, try to infer a preset from the rrule
+  useEffect(() => {
+    if (!value?.rrule || !startDate) {
+      setPreset('none');
+      return;
+    }
+    try {
+      const opts = RRule.parseString(value.rrule);
+
+      const isDaily = opts.freq === RRule.DAILY && !opts.byweekday && !opts.bymonthday;
+
+      const weekdayList = (opts.byweekday ?? []) as Weekday[];
+
+      const isWeeklySameDay =
+        opts.freq === RRule.WEEKLY &&
+        weekdayList.length === 1 &&
+        jsDayToRRule[startDate.getDay()]?.weekday === weekdayList[0]?.weekday;
+
+      const isWeekday =
+        opts.freq === RRule.WEEKLY &&
+        weekdayList.length === 5 &&
+        [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR].every((w) =>
+          weekdayList.some((bw) => bw.weekday === w.weekday),
+        );
+
+      const isMonthlySameDay =
+        opts.freq === RRule.MONTHLY &&
+        Array.isArray(opts.bymonthday) &&
+        opts.bymonthday.length === 1 &&
+        opts.bymonthday[0] === startDate.getDate();
+
+      const isYearly = opts.freq === RRule.YEARLY;
+
+      if (isDaily) setPreset('daily');
+      else if (isWeeklySameDay) setPreset('weekly');
+      else if (isWeekday) setPreset('weekday');
+      else if (isMonthlySameDay) setPreset('monthly');
+      else if (isYearly) setPreset('yearly');
+      else setPreset('custom');
+    } catch {
+      setPreset('custom');
+    }
+  }, [value?.rrule, startDate]);
+
   // compute next occurrences preview
   useEffect(() => {
     if (!value?.rrule || !startDate) {
@@ -48,17 +93,17 @@ export default function RecurrencePicker(props: {
       return;
     }
     try {
-      // parse rrule into options then attach dtstart anchored to local date/time
+      // IMPORTANT: for preview, trust the DTSTART embedded in the RRULE string
+      // and do not override dtstart here; this avoids off-by-one when mixing
+      // UTC/Z strings with local dates.
       const opts = RRule.parseString(value.rrule);
-      const dt = localStartDate(startDate);
-      if (dt) opts.dtstart = dt;
       const rule = new RRule(opts);
-      const dates = rule.all((d, i) => i < 5);
+      const dates = rule.all((_, i) => i < 5);
       setPreview(dates.map((d) => format(d, 'EEE, MMM d, yyyy')));
     } catch {
       setPreview([]);
     }
-  }, [value?.rrule, startDate]);
+  }, [value?.rrule]);
 
   function setNone() {
     setPreset('none');
@@ -79,12 +124,11 @@ export default function RecurrencePicker(props: {
   function setWeekly() {
     if (!startDate) return;
     const jsWeekday = startDate.getDay(); // 0..6 (Sunday..Saturday)
-    const byweekday = [jsDayToRRule[jsWeekday]];
-    const dt = localStartDate(startDate);
+    const weekday = jsDayToRRule[jsWeekday];
+    // Build a pure RRULE string without DTSTART; DTSTART will be managed separately
     const r = new RRule({
       freq: RRule.WEEKLY,
-      dtstart: dt,
-      byweekday,
+      byweekday: [weekday],
     }).toString();
     setPreset('weekly');
     onChange({ rrule: r });
@@ -143,7 +187,7 @@ export default function RecurrencePicker(props: {
       ['daily', 'Daily'],
       ['weekly', `Weekly on ${dayOfWeek}`],
       ['weekday', 'Every weekday (Mon–Fri)'],
-      ['monthly', 'monthly'],
+      ['monthly', 'Monthly'],
       ['yearly', `Annually on ${format(startDate, 'MMMM')} ${dayOfMonth} `],
       ['custom', 'Custom...'],
     ] as [string, string][];
@@ -179,18 +223,6 @@ export default function RecurrencePicker(props: {
           <div className="text-sm text-gray-500">Custom rule — advanced UI coming soon</div>
         )}
       </div>
-
-      {preview.length > 0 && (
-        <div className="text-xs text-gray-600">
-          Next:{' '}
-          {preview.map((p, i) => (
-            <span key={p}>
-              {i ? ', ' : ''}
-              {p}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

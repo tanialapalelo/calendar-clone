@@ -116,8 +116,15 @@ export function MonthView(props: {
                             <Grid2X2Icon size={8} />
                           ) : null;
 
-                          // prefer parent id when present so the parent can open the series
-                          const openId = ev.id;
+                          // gunakan parent id bila ini occurrence recurring, supaya edit series bisa menemukan event di storage
+                          const openId = (
+                            ev as CalendarEvent & {
+                              originalEventId?: string;
+                              isOccurrence?: boolean;
+                            }
+                          ).originalEventId
+                            ? (ev as CalendarEvent & { originalEventId: string }).originalEventId
+                            : ev.id;
 
                           return (
                             <div
@@ -183,7 +190,12 @@ export function MonthView(props: {
                       const leftCapClass = roundedLeft ? 'rounded-l-full' : 'rounded-l-none';
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
-                      const openId = (s.event as any).originalEventId ?? (s.event as any).id;
+                      const ev = s.event as CalendarEvent & {
+                        originalEventId?: string;
+                        isOccurrence?: boolean;
+                        color?: string;
+                      };
+                      const openId = ev.originalEventId ? ev.originalEventId : ev.id;
 
                       return (
                         <div
@@ -192,7 +204,7 @@ export function MonthView(props: {
                           style={{
                             gridColumn: `${s.startCol + 1} / ${s.endColExclusive + 1}`,
                             gridRow: `${s.lane + 1}`,
-                            background: (s.event as any).color ?? '#039BE5',
+                            background: ev.color ?? '#039BE5',
                           }}
                           title={s.event.title}
                           onClick={(e) => {

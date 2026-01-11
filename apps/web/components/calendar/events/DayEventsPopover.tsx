@@ -2,7 +2,7 @@
 
 import { addDays, format, isSameDay, parseISO, startOfDay, subMilliseconds } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
-import { CircleIcon, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 
 type Props = {
   open: boolean;
@@ -141,8 +141,6 @@ export function DayEventsPopover({
 
                 const isBar = ev.allDay || isCrossDayTimedEvent(ev);
 
-                // Rounded only if the event actually starts/ends on this day.
-                // If it continues, make that side flat so it looks "connected".
                 const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
                 const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
 
@@ -151,6 +149,14 @@ export function DayEventsPopover({
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
+                const eventWithRecurrence = ev as CalendarEvent & {
+                  originalEventId?: string;
+                  isOccurrence?: boolean;
+                };
+                const openId = eventWithRecurrence.originalEventId
+                  ? eventWithRecurrence.originalEventId
+                  : ev.id;
+
                 return (
                   <li key={ev.id}>
                     <button
@@ -158,7 +164,7 @@ export function DayEventsPopover({
                       className={`w-full px-3 py-1 text-left ${containerClass}`}
                       onClick={(clickEvt) => {
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
-                        onPickEvent(ev.id, rect);
+                        onPickEvent(openId, rect);
                       }}
                       style={{
                         background: !isBar ? '' : eventColor,

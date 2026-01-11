@@ -1,6 +1,6 @@
 'use client';
 
-import { addDays, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO, startOfDay } from 'date-fns';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
@@ -215,11 +215,13 @@ export function EventFullscreenForm({
     let startDate: Date;
     let endDate: Date;
     if (allDay) {
-      startDate = startOfDayDefaultHour(parseISO(start));
-      endDate = addDays(startOfDayDefaultHour(parseISO(end)), 1);
+      const rawStart = new Date(start);
+      const dayStart = startOfDay(rawStart);
+      startDate = dayStart;
+      endDate = addDays(dayStart, 1); // exclusive end at next midnight
     } else {
-      startDate = parseISO(start);
-      endDate = parseISO(end);
+      startDate = new Date(start);
+      endDate = new Date(end);
     }
 
     const payload: CalendarEvent = {

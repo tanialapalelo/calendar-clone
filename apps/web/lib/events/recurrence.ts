@@ -1,59 +1,49 @@
 'use strict';
 
 import { RRule } from 'rrule';
-import { parseISO, addDays } from 'date-fns';
+import { parseISO, addDays, startOfDay } from 'date-fns';
+import { eventIntersectsDay } from '@/lib/events/day';
+
+export type RecurringOccurrenceEvent = CalendarEvent & {
+  isOccurrence: true;
+  originalEventId: string;
+};
 
 /**
  * Expand recurring events into concrete instances within the given [windowStart, windowEnd).
- *
- * - For non-recurring events: included unchanged.
- * - For recurring events:
- *   - parse stored start/end with parseISO (local-aware)
- *   - anchor RRule.dtstart to the original local Y/M/D/H/M/S
- *   - if ev.allDay === true: anchor dtstart to local midnight and generate occurrences as [midnight, next midnight)
- *   - create instance objects:
- *       id: `${parentId}::occurrence::${occStart.getTime()}`
- *       start/end: ISO strings (occurrence start/end)
- *       originalEventId: parent id
- *       isOccurrence: true
- *       allDay: copied from parent
  */
 export function expandRecurringEvents(
-  events: Record<string, any>[],
+  events: CalendarEvent[],
   windowStart: Date,
   windowEnd: Date,
-) {
-  const out: Record<string, any>[] = [];
+): (CalendarEvent | RecurringOccurrenceEvent)[] {
+  const out: (CalendarEvent | RecurringOccurrenceEvent)[] = [];
+
+  const winStart = windowStart;
+  const winEnd = windowEnd;
 
   for (const ev of events) {
-    if (!ev?.recurrence) {
-      out.push(ev);
+    // Non-recurring event: include if it intersects the window
+    if (!ev.recurrence) {
+      if (eventIntersectsDay(ev, winStart) || eventIntersectsDay(ev, addDays(winEnd, -1))) {
+        out.push(ev);
+      }
       continue;
     }
 
     try {
-      // Parse stored ISO start/end into Date objects (local)
       const origStart = parseISO(ev.start);
       const origEnd = parseISO(ev.end);
       const durationMs = origEnd.getTime() - origStart.getTime();
 
-      // Parse RRULE options and anchor dtstart to the event's local components.
-      // For all-day events we anchor at local midnight of origStart.
       const opts = RRule.parseString(ev.recurrence);
 
       if (ev.allDay) {
-        // Anchor at local midnight
-        opts.dtstart = new Date(
-          origStart.getFullYear(),
-          origStart.getMonth(),
-          origStart.getDate(),
-          0,
-          0,
-          0,
-          0,
-        );
+        // For all-day events, anchor dtstart to local midnight of the logical start date.
+        const anchor = startOfDay(origStart);
+        opts.dtstart = anchor;
       } else {
-        // Anchor at the exact local time-of-day
+        // For timed events, keep the local Y/M/D/H/M/S anchor.
         opts.dtstart = new Date(
           origStart.getFullYear(),
           origStart.getMonth(),
@@ -67,21 +57,21 @@ export function expandRecurringEvents(
 
       const rule = new RRule(opts);
 
-      // Find occurrences in the requested window (inclusive start)
-      const occDates = rule.between(windowStart, windowEnd, true);
+      // Ambil occurrence yang jatuh dalam window [winStart, winEnd]
+      const occDates = rule.between(winStart, winEnd, true);
 
       for (const occ of occDates) {
         let occStart: Date;
         let occEnd: Date;
 
         if (ev.allDay) {
-          // For all-day: set occurrence start at local midnight of occ date,
-          // and end at next local midnight (i.e., +1 day).
-          occStart = new Date(occ.getFullYear(), occ.getMonth(), occ.getDate(), 0, 0, 0, 0);
-          occEnd = addDays(occStart, 1); // exclusive end
+          // All-day: logical tanggal = tanggal lokal dari occ, pakai midnight lokal, end = +1 hari
+          const d = startOfDay(occ);
+          occStart = d;
+          occEnd = addDays(d, 1);
         } else {
-          // For timed events: preserve the original duration and local time offset
-          occStart = new Date(
+          // Timed: preserve duration dan offset lokal
+          const base = new Date(
             occ.getFullYear(),
             occ.getMonth(),
             occ.getDate(),
@@ -90,22 +80,23 @@ export function expandRecurringEvents(
             occ.getSeconds(),
             occ.getMilliseconds(),
           );
-          occEnd = new Date(occStart.getTime() + durationMs);
+          occStart = base;
+          occEnd = new Date(base.getTime() + durationMs);
         }
 
-        out.push({
+        const occurrence: RecurringOccurrenceEvent = {
           ...ev,
           id: `${ev.id}::occurrence::${occStart.getTime()}`,
           start: occStart.toISOString(),
           end: occEnd.toISOString(),
           originalEventId: ev.id,
           isOccurrence: true,
-          allDay: !!ev.allDay,
-        });
+        };
+
+        out.push(occurrence);
       }
     } catch (err) {
-      // On error, include original event so nothing disappears
-      console.error('expandRecurringEvents failed for', ev?.id, err);
+      console.error('expandRecurringEvents failed for', ev.id, err);
       out.push(ev);
     }
   }

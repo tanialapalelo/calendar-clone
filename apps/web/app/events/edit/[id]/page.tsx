@@ -11,7 +11,7 @@ export default function EditEventPage() {
   const id = params?.id ?? '';
 
   const { events, updateEvent, removeEvent } = useEventsStorage();
-  const [ev, setEv] = useState<any | null>(null);
+  const [ev, setEv] = useState<CalendarEvent | null>(null);
 
   useEffect(() => {
     if (!id) return;
