@@ -6,14 +6,26 @@ import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { useRouter } from 'next/navigation';
 
+type RecurringOccurrence = CalendarEvent & {
+  isOccurrence: true;
+  originalEventId: string;
+};
+
 type Props = {
   open: boolean;
   anchorRect: DOMRect | null;
-  event: CalendarEvent | null;
+  event: CalendarEvent | RecurringOccurrence | null;
   onClose: () => void;
   onUpdate: (event: CalendarEvent) => void;
   onDelete: (id: string) => void;
 };
+
+function getSeriesParentId(ev: CalendarEvent | RecurringOccurrence): string {
+  if ((ev as RecurringOccurrence).isOccurrence && (ev as RecurringOccurrence).originalEventId) {
+    return (ev as RecurringOccurrence).originalEventId;
+  }
+  return ev.id;
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -35,7 +47,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     setTitle(event.title ?? '');
     setStart(toLocalDateTimeInputValue(parseISO(event.start)));
     setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
-  }, [open, event?.id]);
+  }, [open, event?.id, event?.start, event?.end]);
 
   // Close on Escape
   useEffect(() => {
@@ -85,31 +97,37 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   if (!open || !event || !anchorRect || !position) return null;
 
   const editEvent = () => {
+    if (!event) return;
+    // appointments / tasks tetap quick-edit
     if (event.isAppointment || event.isTask) {
       setEditing(true);
-    } else {
-      router.push('/events/edit/' + event.id);
+      return;
     }
+
+    // untuk recurring occurrence, buka editor parent series
+    const parentId = getSeriesParentId(event);
+    router.push('/events/edit/' + parentId);
   };
 
   const submitEdit = () => {
-    onUpdate({
+    if (!event) return;
+    const updated: CalendarEvent = {
       ...event,
       title: title.trim(),
       start: new Date(start).toISOString(),
       end: new Date(end).toISOString(),
-    });
+    };
+    onUpdate(updated);
     setEditing(false);
     onClose();
   };
 
   const formattedDate = event.allDay
-    ? format(parseISO(event.start), 'MMMM d · HH:mm') +
-      ' – ' +
-      format(parseISO(event.end), 'MMMM d · HH:mm')
-    : format(parseISO(event.start), 'EEE, MMM d · HH:mm') +
-      ' - ' +
-      format(parseISO(event.end), 'HH:mm');
+    ? `${format(parseISO(event.start), 'MMMM d')} · All day`
+    : `${format(parseISO(event.start), 'EEE, MMM d · HH:mm')} - ${format(
+        parseISO(event.end),
+        'HH:mm',
+      )}`;
 
   return (
     <div className="fixed inset-0 z-[60]">

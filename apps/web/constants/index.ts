@@ -46,3 +46,14 @@ export const DAY_VIEW_PX_PER_HOUR = 48;
 export const DAY_VIEW_GUTTER_PX = 64;
 export const DAY_VIEW_COLUMN_GAP_PX = 6;
 export const DAY_VIEW_PX_PER_MIN = DAY_VIEW_PX_PER_HOUR / 60;
+
+export const PALETTE = [
+  '#039BE5', // blue
+  '#0B57D0', // deep blue
+  '#4CAF50', // green
+  '#FFB300', // amber
+  '#F44336', // red
+  '#9C27B0', // purple
+  '#FF7043', // orange
+  '#607D8B', // gray
+];

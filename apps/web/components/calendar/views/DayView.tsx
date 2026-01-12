@@ -1,6 +1,9 @@
+'use client';
+
 import { format, isSameDay, parseISO } from 'date-fns';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 import { eventsForDay } from '@/lib/events/day';
+import { expandRecurringEvents } from '@/lib/events/recurrence';
 import {
   DAY_VIEW_COLUMN_GAP_PX,
   DAY_VIEW_GUTTER_PX,
@@ -8,6 +11,7 @@ import {
   DAY_VIEW_PX_PER_MIN,
 } from '@/constants';
 import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
+import { CircleIcon, Grid2X2Icon } from 'lucide-react';
 
 function getGmtOffsetLabel(d: Date) {
   const parts = new Intl.DateTimeFormat(undefined, {
@@ -26,13 +30,24 @@ export function DayView(props: {
   const { date, events } = props;
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
-  const dayEvents = eventsForDay(events, date);
+
+  // Expand recurring events for the visible day window so occurrences are included.
+  const dayStart = startOfDayDefaultHour(date);
+  const dayEnd = endOfDayExclusive(date);
+  const expanded = expandRecurringEvents(events, dayStart, dayEnd);
+
+  // events that belong to the day (includes expanded occurrences)
+  const dayEvents = eventsForDay(expanded, date);
+
+  // Compute overlapping layout (positions in minutes columns/cols etc.)
   const positioned = layoutOverlappingEvents(dayEvents, date);
 
+  // Now indicator
   const showNowIndicator = isSameDay(date, new Date());
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const nowTop = nowMinutes * DAY_VIEW_PX_PER_MIN;
+  // Add the top offset that corresponds to the first hour row in the timeline
+  const nowTop = DAY_VIEW_PX_PER_HOUR + nowMinutes * DAY_VIEW_PX_PER_MIN;
 
   const tzLabel = getGmtOffsetLabel(new Date());
 
@@ -71,10 +86,12 @@ export function DayView(props: {
               <div className="text-xs text-gray-500">{tzLabel}</div>
             </div>
 
-            <div className="" style={{ height: DAY_VIEW_PX_PER_HOUR }}>
+            {/* first hour row (top offset) */}
+            <div style={{ height: DAY_VIEW_PX_PER_HOUR }}>
               <div className="absolute top-1/2 right-0 left-0 border-t border-gray-100" />
             </div>
           </div>
+
           {hours.map((h) => (
             <div
               key={h}
@@ -92,30 +109,46 @@ export function DayView(props: {
           ))}
         </div>
 
-        {/* Events overlay */}
+        {/* Events overlay (absolute positioned, aligned with the grid above) */}
         <div className="absolute inset-0" style={{ left: DAY_VIEW_GUTTER_PX }}>
           <div className="relative h-full">
-            {positioned.map((p, i) => {
-              const allDay = p.event.allDay;
+            {positioned.map((p) => {
+              const allDay = !!p.event.allDay;
               const crossDay = !isSameDay(parseISO(p.event.start), parseISO(p.event.end));
-              const dayStart = startOfDayDefaultHour(date).getTime();
-              const dayEnd = endOfDayExclusive(date).getTime();
+
+              const dayStartMs = startOfDayDefaultHour(date).getTime();
+              const dayEndMs = endOfDayExclusive(date).getTime();
 
               const evStart = parseISO(p.event.start).getTime();
               const evEnd = parseISO(p.event.end).getTime();
 
-              const continuesFromPrev = evStart < dayStart;
-              const continuesToNext = evEnd > dayEnd;
+              const continuesFromPrev = evStart < dayStartMs;
+              const continuesToNext = evEnd > dayEndMs;
 
+              // position within timeline: minutes since midnight
+              const startMin = p.startMin;
+              const endMin = p.endMin;
+
+              // top needs to include the initial hour-row offset used above
               const top =
-                allDay || crossDay ? 0 : p.startMin * DAY_VIEW_PX_PER_MIN + DAY_VIEW_PX_PER_HOUR;
+                allDay || crossDay ? 0 : DAY_VIEW_PX_PER_HOUR + startMin * DAY_VIEW_PX_PER_MIN;
               const height =
                 allDay || crossDay
                   ? DAY_VIEW_PX_PER_HOUR / 2
-                  : Math.max(18, (p.endMin - p.startMin) * DAY_VIEW_PX_PER_MIN);
+                  : Math.max(18, (endMin - startMin) * DAY_VIEW_PX_PER_MIN);
 
               const leftPct = (p.col / p.colCount) * 100;
               const widthPct = (1 / p.colCount) * 100;
+
+              // Prefer originalEventId when opening occurrence so parent can find the series
+              const openId = (p.event as any).originalEventId ?? p.event.id;
+
+              // optional icons for tasks/appointments if you want to surface them
+              const isNotEvent = p.event.isTask ? (
+                <CircleIcon size={8} />
+              ) : p.event.isAppointment ? (
+                <Grid2X2Icon size={8} />
+              ) : null;
 
               return (
                 <div
@@ -132,25 +165,31 @@ export function DayView(props: {
                     'MMM d HH:mm',
                   )})`}
                   onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    props.onOpenEvent(p.event.id, rect);
+                    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                    props.onOpenEvent(openId, rect);
                   }}
                 >
-                  {/* Main body */}
                   <div
                     className={[
-                      'relative h-full overflow-hidden border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-900',
+                      'relative h-full overflow-hidden px-2 py-1 text-xs text-white',
                       continuesFromPrev ? 'rounded-l-full' : 'rounded-md',
                       continuesToNext ? 'rounded-r-full' : 'rounded-md',
                     ].join(' ')}
+                    style={{ background: p.event.color ?? '#039BE5' }}
                   >
                     <div className="truncate font-semibold">{p.event.title}</div>
                     {!allDay && !crossDay && (
-                      <div className="truncate text-[11px] text-blue-800/80">
+                      <div className="truncate text-[11px]">
                         {format(parseISO(p.event.start), 'HH:mm')} –{' '}
                         {format(parseISO(p.event.end), 'HH:mm')}
                       </div>
                     )}
+                    {allDay && (
+                      <div className="text-[11px] opacity-90">
+                        {/* optionally show 'All day' */}
+                      </div>
+                    )}
+                    <div className="absolute top-1 right-1">{isNotEvent}</div>
                   </div>
                 </div>
               );
@@ -158,7 +197,7 @@ export function DayView(props: {
           </div>
         </div>
 
-        {/* Now indicator */}
+        {/* Now indicator (aligned with the same top-offset used for events) */}
         {showNowIndicator && (
           <div
             className="pointer-events-none absolute right-0"
@@ -174,3 +213,5 @@ export function DayView(props: {
     </div>
   );
 }
+
+export default DayView;

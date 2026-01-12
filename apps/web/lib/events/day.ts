@@ -13,24 +13,25 @@ export function eventIntersectsDay(e: CalendarEvent, day: Date) {
 }
 
 export function eventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
-  return (
-    events
-      .filter((e) => eventIntersectsDay(e, day))
-      // cross-day first, then all-day, then start time
-      .sort((a, b) => {
-        const aCross =
-          !a.allDay &&
-          eventIntersectsDay(a, day) &&
-          new Date(a.start).getDate() !== new Date(a.end).getDate();
-        const bCross =
-          !b.allDay &&
-          eventIntersectsDay(b, day) &&
-          new Date(b.start).getDate() !== new Date(b.end).getDate();
-        if (aCross && !bCross) return -1;
-        if (!aCross && bCross) return 1;
-        if (a.allDay && !b.allDay) return -1;
-        if (!a.allDay && b.allDay) return 1;
-        return new Date(a.start).getTime() - new Date(b.start).getTime();
-      })
-  );
+  // gunakan interval [start, end) untuk menentukan apakah event menyentuh hari ini,
+  // lalu urutkan dengan aturan yang konsisten: cross-day timed dulu, lalu all-day, lalu timed biasa.
+  return events
+    .filter((event) => eventIntersectsDay(event, day))
+    .sort((a, b) => {
+      const aStart = new Date(a.start);
+      const aEnd = new Date(a.end);
+      const bStart = new Date(b.start);
+      const bEnd = new Date(b.end);
+
+      const aCross = !a.allDay && aStart.getDate() !== aEnd.getDate() && eventIntersectsDay(a, day);
+      const bCross = !b.allDay && bStart.getDate() !== bEnd.getDate() && eventIntersectsDay(b, day);
+
+      if (aCross && !bCross) return -1;
+      if (!aCross && bCross) return 1;
+
+      if (a.allDay && !b.allDay) return -1;
+      if (!a.allDay && b.allDay) return 1;
+
+      return aStart.getTime() - bStart.getTime();
+    });
 }

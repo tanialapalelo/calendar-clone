@@ -1,6 +1,6 @@
 'use client';
 
-import { addDays, addMinutes, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO, startOfDay } from 'date-fns';
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
@@ -21,6 +21,8 @@ import {
 import LocationAutocomplete, {
   PlaceSuggestion,
 } from '@/components/calendar/events/LocationAutoComplete';
+import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
+import ColorPicker from '@/components/calendar/events/ColorPicker';
 
 function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   try {
@@ -74,21 +76,23 @@ export function EventFullscreenForm({
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState<'busy' | 'free'>('busy');
   const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>('default');
+  const [recurrence, setRecurrence] = useState<RecurrenceValue>({
+    rrule: event?.recurrence ?? null,
+  });
+  const [color, setColor] = useState('');
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (event) {
-      console.log('load event into form', event);
       setTitle(event.title ?? '');
-      setStart(toLocalDateTimeInputValue(new Date(event.start)));
-      setEnd(toLocalDateTimeInputValue(new Date(event.end)));
+      setStart(toLocalDateTimeInputValue(parseISO(event.start)));
+      setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
       setAllDay(event.allDay);
       setShowTime(!event.allDay);
-      setGuests((event as any).guests ?? []);
+      setGuests(event.guests ?? []);
       setGuestInput('');
       setGuestError(null);
-      // if the stored location is JSON, try to parse and set place
       try {
         const parsed = typeof event.location === 'string' ? JSON.parse(event.location) : null;
         if (parsed && parsed.display_name) {
@@ -104,9 +108,10 @@ export function EventFullscreenForm({
       setDescription(event.description ?? '');
       setBusy(event.busyStatus ?? 'busy');
       setVisibility(event.visibility ?? 'default');
+      setColor(event.color ?? '#0B57D0');
+      setRecurrence({ rrule: event.recurrence ?? null });
       setSubmitError(null);
     } else {
-      // reset to initial
       const s = startOfDayDefaultHour(initialStart);
       const e = startOfDayDefaultHour(initialEnd);
       setStart(toLocalDateTimeInputValue(s));
@@ -118,23 +123,19 @@ export function EventFullscreenForm({
       setGuestError(null);
       setLocation('');
       setLocationPlace(null);
+      setColor('#0B57D0');
       setNotifications([
-        {
-          id: crypto.randomUUID(),
-          method: 'notification',
-          amount: 30,
-          unit: 'minutes',
-        },
+        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
       ]);
       setDescription('');
       setBusy('busy');
       setVisibility('default');
       setTitle('');
+      setRecurrence({ rrule: null });
       setSubmitError(null);
     }
   }, [event, initialDate]);
 
-  // simple email validator
   function isValidEmail(email: string) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email.trim());
@@ -169,8 +170,8 @@ export function EventFullscreenForm({
   const onToggleAllDayWhenShown = (checked: boolean) => {
     setAllDay(checked);
     if (checked) {
-      const s = startOfDayDefaultHour(new Date(start));
-      const e = startOfDayDefaultHour(new Date(start));
+      const s = startOfDayDefaultHour(parseISO(start));
+      const e = startOfDayDefaultHour(parseISO(start));
       setStart(toLocalDateTimeInputValue(s));
       setEnd(toLocalDateTimeInputValue(e));
       setShowTime(false);
@@ -181,7 +182,7 @@ export function EventFullscreenForm({
     }
   };
 
-  // Notifications
+  // Notifications handlers...
   const addNotification = () => {
     const id = crypto.randomUUID();
     const defaultUnit: NotificationItem['unit'] = 'minutes';
@@ -191,31 +192,15 @@ export function EventFullscreenForm({
       { id, method: defaultMethod, amount: 30, unit: defaultUnit },
     ]);
   };
-
   const updateNotification = (id: string, updates: Partial<NotificationItem>) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, ...updates } : n)));
   };
-
-  const removeNotification = (id: string) => {
+  const removeNotification = (id: string) =>
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
 
-  // construct selection for repetition options according to date chosen
-  const repetitionOptions = () => {
-    const options = [];
-    const startDate = new Date(start);
-    const dayOfWeek = format(startDate, 'EEEE'); // e.g., 'Monday'
-    const dayOfMonth = startDate.getDate(); // e.g., 15
-    options.push('Daily');
-    options.push(`Weekly on ${dayOfWeek}`);
-    options.push(`Annually on ${dayOfMonth} ${format(startDate, 'MMMM')}`);
-    options.push('Every weekday (Monday to Friday)');
-    return options;
-  };
   const validateBeforeSubmit = () => {
-    // ensure end > start
-    const s = new Date(start).getTime();
-    const e = new Date(end).getTime();
+    const s = parseISO(start).getTime();
+    const e = parseISO(end).getTime();
     if (e <= s && !allDay) {
       setSubmitError('End must be after start');
       return false;
@@ -230,14 +215,14 @@ export function EventFullscreenForm({
     let startDate: Date;
     let endDate: Date;
     if (allDay) {
-      startDate = startOfDayDefaultHour(new Date(start));
-      endDate = addDays(startOfDayDefaultHour(new Date(end)), 1);
+      const rawStart = new Date(start);
+      const dayStart = startOfDay(rawStart);
+      startDate = dayStart;
+      endDate = addDays(dayStart, 1); // exclusive end at next midnight
     } else {
       startDate = new Date(start);
       endDate = new Date(end);
     }
-
-    console.log('submit', allDay, startDate, endDate);
 
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
@@ -246,28 +231,33 @@ export function EventFullscreenForm({
       end: endDate.toISOString(),
       allDay,
       guests: guests.length ? guests : undefined,
-      // store structured location if available, otherwise the string
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
+      recurrence: recurrence?.rrule ?? null,
       description: description || undefined,
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
+      color: color || '#0B57D0',
     };
 
-    console.log('payload', payload);
-    if (event) {
-      // existing event, call onSave
-      onSave?.({ ...payload, id: event.id });
-    } else {
-      // new event, call onCreate
-      onCreate?.(payload);
-    }
+    if (event) onSave?.({ ...payload, id: event.id });
+    else onCreate?.(payload);
   };
+
+  const recurrencePickerStartDate = (() => {
+    try {
+      return parseISO(start);
+    } catch {
+      return undefined;
+    }
+  })();
+
   return (
     <div className="space-y-3 px-4 py-4">
       <button onClick={onClose}>
         <XIcon size={16} />
       </button>
+
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -324,16 +314,13 @@ export function EventFullscreenForm({
               All day
             </label>
           )}
-          {/*  selections for repetition event */}
+
           <div>
-            <select className="rounded border p-3 text-sm text-gray-700 hover:bg-gray-100">
-              <option value="">Does not repeat</option>
-              {repetitionOptions().map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+            <RecurrencePicker
+              value={recurrence}
+              onChange={setRecurrence}
+              startDate={recurrencePickerStartDate}
+            />
           </div>
         </div>
       </div>
@@ -356,9 +343,10 @@ export function EventFullscreenForm({
             </button>
           ))}
         </div>
+
         {tab === 'detail' && (
           <>
-            {/* Location */}
+            {/* Location, Notifications, Color, Status, Description, Guests */}
             <div className="flex items-center gap-2 pt-3">
               <MapPinIcon size={16} />
               <div className="flex-1">
@@ -366,7 +354,6 @@ export function EventFullscreenForm({
                   value={location}
                   onChange={(v) => {
                     setLocation(v);
-                    // clear place details when user types
                     setLocationPlace(null);
                   }}
                   onSelect={(place) => {
@@ -388,20 +375,14 @@ export function EventFullscreenForm({
               </div>
             </div>
 
-            {/*  Notification */}
             <div className="mt-3 flex items-start gap-2">
               <BellIcon size={16} />
               <div className="flex-1">
                 {notifications.map((n) => (
                   <div key={n.id} className="mb-2 flex items-center gap-2">
-                    {/* selection */}
                     <select
-                      className="rounded-md bg-gray-200 p-3 text-sm"
-                      onChange={(e) =>
-                        updateNotification(n.id, {
-                          method: e.target.value,
-                        })
-                      }
+                      className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
+                      onChange={(e) => updateNotification(n.id, { method: e.target.value })}
                       value={n.method}
                     >
                       {notificationOption.map((option) => (
@@ -411,17 +392,15 @@ export function EventFullscreenForm({
                       ))}
                     </select>
 
-                    {/* time to ring */}
                     <input
                       type="number"
                       min={1}
                       value={n.amount}
                       max={60}
-                      className="w-16 rounded-md bg-gray-200 p-3 text-sm"
+                      className="w-16 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                       onChange={(e) => updateNotification(n.id, { amount: Number(e.target.value) })}
                     />
 
-                    {/* unit of time (minutes, etc) */}
                     <select
                       value={n.unit}
                       onChange={(e) =>
@@ -429,7 +408,7 @@ export function EventFullscreenForm({
                           unit: e.target.value as NotificationItem['unit'],
                         })
                       }
-                      className="rounded bg-gray-200 p-3 text-sm"
+                      className="rounded bg-gray-100 p-3 text-sm hover:bg-gray-200"
                     >
                       {unitOfTimeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -438,7 +417,6 @@ export function EventFullscreenForm({
                       ))}
                     </select>
 
-                    {/* remove notification */}
                     <button onClick={() => removeNotification(n.id)}>
                       <XIcon
                         size={25}
@@ -449,6 +427,7 @@ export function EventFullscreenForm({
                 ))}
               </div>
             </div>
+
             <button
               className="my-1 ml-6 rounded-full p-2 text-sm text-[#0B57D0] hover:bg-blue-100"
               onClick={addNotification}
@@ -456,13 +435,18 @@ export function EventFullscreenForm({
               Add notification
             </button>
 
-            {/* Status + Visibility */}
+            <div className="flex items-center gap-2">
+              <div className="w-5" />
+              <div className="flex-1">
+                <ColorPicker value={color} onChange={setColor} />
+              </div>
+            </div>
+
             <div className="flex items-center gap-2 pt-3">
               <BriefcaseBusinessIcon size={16} />
               <div className="flex-1">
-                {/* Status */}
                 <select
-                  className="rounded-md bg-gray-200 p-3 text-sm"
+                  className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
                   value={busy}
                 >
@@ -472,9 +456,9 @@ export function EventFullscreenForm({
                     </option>
                   ))}
                 </select>
-                {/* Visibility */}
+
                 <select
-                  className="ml-3 rounded-md bg-gray-200 p-3 text-sm"
+                  className="ml-3 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
                   onChange={(e) =>
                     setVisibility(e.target.value as 'default' | 'public' | 'private')
                   }
@@ -489,7 +473,6 @@ export function EventFullscreenForm({
               </div>
             </div>
 
-            {/* Description */}
             <div className="flex items-center gap-2 pt-3">
               <NotebookPenIcon size={16} />
               <div className="flex-1">
@@ -558,7 +541,6 @@ export function EventFullscreenForm({
             )}
           </div>
         </div>
-
         {/* right column: guest permissions, simple preview */}
         <div>
           <div className="mb-2 text-sm font-semibold">Guest permissions</div>
@@ -577,10 +559,8 @@ export function EventFullscreenForm({
         </div>
       </div>
 
-      {/* submit error */}
       {submitError && <div className="text-sm text-red-600">{submitError}</div>}
 
-      {/* Actions */}
       <div className="flex items-center justify-end gap-2 px-4 py-3">
         <button
           type="button"
@@ -602,3 +582,5 @@ export function EventFullscreenForm({
     </div>
   );
 }
+
+export default EventFullscreenForm;
