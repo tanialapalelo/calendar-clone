@@ -3,6 +3,7 @@
 import { addDays, format, isSameDay, parseISO, startOfDay, subMilliseconds } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
+import { expandRecurringEvents } from '@/lib/events/recurrence';
 
 type Props = {
   open: boolean;
@@ -80,10 +81,23 @@ export function DayEventsPopover({
     return { left: Math.max(8, left), top };
   }, [anchorRect]);
 
-  if (!open || !anchorRect || !date || !position) return null;
+  // Hitung window hari ini dan expand recurring sebelum guard return,
+  // supaya urutan hooks (useMemo) tetap konsisten di semua render.
+  const dayStart = date ? startOfDay(date) : null;
+  const dayEnd = dayStart ? addDays(dayStart, 1) : null;
+
+  const expandedEventsForDay = useMemo(
+    () =>
+      dayStart && dayEnd
+        ? expandRecurringEvents(events, dayStart, dayEnd)
+        : ([] as CalendarEvent[]),
+    [events, dayStart, dayEnd],
+  );
+
+  if (!open || !anchorRect || !date || !position || !dayStart || !dayEnd) return null;
 
   // cross-day first, then all-day, then start time
-  const sorted = [...events].sort((a, b) => {
+  const sorted = [...expandedEventsForDay].sort((a, b) => {
     const aCross = isCrossDayTimedEvent(a) ? 1 : 0;
     const bCross = isCrossDayTimedEvent(b) ? 1 : 0;
     if (aCross !== bCross) return bCross - aCross;
@@ -96,8 +110,6 @@ export function DayEventsPopover({
   });
 
   const today = new Date();
-  const dayStart = startOfDay(date);
-  const dayEnd = addDays(dayStart, 1); // exclusive
 
   return (
     <div className="fixed inset-0 z-[55]">
@@ -149,6 +161,7 @@ export function DayEventsPopover({
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
+                // gunakan parent id bila ini occurrence recurring, supaya editor series bisa menemukan event di storage
                 const eventWithRecurrence = ev as CalendarEvent & {
                   originalEventId?: string;
                   isOccurrence?: boolean;
