@@ -78,6 +78,7 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
       allDay,
       guests: guests.length ? guests : undefined,
       location: location || undefined,
+      color: '#0B57D0',
     });
     onClose();
   };

@@ -54,6 +54,7 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
       end: endDate.toISOString(),
       allDay,
       isTask: true,
+      color: '#0B57D0',
     });
     onClose();
   }

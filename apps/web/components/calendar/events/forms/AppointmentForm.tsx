@@ -40,8 +40,9 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
     let startDate: Date;
     let endDate: Date;
     if (allDay) {
-      startDate = startOfDayLocal(new Date(start));
-      endDate = addDays(startOfDayLocal(new Date(end)), 1);
+      const s = startOfDayLocal(new Date(start));
+      startDate = s;
+      endDate = addDays(s, 1); // exclusive end at next midnight
     } else {
       startDate = new Date(start);
       endDate = new Date(end);
@@ -54,6 +55,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
       end: endDate.toISOString(),
       allDay,
       isAppointment: true,
+      color: '#0B57D0',
     });
     onClose();
   }
