@@ -1,6 +1,7 @@
 import { format } from 'date-fns';
 import { generateMonthGrid } from '@/lib/month-grid';
 import { shortDaysOfWeek } from '@/constants';
+import { useState } from 'react';
 
 export function YearMiniView(props: {
   monthDate: Date;
@@ -10,6 +11,7 @@ export function YearMiniView(props: {
   const { monthDate, onPickMonth, onOpenDayPopover } = props;
 
   const cells = generateMonthGrid(monthDate);
+  const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);
 
   return (
     <button type="button" className="w-full p-3 text-left">
@@ -20,19 +22,33 @@ export function YearMiniView(props: {
             {d}
           </div>
         ))}
-        {cells.map((cell) => (
-          <div
-            key={cell.date.toISOString()}
-            className={`text-center ${cell.isToday ? 'bg-[#0B57D0] font-bold text-white' : 'hover:bg-gray-100'} mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full`}
-            onClick={(clickEvt) => {
-              clickEvt.stopPropagation();
-              const rect = clickEvt.currentTarget.getBoundingClientRect();
-              onOpenDayPopover?.(cell.date, rect);
-            }}
-          >
-            {format(cell.date, 'd')}
-          </div>
-        ))}
+        {cells.map((cell) => {
+          const iso = cell.date.toISOString();
+          const isSelected = selectedDateIso === iso;
+
+          const base =
+            'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-center';
+          const todayClass = cell.isToday ? 'bg-[#0B57D0] font-bold text-white' : '';
+          const selectedClass = isSelected && !cell.isToday ? 'bg-[#C2E7FF] font-semibold' : '';
+          const hoverClass = !cell.isToday && !isSelected ? 'hover:bg-gray-100' : '';
+
+          const className = [base, todayClass, selectedClass, hoverClass].filter(Boolean).join(' ');
+
+          return (
+            <div
+              key={iso}
+              className={className}
+              onClick={(clickEvt) => {
+                clickEvt.stopPropagation();
+                const rect = clickEvt.currentTarget.getBoundingClientRect();
+                setSelectedDateIso(iso);
+                onOpenDayPopover?.(cell.date, rect);
+              }}
+            >
+              {format(cell.date, 'd')}
+            </div>
+          );
+        })}
       </div>
     </button>
   );
