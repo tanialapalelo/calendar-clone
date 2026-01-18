@@ -1,9 +1,10 @@
 'use client';
 
-import { addDays, format, isSameDay, parseISO, startOfDay, subMilliseconds } from 'date-fns';
+import { addDays, format, isSameDay, parseISO, startOfDay } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
-import { expandRecurringEvents } from '@/lib/events/recurrence';
+import { expandRecurringEvents, getSeriesOpenId } from '@/lib/events/recurrence';
+import { compareEventsInDayBucket, isCrossDayTimedEventOnCalendar } from '@/lib/events/day';
 
 type Props = {
   open: boolean;
@@ -19,13 +20,8 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-// End-exclusive safe cross-day check (handles all-day stored as [start, nextDayStart))
-function isCrossDayTimedEvent(ev: CalendarEvent) {
-  if (ev.allDay) return false;
-  const start = parseISO(ev.start);
-  const endInclusive = subMilliseconds(parseISO(ev.end), 1);
-  return !isSameDay(start, endInclusive);
-}
+// NOTE: cross-day timed predicate is now centralized in lib/events/day as
+// isCrossDayTimedEventOnCalendar.
 
 export function DayEventsPopover({
   open,
@@ -96,18 +92,8 @@ export function DayEventsPopover({
 
   if (!open || !anchorRect || !date || !position || !dayStart || !dayEnd) return null;
 
-  // cross-day first, then all-day, then start time
-  const sorted = [...expandedEventsForDay].sort((a, b) => {
-    const aCross = isCrossDayTimedEvent(a) ? 1 : 0;
-    const bCross = isCrossDayTimedEvent(b) ? 1 : 0;
-    if (aCross !== bCross) return bCross - aCross;
-
-    const aAllDay = a.allDay ? 1 : 0;
-    const bAllDay = b.allDay ? 1 : 0;
-    if (aAllDay !== bAllDay) return bAllDay - aAllDay;
-
-    return parseISO(a.start).getTime() - parseISO(b.start).getTime();
-  });
+  // Use shared comparator so ordering is consistent across views.
+  const sorted = [...expandedEventsForDay].sort(compareEventsInDayBucket);
 
   const today = new Date();
 
@@ -151,7 +137,7 @@ export function DayEventsPopover({
                 const continuesFromPrev = evStart.getTime() < dayStart.getTime();
                 const continuesToNext = evEnd.getTime() > dayEnd.getTime();
 
-                const isBar = ev.allDay || isCrossDayTimedEvent(ev);
+                const isBar = ev.allDay || isCrossDayTimedEventOnCalendar(ev);
 
                 const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
                 const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
@@ -161,14 +147,7 @@ export function DayEventsPopover({
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
-                // gunakan parent id bila ini occurrence recurring, supaya editor series bisa menemukan event di storage
-                const eventWithRecurrence = ev as CalendarEvent & {
-                  originalEventId?: string;
-                  isOccurrence?: boolean;
-                };
-                const openId = eventWithRecurrence.originalEventId
-                  ? eventWithRecurrence.originalEventId
-                  : ev.id;
+                const openId = getSeriesOpenId(ev as CalendarEvent);
 
                 return (
                   <li key={ev.id}>

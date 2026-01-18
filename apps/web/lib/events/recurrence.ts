@@ -9,6 +9,11 @@ export type RecurringOccurrenceEvent = CalendarEvent & {
   originalEventId: string;
 };
 
+export function getSeriesOpenId(ev: CalendarEvent | RecurringOccurrenceEvent): string {
+  const anyEv = ev as CalendarEvent & { originalEventId?: string };
+  return anyEv.originalEventId ?? anyEv.id;
+}
+
 /**
  * Expand recurring events into concrete instances within the given [windowStart, windowEnd).
  */
