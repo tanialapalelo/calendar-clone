@@ -1,8 +1,8 @@
 'use strict';
 
 import { RRule } from 'rrule';
-import { parseISO, addDays, startOfDay } from 'date-fns';
-import { eventIntersectsDay } from '@/lib/events/day';
+import { parseISO, addDays, startOfDay, areIntervalsOverlapping } from 'date-fns';
+import { eventInterval } from '@/lib/events/interval';
 
 export type RecurringOccurrenceEvent = CalendarEvent & {
   isOccurrence: true;
@@ -28,9 +28,12 @@ export function expandRecurringEvents(
   const winEnd = windowEnd;
 
   for (const ev of events) {
-    // Non-recurring event: include if it intersects the window
+    // Non-recurring event
     if (!ev.recurrence) {
-      if (eventIntersectsDay(ev, winStart) || eventIntersectsDay(ev, addDays(winEnd, -1))) {
+      const evInt = eventInterval(ev);
+      const winInt = { start: windowStart, end: windowEnd }; // [start, end)
+
+      if (areIntervalsOverlapping(evInt, winInt, { inclusive: false })) {
         out.push(ev);
       }
       continue;
@@ -62,7 +65,6 @@ export function expandRecurringEvents(
 
       const rule = new RRule(opts);
 
-      // Ambil occurrence yang jatuh dalam window [winStart, winEnd]
       const occDates = rule.between(winStart, winEnd, true);
 
       for (const occ of occDates) {
@@ -70,7 +72,6 @@ export function expandRecurringEvents(
         let occEnd: Date;
 
         if (ev.allDay) {
-          // All-day: logical tanggal = tanggal lokal dari occ, pakai midnight lokal, end = +1 hari
           const d = startOfDay(occ);
           occStart = d;
           occEnd = addDays(d, 1);
