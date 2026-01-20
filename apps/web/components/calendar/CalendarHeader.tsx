@@ -1,6 +1,8 @@
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
+import { exportEventsToICS } from '@/lib/events/ical';
+import { useRef } from 'react';
 
 export function CalendarHeader(props: {
   view: CalendarView;
@@ -9,9 +11,13 @@ export function CalendarHeader(props: {
   onPrev: () => void;
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
-  onCreate: (d: Date) => void;
+  onCreate: () => void;
+  onExportCalendar?: () => void;
+  onImportCalendar?: (file: File) => void;
 }) {
-  const { view, date, onToday, onPrev, onNext, onChangeView, onCreate } = props;
+  const { view, date, onToday, onPrev, onNext, onChangeView, onCreate, onExportCalendar, onImportCalendar } = props;
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
@@ -56,12 +62,37 @@ export function CalendarHeader(props: {
         <button
           type="button"
           className="flex items-center justify-center rounded-xl border bg-white px-3 py-1.5 text-sm font-semibold hover:bg-gray-100"
-          onClick={() => onCreate(date)}
+          onClick={() => onCreate()}
         >
           <PlusIcon size={16} />
           <span>Create</span>
         </button>
         <ViewSwitcher view={view} onChange={onChangeView} />
+        <button
+          type="button"
+          className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+          onClick={() => onExportCalendar?.()}
+        >
+          Export
+        </button>
+        <button
+          type="button"
+          className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Import
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".ics,text/calendar"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && onImportCalendar) onImportCalendar(file);
+            e.target.value = '';
+          }}
+        />
       </div>
     </header>
   );

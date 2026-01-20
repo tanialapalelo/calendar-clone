@@ -16,6 +16,8 @@ export function CalendarShell(props: {
   onCreateEvent: (d: Date) => void;
   onOpenEvent: (id: string, rect: DOMRect) => void;
   onOpenDayPopover: (d: Date, rect: DOMRect) => void;
+  onExportCalendar?: () => void;
+  onImportCalendar?: (file: File) => void;
 }) {
   const {
     view,
@@ -27,6 +29,8 @@ export function CalendarShell(props: {
     onCreateEvent,
     onOpenEvent,
     onOpenDayPopover,
+    onExportCalendar,
+    onImportCalendar,
   } = props;
 
   const onToday = () => onChangeDate(new Date());
@@ -53,6 +57,8 @@ export function CalendarShell(props: {
         onNext={onNext}
         onChangeView={onChangeView}
         onCreate={() => onCreateEvent(date)}
+        onExportCalendar={onExportCalendar}
+        onImportCalendar={onImportCalendar}
       />
 
       <main className="mx-auto max-w-6xl p-4">

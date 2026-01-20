@@ -27,9 +27,14 @@ function parseView(value: string | undefined): CalendarView {
   return 'month';
 }
 
-export function generateMetadata({ searchParams }: { searchParams: SearchParams }): Metadata {
-  const view = parseView(getFirst(searchParams, 'view'));
-  const date = parseIsoDateOnly(getFirst(searchParams, 'date'));
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  const sp = await searchParams;
+  const view = parseView(getFirst(sp, 'view'));
+  const date = parseIsoDateOnly(getFirst(sp, 'date'));
 
   let title: string;
   if (view === 'year') title = format(date, 'yyyy') + ' year';
