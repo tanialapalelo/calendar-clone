@@ -7,7 +7,7 @@ import { daysOfWeek } from '@/constants';
 import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
 import { isBarEventInMonth } from '@/lib/events/month-classify';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
-import { expandRecurringEvents } from '@/lib/events/recurrence';
+import { expandRecurringEvents, getSeriesOpenId } from '@/lib/events/recurrence';
 
 export function MonthView(props: {
   date: Date;
@@ -117,14 +117,7 @@ export function MonthView(props: {
                           ) : null;
 
                           // gunakan parent id bila ini occurrence recurring, supaya edit series bisa menemukan event di storage
-                          const openId = (
-                            ev as CalendarEvent & {
-                              originalEventId?: string;
-                              isOccurrence?: boolean;
-                            }
-                          ).originalEventId
-                            ? (ev as CalendarEvent & { originalEventId: string }).originalEventId
-                            : ev.id;
+                          const openId = getSeriesOpenId(ev);
 
                           return (
                             <div
@@ -195,7 +188,7 @@ export function MonthView(props: {
                         isOccurrence?: boolean;
                         color?: string;
                       };
-                      const openId = ev.originalEventId ? ev.originalEventId : ev.id;
+                      const openId = getSeriesOpenId(ev);
 
                       return (
                         <div

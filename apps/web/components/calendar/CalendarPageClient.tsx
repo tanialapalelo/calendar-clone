@@ -9,6 +9,9 @@ import { CreateEventModal } from '@/components/calendar/events/CreateEventModal'
 import { EventPopover } from '@/components/calendar/events/EventPopover';
 import { DayEventsPopover } from '@/components/calendar/events/DayEventsPopover';
 import { eventsForDay } from '@/lib/events/day';
+import { addDays, startOfDay } from 'date-fns';
+import { expandRecurringEvents } from '@/lib/events/recurrence';
+import { exportEventsToICS, importEventsFromICS } from '@/lib/events/ical';
 
 function parseView(value: string | null): CalendarView {
   if (value === 'year' || value === 'month' || value === 'day') return value;
@@ -39,7 +42,9 @@ export default function CalendarPageClient() {
   const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
   const dayPopoverEvents = useMemo(() => {
     if (!dayPopoverDate) return [];
-    return eventsForDay(events, dayPopoverDate);
+    const dayStart = startOfDay(dayPopoverDate);
+    const dayEnd = addDays(dayStart, 1);
+    return expandRecurringEvents(events, dayStart, dayEnd);
   }, [events, dayPopoverDate]);
 
   useEffect(() => {
@@ -81,6 +86,24 @@ export default function CalendarPageClient() {
     setDayPopoverOpen(true);
   };
 
+  const handleExportCalendar = () => {
+    const ics = exportEventsToICS(events);
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'calendar.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCalendar = async (file: File) => {
+    const text = await file.text();
+    const imported = importEventsFromICS(text);
+    // For now, append imported events to local storage.
+    imported.forEach((ev) => addEvent(ev));
+  };
+
   return (
     <>
       <CalendarShell
@@ -93,6 +116,8 @@ export default function CalendarPageClient() {
         onCreateEvent={openCreateForDate}
         onOpenEvent={openEventPopover}
         onOpenDayPopover={openDayPopover}
+        onExportCalendar={handleExportCalendar}
+        onImportCalendar={handleImportCalendar}
       />
       <CreateEventModal
         open={createOpen}
