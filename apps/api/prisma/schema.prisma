@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  calendars Calendar[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Calendar {
+  id        String   @id @default(cuid())
+  name      String
+  color     String?  // optional UI color
+  ownerId   String
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  events    Event[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  calendarId  String
+  calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  location    String?
+
+  // for month view + google-like behavior
+  allDay      Boolean  @default(false)
+  startAt     DateTime
+  endAt       DateTime
+  timeZone    String?  // e.g. "America/Los_Angeles" (optional but useful)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([calendarId, startAt])
+}
