@@ -158,7 +158,7 @@ In Google Cloud Console:
 4. Configure URLs:
 
 **Authorized redirect URIs**
-- `http://localhost:3001/v1/auth/google/callback`
+- `http://localhost:3001/v1/auth/google/callback`-
 
 **Authorized JavaScript origins**
 - `http://localhost:3000`
