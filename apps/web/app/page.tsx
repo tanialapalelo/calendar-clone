@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { format } from 'date-fns';
 import CalendarPageClient from '@/components/calendar/CalendarPageClient';
+import { AuthWidget } from '@/components/auth/AuthWidget';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -47,6 +48,9 @@ export async function generateMetadata({
 export default function HomePage() {
   return (
     <Suspense fallback={null}>
+      <div style={{ padding: 12 }}>
+        <AuthWidget />
+      </div>
       <CalendarPageClient />
     </Suspense>
   );
