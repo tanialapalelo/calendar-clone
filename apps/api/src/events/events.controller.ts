@@ -7,11 +7,10 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { JwtCookieGuard } from '../auth/jwt-cookie.guard';
-import type { AuthUser } from '../auth/auth.types';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import type { RequestWithUser } from '../auth/auth.types';
 
 @Controller('events')
 export class EventsController {
@@ -20,13 +19,14 @@ export class EventsController {
   @Get()
   @UseGuards(JwtCookieGuard)
   async list(
-    @Req() req: Request & { user?: AuthUser },
+    @Req() req: RequestWithUser,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
     const userId = req.user!.sub;
     const fromDate = from ? new Date(from) : undefined;
     const toDate = to ? new Date(to) : undefined;
+
     return this.events.listForUser(
       userId,
       fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
@@ -36,10 +36,7 @@ export class EventsController {
 
   @Post()
   @UseGuards(JwtCookieGuard)
-  async create(
-    @Req() req: Request & { user?: AuthUser },
-    @Body() dto: CreateEventDto,
-  ) {
+  async create(@Req() req: RequestWithUser, @Body() dto: CreateEventDto) {
     const userId = req.user!.sub;
     return this.events.createForUser(userId, dto);
   }

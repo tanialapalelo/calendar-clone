@@ -24,10 +24,10 @@ export class CreateEventDto {
   allDay?: boolean;
 
   @IsISO8601()
-  startAt!: string; // ISO string
+  startAt!: string;
 
   @IsISO8601()
-  endAt!: string; // ISO string
+  endAt!: string;
 
   @IsOptional()
   @IsString()
@@ -35,5 +35,5 @@ export class CreateEventDto {
 
   @IsOptional()
   @IsString()
-  calendarId?: string; // if omitted, use default calendar
+  calendarId?: string;
 }

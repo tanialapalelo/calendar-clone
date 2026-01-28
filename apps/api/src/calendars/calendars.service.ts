@@ -35,7 +35,7 @@ export class CalendarsService {
     if (existing) return existing;
 
     return this.prisma.calendar.create({
-      data: { ownerId: userId, name: 'Personal', color: '#2563eb' },
+      data: { ownerId: userId, name: 'Personal', color: '#0B57D0' },
       select: {
         id: true,
         name: true,

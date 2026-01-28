@@ -54,7 +54,6 @@ export class EventsService {
     const calendarId =
       dto.calendarId ?? (await this.calendars.ensureDefaultCalendar(userId)).id;
 
-    // Enforce calendar ownership (prevents creating events in other users' calendars)
     const cal = await this.prisma.calendar.findFirst({
       where: { id: calendarId, ownerId: userId },
       select: { id: true },
