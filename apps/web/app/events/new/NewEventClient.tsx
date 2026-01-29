@@ -2,19 +2,35 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { parseISO } from 'date-fns';
-import { useEventsStorage } from '@/lib/events/storage';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
+import { createEvent } from '@/lib/api/events';
 
 export default function NewEventClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { addEvent } = useEventsStorage();
 
   const dateParam = searchParams?.get('date') ?? undefined;
   const initialDate = dateParam ? parseISO(`${dateParam}T00:00:00`) : new Date();
 
-  const handleCreate = (evt: CalendarEvent) => {
-    addEvent(evt);
+  const handleCreate = async (evt: CalendarEvent) => {
+    const res = await createEvent({
+      title: evt.title,
+      startAt: evt.start,
+      endAt: evt.end,
+      allDay: !!evt.allDay,
+      description: evt.description,
+      location: evt.location,
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      console.error('createEvent failed', res.status, res.error);
+      return;
+    }
+
     router.push('/');
   };
 
@@ -22,7 +38,9 @@ export default function NewEventClient() {
     <EventFullscreenForm
       initialDate={initialDate}
       onClose={() => router.push('/')}
-      onCreate={handleCreate}
+      onCreate={(evt) => {
+        void handleCreate(evt);
+      }}
     />
   );
 }

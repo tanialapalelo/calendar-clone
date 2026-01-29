@@ -2,16 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { formatIsoDate, parseIsoDateOrToday } from '@/lib/date';
+import { addDays, addMonths, startOfDay, startOfMonth } from 'date-fns';
+
 import { CalendarShell } from '@/components/calendar/CalendarShell';
-import { useEventsStorage } from '@/lib/events/storage';
 import { CreateEventModal } from '@/components/calendar/events/CreateEventModal';
-import { EventPopover } from '@/components/calendar/events/EventPopover';
 import { DayEventsPopover } from '@/components/calendar/events/DayEventsPopover';
-import { eventsForDay } from '@/lib/events/day';
-import { addDays, startOfDay } from 'date-fns';
+import { EventPopover } from '@/components/calendar/events/EventPopover';
+
+import { formatIsoDate, parseIsoDateOrToday } from '@/lib/date';
 import { expandRecurringEvents } from '@/lib/events/recurrence';
 import { exportEventsToICS, importEventsFromICS } from '@/lib/events/ical';
+import { useEventsApi } from '@/lib/events/useEventsApi';
 
 function parseView(value: string | null): CalendarView {
   if (value === 'year' || value === 'month' || value === 'day') return value;
@@ -23,10 +24,27 @@ export default function CalendarPageClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // isMounted flag, but do NOT early-return before other hooks
   const [isMounted, setIsMounted] = useState(false);
 
-  const { events, addEvent, updateEvent, removeEvent } = useEventsStorage();
+  const view = useMemo(() => parseView(searchParams.get('view')), [searchParams]);
+  const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
+
+  // MVP: always fetch events for the current month window.
+  const range = useMemo(() => {
+    const from = startOfMonth(date);
+    const to = addMonths(from, 1);
+    return { from, to };
+  }, [date]);
+
+  const { events, addEvent, updateEvent, removeEvent, unauthorized } = useEventsApi(range);
+
+  useEffect(() => setIsMounted(true), []);
+
+  // Redirect to login if user is not authenticated
+  useEffect(() => {
+    if (unauthorized) router.replace('/login');
+  }, [unauthorized, router]);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [createDate, setCreateDate] = useState<Date | null>(null);
 
@@ -38,8 +56,6 @@ export default function CalendarPageClient() {
   const [dayPopoverDate, setDayPopoverDate] = useState<Date | null>(null);
   const [dayPopoverRect, setDayPopoverRect] = useState<DOMRect | null>(null);
 
-  const view = useMemo(() => parseView(searchParams.get('view')), [searchParams]);
-  const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
   const dayPopoverEvents = useMemo(() => {
     if (!dayPopoverDate) return [];
     const dayStart = startOfDay(dayPopoverDate);
@@ -47,21 +63,12 @@ export default function CalendarPageClient() {
     return expandRecurringEvents(events, dayStart, dayEnd);
   }, [events, dayPopoverDate]);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted) {
-    // While mounting, render nothing but keep hook order stable
-    return null;
-  }
+  if (!isMounted) return null;
 
   const setQuery = (next: { view?: CalendarView; date?: Date }) => {
     const params = new URLSearchParams(searchParams.toString());
-
     if (next.view) params.set('view', next.view);
     if (next.date) params.set('date', formatIsoDate(next.date));
-
     router.replace(`${pathname}?${params.toString()}`);
   };
 
@@ -100,8 +107,11 @@ export default function CalendarPageClient() {
   const handleImportCalendar = async (file: File) => {
     const text = await file.text();
     const imported = importEventsFromICS(text);
-    // For now, append imported events to local storage.
-    imported.forEach((ev) => addEvent(ev));
+
+    for (const ev of imported) {
+      // eslint-disable-next-line no-await-in-loop
+      await addEvent(ev);
+    }
   };
 
   return (
@@ -119,12 +129,16 @@ export default function CalendarPageClient() {
         onExportCalendar={handleExportCalendar}
         onImportCalendar={handleImportCalendar}
       />
+
       <CreateEventModal
         open={createOpen}
         initialDate={createDate ?? date}
         onClose={() => setCreateOpen(false)}
-        onCreate={addEvent}
+        onCreate={(ev) => {
+          void addEvent(ev);
+        }}
       />
+
       <EventPopover
         open={popoverOpen}
         anchorRect={popoverRect}
@@ -133,6 +147,7 @@ export default function CalendarPageClient() {
         onUpdate={updateEvent}
         onDelete={removeEvent}
       />
+
       <DayEventsPopover
         events={dayPopoverEvents}
         anchorRect={dayPopoverRect}
