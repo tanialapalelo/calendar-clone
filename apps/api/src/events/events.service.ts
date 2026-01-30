@@ -1,7 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CalendarsService } from '../calendars/calendars.service';
 import { CreateEventDto } from './dto/create-event.dto';
+import { UpdateEventDto } from './dto/update-event.dto';
 
 @Injectable()
 export class EventsService {
@@ -85,5 +91,59 @@ export class EventsService {
         updatedAt: true,
       },
     });
+  }
+
+  async getForUser(userId: string, eventId: string) {
+    const ev = await this.prisma.event.findFirst({
+      where: { id: eventId, calendar: { ownerId: userId } },
+    });
+
+    if (!ev) throw new NotFoundException('Event not found');
+    return ev;
+  }
+
+  async updateForUser(userId: string, eventId: string, dto: UpdateEventDto) {
+    const existing = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        calendar: { select: { ownerId: true } },
+      },
+    });
+    if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
+    return this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description }
+          : {}),
+        ...(dto.location !== undefined ? { location: dto.location } : {}),
+        ...(dto.allDay !== undefined ? { allDay: dto.allDay } : {}),
+        ...(dto.startAt !== undefined
+          ? { startAt: new Date(dto.startAt) }
+          : {}),
+        ...(dto.endAt !== undefined ? { endAt: new Date(dto.endAt) } : {}),
+      },
+    });
+  }
+
+  async deleteForUser(userId: string, eventId: string) {
+    const existing = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        calendar: { select: { ownerId: true } },
+      },
+    });
+
+    if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
+
+    await this.prisma.event.delete({ where: { id: eventId } });
+    return { ok: true };
   }
 }
