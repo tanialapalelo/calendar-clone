@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiEventToCalendarEvent, createEvent, listEvents } from '@/lib/api/events';
+import {
+  apiEventToCalendarEvent,
+  createEvent,
+  listEvents,
+  updateEvent,
+  deleteEvent,
+} from '@/lib/api/events';
 
 export function useEventsApi(range: { from: Date; to: Date }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -54,17 +60,46 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     setEvents((prev) => [...prev, apiEventToCalendarEvent(res.data)]);
   }, []);
 
-  // MVP: local-only update/delete. Next iteration: PATCH/DELETE endpoints.
-  const updateEvent = useCallback((next: CalendarEvent) => {
-    setEvents((prev) => prev.map((e) => (e.id === next.id ? next : e)));
+  const updateEventById = useCallback(async (next: CalendarEvent) => {
+    const res = await updateEvent(next.id, {
+      title: next.title,
+      startAt: next.start,
+      endAt: next.end,
+      allDay: !!next.allDay,
+      description: next.description ?? '',
+      location: next.location ?? '',
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) setUnauthorized(true);
+      throw new Error(res.error);
+    }
+
+    const mapped = apiEventToCalendarEvent(res.data);
+    setEvents((prev) => prev.map((e) => (e.id === mapped.id ? mapped : e)));
   }, []);
 
-  const removeEvent = useCallback((id: string) => {
+  const removeEventById = useCallback(async (id: string) => {
+    const res = await deleteEvent(id);
+
+    if (!res.ok) {
+      if (res.status === 401) setUnauthorized(true);
+      throw new Error(res.error);
+    }
+
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }, []);
 
   return useMemo(
-    () => ({ events, loading, unauthorized, refresh, addEvent, updateEvent, removeEvent }),
-    [events, loading, unauthorized, refresh, addEvent, updateEvent, removeEvent],
+    () => ({
+      events,
+      loading,
+      unauthorized,
+      refresh,
+      addEvent,
+      updateEvent: updateEventById,
+      removeEvent: removeEventById,
+    }),
+    [events, loading, unauthorized, refresh, addEvent, updateEventById, removeEventById],
   );
 }

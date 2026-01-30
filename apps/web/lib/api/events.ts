@@ -53,3 +53,30 @@ export async function createEvent(input: {
     body: JSON.stringify(input),
   });
 }
+
+export async function getEvent(id: string) {
+  return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}`);
+}
+
+export async function updateEvent(
+  id: string,
+  input: Partial<{
+    title: string;
+    startAt: string;
+    endAt: string;
+    allDay: boolean;
+    description: string;
+    location: string;
+  }>,
+) {
+  return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteEvent(id: string) {
+  return apiFetch<{ ok: true }>(`/v1/events/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}

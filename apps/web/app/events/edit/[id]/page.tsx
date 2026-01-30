@@ -1,51 +1,83 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
-import { useEventsStorage } from '@/lib/events/storage';
+import { apiEventToCalendarEvent, deleteEvent, getEvent, updateEvent } from '@/lib/api/events';
 
 export default function EditEventPage() {
   const router = useRouter();
   const params = useParams();
-  const id = params?.id ?? '';
+  const id = String(params?.id ?? '');
 
-  const { events, updateEvent, removeEvent } = useEventsStorage();
   const [ev, setEv] = useState<CalendarEvent | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
-    const found = events.find((e) => e.id === id) ?? null;
-    setEv(found);
-  }, [events, id]);
 
-  if (!ev) {
-    return <div className="p-6">Loading…</div>;
-  }
+    const run = async () => {
+      setLoading(true);
+      const res = await getEvent(id);
+
+      if (!res.ok) {
+        if (res.status === 401) router.replace('/login');
+        else console.error('getEvent failed', res.status, res.error);
+        setLoading(false);
+        return;
+      }
+
+      setEv(apiEventToCalendarEvent(res.data));
+      setLoading(false);
+    };
+
+    void run();
+  }, [id, router]);
+
+  if (loading || !ev) return <div className="p-6">Loading…</div>;
 
   const handleSave = async (updated: CalendarEvent) => {
-    updateEvent(updated);
-    await Promise.resolve();
+    const res = await updateEvent(updated.id, {
+      title: updated.title,
+      startAt: updated.start,
+      endAt: updated.end,
+      allDay: !!updated.allDay,
+      description: updated.description ?? '',
+      location: updated.location ?? '',
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) router.replace('/login');
+      else console.error('updateEvent failed', res.status, res.error);
+      return;
+    }
+
     router.push('/');
   };
 
-  const handleDelete = (idToDelete: string) => {
+  const handleDelete = async (idToDelete: string) => {
     if (!confirm('Delete this event?')) return;
-    removeEvent(idToDelete);
+
+    const res = await deleteEvent(idToDelete);
+
+    if (!res.ok) {
+      if (res.status === 401) router.replace('/login');
+      else console.error('deleteEvent failed', res.status, res.error);
+      return;
+    }
+
     router.push('/');
   };
 
   return (
     <div className="p-6">
-      <div>
-        <EventFullscreenForm
-          event={ev}
-          initialDate={new Date(ev.start)}
-          onClose={() => router.push('/')}
-          onSave={handleSave}
-          onDelete={handleDelete}
-        />
-      </div>
+      <EventFullscreenForm
+        event={ev}
+        initialDate={new Date(ev.start)}
+        onClose={() => router.push('/')}
+        onSave={(e) => void handleSave(e)}
+        onDelete={(eventId) => void handleDelete(eventId)}
+      />
     </div>
   );
 }
