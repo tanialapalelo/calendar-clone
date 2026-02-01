@@ -4,10 +4,10 @@ A portfolio project: a Google Calendar–inspired app built as a TypeScript mono
 
 ## Tech
 
-- **Web:** Next.js (App Router) + TypeScript (+ Tailwind planned)
+- **Web:** Next.js (App Router) + TypeScript
 - **API:** NestJS + Prisma
-- **DB:** PostgreSQL (local dev)
-- **Auth (current):** Google OAuth 2.0 (API-driven redirect) + **HttpOnly cookie** session (JWT)
+- **DB:** PostgreSQL (local dev; Docker recommended)
+- **Auth:** Google OAuth 2.0 (API-driven redirect) + **HttpOnly cookie** session (JWT)
 
 ---
 
@@ -32,13 +32,93 @@ A portfolio project: a Google Calendar–inspired app built as a TypeScript mono
 pnpm install
 ```
 
-### Database
+---
 
-The API uses `DATABASE_URL` (PostgreSQL). Ensure Postgres is running and reachable, then set:
+## Database
 
-- `apps/api/.env` → `DATABASE_URL=...`
+The API uses `DATABASE_URL` (PostgreSQL). You can run Postgres locally or via Docker.
 
-Then run Prisma:
+### PostgreSQL via Docker (recommended)
+
+Run Postgres:
+
+```bash
+docker run --name calendar-clone-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=calendar_clone \
+  -p 5432:5432 \
+  -d postgres:16
+```
+
+Create a separate **test database** in the same container (used by e2e tests):
+
+```bash
+docker exec -it calendar-clone-postgres \
+  psql -U postgres -c "CREATE DATABASE calendar_clone_test;"
+```
+
+Stop/remove when needed:
+
+```bash
+docker stop calendar-clone-postgres
+docker rm calendar-clone-postgres
+```
+
+---
+
+## Environment variables
+
+> Do not commit real `.env` files. Commit only `.env.*.example` files.
+
+### API — `apps/api/.env` (local dev, do not commit)
+
+Create `apps/api/.env`:
+
+```env
+# Server
+PORT=3001
+WEB_ORIGIN=http://localhost:3000
+
+# Database
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/calendar_clone?schema=public
+
+# Auth cookie + JWT
+JWT_SECRET=replace-with-a-long-random-string
+COOKIE_NAME=access_token
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3001/v1/auth/google/callback
+```
+
+Generate a good JWT secret quickly:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### API tests — `apps/api/.env.test` (do not commit)
+
+Create `apps/api/.env.test` based on `apps/api/.env.test.example`.
+
+This points to the dedicated test DB (`calendar_clone_test`) and uses a test-only `JWT_SECRET`.
+
+### Web — `apps/web/.env.local` (local dev, do not commit)
+
+Create `apps/web/.env.local`:
+
+```env
+NODE_ENV=development
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+---
+
+## Prisma setup (dev DB)
+
+Run migrations + generate client + seed (development database):
 
 ```bash
 pnpm -C apps/api exec prisma migrate dev
@@ -46,7 +126,23 @@ pnpm -C apps/api exec prisma generate
 pnpm -C apps/api exec prisma db seed
 ```
 
-> Note: seeding creates a demo user and calendar data for local development.
+> Note: seeding creates demo user/calendar data for local development.
+
+---
+
+## Run everything (web + api)
+
+From the repo root:
+
+```bash
+pnpm dev
+```
+
+This runs both apps in parallel using Turborepo.
+
+---
+
+## Run apps individually
 
 ### Run the API
 
@@ -105,60 +201,21 @@ fetch('http://localhost:3001/v1/auth/me', { credentials: 'include' })
 
 ---
 
-## Environment variables
-
-### API — `apps/api/.env`
-
-```env
-# Server
-PORT=3001
-WEB_ORIGIN=http://localhost:3000
-
-# Database
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB?schema=public
-
-# Auth cookie + JWT
-JWT_SECRET=replace-with-a-long-random-string
-COOKIE_NAME=access_token
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:3001/v1/auth/google/callback
-```
-
-Generate a good JWT secret quickly:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-### Web — `apps/web/.env.local`
-
-```env
-NODE_ENV=development
-NEXT_PUBLIC_API_URL=http://localhost:3001
-```
-
-> Do not commit `.env` files. Use `.env.example` files or this README as reference.
-
----
-
 ## Google OAuth setup (local)
 
 In Google Cloud Console:
 
 1. Create/select a project
 2. Configure **OAuth consent screen**
-  - Choose “External” (fine for local dev)
-  - Add your Google account as a **test user** if required
+- Choose “External” (fine for local dev)
+- Add your Google account as a **test user** if required
 3. Create credentials:
-  - **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-  - Application type: **Web application**
+- **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+- Application type: **Web application**
 4. Configure URLs:
 
 **Authorized redirect URIs**
-- `http://localhost:3001/v1/auth/google/callback`-
+- `http://localhost:3001/v1/auth/google/callback`
 
 **Authorized JavaScript origins**
 - `http://localhost:3000`
@@ -166,21 +223,77 @@ In Google Cloud Console:
 
 ---
 
+## Testing
+
+### API e2e tests
+
+E2E tests run against a dedicated database (`calendar_clone_test`) so tests can freely create/delete data without affecting your dev database.
+
+#### One-time setup
+
+1) Ensure Postgres is running and the test database exists:
+
+```bash
+docker exec -it calendar-clone-postgres \
+  psql -U postgres -c "CREATE DATABASE calendar_clone_test;"
+```
+
+2) Create `apps/api/.env.test` based on `apps/api/.env.test.example`
+
+#### Run e2e tests
+
+```bash
+pnpm -C apps/api test:e2e
+```
+
+This runs:
+- `pretest:e2e`: `dotenv -e .env.test -- prisma migrate deploy` (applies migrations to the test DB)
+- then `test:e2e`: runs Jest (`*.e2e-spec.ts`)
+
+#### How auth works in tests (no Google)
+
+E2E tests do not call Google OAuth. Instead they:
+- create a test user + calendar directly in the test DB (via Prisma)
+- generate a signed JWT using `JWT_SECRET` from `.env.test`
+- send it as a cookie (`COOKIE_NAME`, default `access_token`)
+- call real API endpoints using `supertest`
+
+---
 ## Milestones / roadmap
 
-### Milestone 1 (done / in progress)
+### Milestone 1 ✅ — UI prototype
 - UI-only calendar prototype (localStorage)
 
-### Milestone 2 (done / in progress)
+### Milestone 2 ✅ — Backend foundation
 - NestJS API + Prisma + Postgres foundation
+- Health + db-health endpoints
 
-### Milestone 3 (current)
+### Milestone 3 ✅ — Authentication
 - Google OAuth login
-- HttpOnly cookie session
+- HttpOnly cookie session (JWT)
 - `/v1/auth/me` protected route using a JWT cookie Guard
 
-### Next
-- Replace localStorage calendar data with API-backed calendars/events scoped to `req.user.sub`
-- Add request validation (DTOs), error handling, and better API docs
-- Add tests (unit + e2e) for auth and core endpoints
-- UI polish (login state in header, loading states, responsive layout)
+### Milestone 4 🚧 — API-backed core calendar/events (data correctness + tests)
+- Replace localStorage event data with API-backed events scoped to the authenticated user ✅
+- Replace localStorage calendar data with API-backed calendars scoped to the authenticated user 🚧
+- Request validation (DTOs) for core endpoints ✅ (create/update events)
+- Core error handling (consistent 400/401/403/404) 🚧
+- Tests:
+  - API e2e tests for events CRUD ✅
+  - Auth e2e smoke tests (me/logout) 🚧
+  - Unit tests for tricky logic (recurrence/timezone) 🚧
+- Docs:
+  - README “How to run + test” ✅
+  - API endpoint docs / Swagger (optional) 🚧
+
+### Milestone 5 ⏭️ — Google Calendar features (clone direction)
+- Recurring events (RRULE + exceptions) + correct all-day/timezone behavior
+- Event color (calendar default + optional event override)
+- Reminders/notifications (persist config first; delivery later)
+- Search (title/description/location) + optional pagination for list/search endpoints
+
+### Milestone 6 ⏭️ — UI polish + layout parity
+- Sidebar (mini calendar + calendars list)
+- Responsive layout + skeleton/loading states
+- Better event editor UX (all-day handling, timezone display)
+- Keyboard & accessibility improvements
