@@ -128,4 +128,137 @@ describe('Events (e2e)', () => {
 
     expect(listAfter.body.some((e: any) => e.id === created.id)).toBe(false);
   });
+
+  it("returns 403 when modifying another user's event", async () => {
+    // Create an event owned by user A (the default setup user)
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'User A Event',
+        startAt: '2026-01-10T10:00:00.000Z',
+        endAt: '2026-01-10T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+
+    // Create user B + calendar B
+    const userB = await prisma.user.create({
+      data: {
+        email: 'e2e-b@example.com',
+        name: 'E2E User B',
+        googleSub: 'e2e-google-sub-b',
+      },
+    });
+
+    const calendarB = await prisma.calendar.create({
+      data: {
+        ownerId: userB.id,
+        name: 'B Default',
+        color: '#188038',
+      },
+    });
+
+    const cookieB = makeAuthCookie({ userId: userB.id, email: userB.email });
+
+    // User B tries to update User A's event -> 403
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${eventId}`)
+      .set('Cookie', cookieB)
+      .send({ title: 'Hacked' })
+      .expect(403);
+
+    // User B tries to delete User A's event -> 403
+    await request(app.getHttpServer())
+      .delete(`/v1/events/${eventId}`)
+      .set('Cookie', cookieB)
+      .expect(403);
+
+    // (Optional) sanity: User B can create their own event in their calendar
+    await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', cookieB)
+      .send({
+        title: 'User B Event',
+        startAt: '2026-01-12T10:00:00.000Z',
+        endAt: '2026-01-12T11:00:00.000Z',
+        calendarId: calendarB.id,
+      })
+      .expect(201);
+  });
+
+  it('PATCH /v1/events/:id returns 400 when endAt <= startAt', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Test',
+        startAt: '2026-01-15T10:00:00.000Z',
+        endAt: '2026-01-15T11:00:00.000Z',
+        calendarId,
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${eventId}`)
+      .set('Cookie', authCookie)
+      .send({
+        startAt: '2026-01-15T12:00:00.000Z',
+        endAt: '2026-01-15T11:00:00.000Z',
+      })
+      .expect(400);
+  });
+
+  it('PATCH /v1/events/:id validates partial updates against existing values', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Test',
+        startAt: '2026-01-15T10:00:00.000Z',
+        endAt: '2026-01-15T11:00:00.000Z',
+        calendarId,
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+
+    // Only endAt provided, but it becomes invalid vs existing startAt
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${eventId}`)
+      .set('Cookie', authCookie)
+      .send({
+        endAt: '2026-01-15T09:00:00.000Z',
+      })
+      .expect(400);
+  });
+
+  it('PATCH /v1/events/:id can update timeZone', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'TZ Event',
+        startAt: '2026-01-15T10:00:00.000Z',
+        endAt: '2026-01-15T11:00:00.000Z',
+        calendarId,
+        timeZone: 'UTC',
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+
+    const patchRes = await request(app.getHttpServer())
+      .patch(`/v1/events/${eventId}`)
+      .set('Cookie', authCookie)
+      .send({ timeZone: 'America/Los_Angeles' })
+      .expect(200);
+
+    expect(patchRes.body.timeZone).toBe('America/Los_Angeles');
+  });
 });

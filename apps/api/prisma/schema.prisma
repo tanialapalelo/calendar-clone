@@ -39,11 +39,20 @@ model Event {
   description String?
   location    String?
 
-  // for month view + google-like behavior
   allDay      Boolean  @default(false)
   startAt     DateTime
   endAt       DateTime
-  timeZone    String?  // e.g. "America/Los_Angeles" (optional but useful)
+  timeZone    String?
+
+  // Clone features (persisted config)
+  color       String?  // optional override; if null, UI can fallback to Calendar.color
+  busyStatus  String?  // 'busy' | 'free' (string for now; enum later)
+  visibility  String?  // 'default' | 'public' | 'private'
+
+  // Recurrence (store RRULE; expansion/exceptions implemented later)
+  recurrenceRule String? // e.g. "FREQ=WEEKLY;BYDAY=MO,WE"
+  // Option A: store exceptions as JSON array of ISO strings (fast MVP)
+  recurrenceExDates Json?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

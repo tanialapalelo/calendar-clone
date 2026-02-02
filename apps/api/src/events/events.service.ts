@@ -107,12 +107,36 @@ export class EventsService {
       where: { id: eventId },
       select: {
         id: true,
+        startAt: true,
+        endAt: true,
         calendar: { select: { ownerId: true } },
       },
     });
+
     if (!existing) throw new NotFoundException('Event not found');
     if (existing.calendar.ownerId !== userId)
       throw new ForbiddenException('Forbidden');
+
+    // Parse/validate dates if present
+    const parsedStartAt =
+      dto.startAt !== undefined ? new Date(dto.startAt) : undefined;
+    const parsedEndAt =
+      dto.endAt !== undefined ? new Date(dto.endAt) : undefined;
+
+    if (parsedStartAt && Number.isNaN(parsedStartAt.getTime())) {
+      throw new BadRequestException('Invalid startAt');
+    }
+    if (parsedEndAt && Number.isNaN(parsedEndAt.getTime())) {
+      throw new BadRequestException('Invalid endAt');
+    }
+
+    const nextStartAt = parsedStartAt ?? existing.startAt;
+    const nextEndAt = parsedEndAt ?? existing.endAt;
+
+    if (nextEndAt <= nextStartAt) {
+      throw new BadRequestException('endAt must be after startAt');
+    }
+
     return this.prisma.event.update({
       where: { id: eventId },
       data: {
@@ -122,10 +146,22 @@ export class EventsService {
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
         ...(dto.allDay !== undefined ? { allDay: dto.allDay } : {}),
-        ...(dto.startAt !== undefined
-          ? { startAt: new Date(dto.startAt) }
-          : {}),
-        ...(dto.endAt !== undefined ? { endAt: new Date(dto.endAt) } : {}),
+        ...(parsedStartAt !== undefined ? { startAt: parsedStartAt } : {}),
+        ...(parsedEndAt !== undefined ? { endAt: parsedEndAt } : {}),
+        ...(dto.timeZone !== undefined ? { timeZone: dto.timeZone } : {}),
+      },
+      select: {
+        id: true,
+        calendarId: true,
+        title: true,
+        description: true,
+        location: true,
+        allDay: true,
+        startAt: true,
+        endAt: true,
+        timeZone: true,
+        createdAt: true,
+        updatedAt: true,
       },
     });
   }

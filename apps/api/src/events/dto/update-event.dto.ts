@@ -31,4 +31,8 @@ export class UpdateEventDto {
   @IsOptional()
   @IsISO8601()
   endAt?: string;
+
+  @IsOptional()
+  @IsString()
+  timeZone?: string;
 }
