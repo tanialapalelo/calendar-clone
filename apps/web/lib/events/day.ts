@@ -1,16 +1,5 @@
-import { areIntervalsOverlapping } from 'date-fns';
-import { dayInterval, eventInterval } from '@/lib/events/interval';
-
-/**
- * True if any part of the event occurs within the day.
- * (We treat the event as [start, end) like most calendars.)
- */
-export function eventIntersectsDay(e: CalendarEvent, day: Date) {
-  const ev = eventInterval(e);
-  const d = dayInterval(day);
-
-  return areIntervalsOverlapping(ev, d, { inclusive: false });
-}
+import { addDays, parseISO, startOfDay } from 'date-fns';
+import { getEventRangeMs } from '@/lib/events/range';
 
 /**
  * Predicate: a timed event whose [start, end) spans multiple calendar days.
@@ -46,8 +35,21 @@ export function compareEventsInDayBucket(a: CalendarEvent, b: CalendarEvent): nu
   return aStart - bStart;
 }
 
-export function eventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
-  // gunakan interval [start, end) untuk menentukan apakah event menyentuh hari ini,
-  // lalu urutkan dengan aturan yang konsisten menggunakan compareEventsInDayBucket.
-  return events.filter((event) => eventIntersectsDay(event, day)).sort(compareEventsInDayBucket);
+function dayStartMs(day: Date) {
+  return startOfDay(day).getTime();
+}
+
+function dateOnlyStartMs(yyyyMmDd: string) {
+  // Interpret as local date midnight for calendar grid math
+  return parseISO(`${yyyyMmDd}T00:00:00`).getTime();
+}
+
+export function eventsForDay(events: CalendarEvent[], day: Date) {
+  const dayStart = startOfDay(day).getTime();
+  const dayEnd = addDays(startOfDay(day), 1).getTime(); // exclusive
+
+  return events.filter((ev) => {
+    const { startMs, endMsExclusive } = getEventRangeMs(ev);
+    return startMs < dayEnd && endMsExclusive > dayStart;
+  });
 }

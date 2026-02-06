@@ -7,12 +7,30 @@ export type ApiEvent = {
   description: string | null;
   location: string | null;
   allDay: boolean;
+  startDate?: string | null; // "YYYY-MM-DD"
+  endDate?: string | null; // "YYYY-MM-DD" exclusive
   startAt: string; // ISO
   endAt: string; // ISO
   timeZone: string | null;
+  color: string | null;
+  recurrenceRule: string | null;
+  recurrenceTimeZone: string | null;
+
+  // instance metadata (null for non-recurring)
+  recurringEventId: string | null;
+  originalStartAt: string | null;
+  isRecurringInstance: boolean;
+
   createdAt: string;
   updatedAt: string;
 };
+
+export function normalizeRuleOnly(rule: string | null | undefined) {
+  if (!rule) return null;
+  const trimmed = rule.trim();
+  if (!trimmed) return null;
+  return trimmed.toUpperCase().startsWith('RRULE:') ? trimmed.slice('RRULE:'.length) : trimmed;
+}
 
 export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
   return {
@@ -20,13 +38,24 @@ export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
     title: ev.title,
     start: ev.startAt,
     end: ev.endAt,
+    startDate: ev.startDate ?? undefined,
+    endDate: ev.endDate ?? undefined,
     allDay: ev.allDay,
     description: ev.description ?? undefined,
     location: ev.location ?? undefined,
-    recurrence: null,
+
+    // series-level config (still useful for UI)
+    recurrence: ev.recurrenceRule ?? null,
+    color: ev.color ?? '#0B57D0',
+
+    // metadata needed to update/delete correctly
+    recurringEventId: ev.recurringEventId ?? undefined,
+    originalStartAt: ev.originalStartAt ?? undefined,
+    isRecurringInstance: ev.isRecurringInstance,
+
+    // not implemented yet
     guests: undefined,
     notifications: undefined,
-    color: '#0B57D0',
     visibility: 'default',
     busyStatus: 'busy',
   };
@@ -45,8 +74,14 @@ export async function createEvent(input: {
   startAt: string;
   endAt: string;
   allDay: boolean;
+  startDate?: string;
+  endDate?: string;
   description?: string;
   location?: string;
+  color?: string;
+  recurrenceRule?: string | null;
+  timeZone?: string;
+  recurrenceTimeZone?: string;
 }) {
   return apiFetch<ApiEvent>('/v1/events', {
     method: 'POST',
@@ -65,8 +100,14 @@ export async function updateEvent(
     startAt: string;
     endAt: string;
     allDay: boolean;
+    startDate?: string;
+    endDate?: string;
     description: string;
     location: string;
+    color: string | null;
+    recurrenceRule: string | null;
+    timeZone: string;
+    recurrenceTimeZone: string;
   }>,
 ) {
   return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}`, {

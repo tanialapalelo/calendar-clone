@@ -3,7 +3,6 @@
 import { format, isSameDay, parseISO } from 'date-fns';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 import { eventsForDay } from '@/lib/events/day';
-import { expandRecurringEvents } from '@/lib/events/recurrence';
 import {
   DAY_VIEW_COLUMN_GAP_PX,
   DAY_VIEW_GUTTER_PX,
@@ -34,10 +33,7 @@ export function DayView(props: {
   // Expand recurring events for the visible day window so occurrences are included.
   const dayStart = startOfDayDefaultHour(date);
   const dayEnd = endOfDayExclusive(date);
-  const expanded = expandRecurringEvents(events, dayStart, dayEnd);
-
-  // events that belong to the day (includes expanded occurrences)
-  const dayEvents = eventsForDay(expanded, date);
+  const dayEvents = eventsForDay(events, date);
 
   // Compute overlapping layout (positions in minutes columns/cols etc.)
   const positioned = layoutOverlappingEvents(dayEvents, date);
@@ -140,8 +136,10 @@ export function DayView(props: {
               const leftPct = (p.col / p.colCount) * 100;
               const widthPct = (1 / p.colCount) * 100;
 
-              // Prefer originalEventId when opening occurrence so parent can find the series
-              const openId = (p.event as any).originalEventId ?? p.event.id;
+              const openId =
+                p.event.isRecurringInstance && p.event.recurringEventId
+                  ? p.event.recurringEventId
+                  : p.event.id;
 
               // optional icons for tasks/appointments if you want to surface them
               const isNotEvent = p.event.isTask ? (

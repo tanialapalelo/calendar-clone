@@ -20,7 +20,7 @@ model User {
 model Calendar {
   id        String   @id @default(cuid())
   name      String
-  color     String?  // optional UI color
+  color     String?
   ownerId   String
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   events    Event[]
@@ -39,23 +39,27 @@ model Event {
   description String?
   location    String?
 
+  // google-like behavior
   allDay      Boolean  @default(false)
+
+  // Timed events: stored as UTC instants
   startAt     DateTime
   endAt       DateTime
-  timeZone    String?
 
-  // Clone features (persisted config)
-  color       String?  // optional override; if null, UI can fallback to Calendar.color
-  busyStatus  String?  // 'busy' | 'free' (string for now; enum later)
-  visibility  String?  // 'default' | 'public' | 'private'
+  // All-day events: stored as DATEs (exclusive endDate)
+  // NOTE: use DateTime with @db.Date in Postgres
+  startDate   DateTime? @db.Date
+  endDate     DateTime? @db.Date
 
-  // Recurrence (store RRULE; expansion/exceptions implemented later)
-  recurrenceRule String? // e.g. "FREQ=WEEKLY;BYDAY=MO,WE"
-  // Option A: store exceptions as JSON array of ISO strings (fast MVP)
-  recurrenceExDates Json?
+  timeZone    String?  // tzid semantics (important for all-day & timed)
+
+  color              String?
+  recurrenceRule     String?
+  recurrenceTimeZone String?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([calendarId, startAt])
+  @@index([calendarId, startDate])
 }

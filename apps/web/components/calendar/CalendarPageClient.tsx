@@ -10,9 +10,9 @@ import { DayEventsPopover } from '@/components/calendar/events/DayEventsPopover'
 import { EventPopover } from '@/components/calendar/events/EventPopover';
 
 import { formatIsoDate, parseIsoDateOrToday } from '@/lib/date';
-import { expandRecurringEvents } from '@/lib/events/recurrence';
 import { exportEventsToICS, importEventsFromICS } from '@/lib/events/ical';
 import { useEventsApi } from '@/lib/events/useEventsApi';
+import { generateMonthGrid } from '@/lib/month-grid';
 
 function parseView(value: string | null): CalendarView {
   if (value === 'year' || value === 'month' || value === 'day') return value;
@@ -29,10 +29,10 @@ export default function CalendarPageClient() {
   const view = useMemo(() => parseView(searchParams.get('view')), [searchParams]);
   const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
 
-  // MVP: always fetch events for the current month window.
   const range = useMemo(() => {
-    const from = startOfMonth(date);
-    const to = addMonths(from, 1);
+    const cells = generateMonthGrid(date);
+    const from = startOfDay(cells[0].date);
+    const to = addDays(startOfDay(cells[cells.length - 1].date), 1); // exclusive
     return { from, to };
   }, [date]);
 
@@ -56,11 +56,28 @@ export default function CalendarPageClient() {
   const [dayPopoverDate, setDayPopoverDate] = useState<Date | null>(null);
   const [dayPopoverRect, setDayPopoverRect] = useState<DOMRect | null>(null);
 
+  const activeEvent = useMemo(() => {
+    if (!popoverEventId) return null;
+
+    // direct match (non-recurring or if API returns masters)
+    const direct = events.find((e) => e.id === popoverEventId);
+    if (direct) return direct;
+
+    // if we opened a series master id, find any instance of that series
+    const instance = events.find((e) => e.recurringEventId === popoverEventId);
+    return instance ?? null;
+  }, [events, popoverEventId]);
+
   const dayPopoverEvents = useMemo(() => {
     if (!dayPopoverDate) return [];
     const dayStart = startOfDay(dayPopoverDate);
     const dayEnd = addDays(dayStart, 1);
-    return expandRecurringEvents(events, dayStart, dayEnd);
+
+    return events.filter((e) => {
+      const start = new Date(e.start).getTime();
+      const end = new Date(e.end).getTime();
+      return end > dayStart.getTime() && start < dayEnd.getTime();
+    });
   }, [events, dayPopoverDate]);
 
   if (!isMounted) return null;
@@ -84,8 +101,6 @@ export default function CalendarPageClient() {
     setPopoverRect(rect);
     setPopoverOpen(true);
   };
-
-  const activeEvent = popoverEventId ? (events.find((e) => e.id === popoverEventId) ?? null) : null;
 
   const openDayPopover = (d: Date, rect: DOMRect) => {
     setDayPopoverDate(d);

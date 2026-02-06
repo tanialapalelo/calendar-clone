@@ -261,4 +261,86 @@ describe('Events (e2e)', () => {
 
     expect(patchRes.body.timeZone).toBe('America/Los_Angeles');
   });
+  it('expands weekly recurrence in GET /v1/events', async () => {
+    const from = new Date('2026-02-01T00:00:00.000Z');
+    const to = new Date('2026-03-01T00:00:00.000Z');
+
+    // Create a recurring event (weekly Tuesday)
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', [authCookie])
+      .send({
+        title: 'Weekly Tuesday',
+        startAt: '2026-02-03T10:00:00.000Z', // Tue
+        endAt: '2026-02-03T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+        recurrenceRule: 'FREQ=WEEKLY;BYDAY=TU',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+        color: '#D93025',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', [authCookie])
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    expect(Array.isArray(listRes.body)).toBe(true);
+
+    const instances = listRes.body.filter(
+      (e: any) => e.recurringEventId === masterId,
+    );
+    expect(instances.length).toBeGreaterThanOrEqual(3);
+
+    // instance metadata present
+    expect(instances[0].isRecurringInstance).toBe(true);
+    expect(instances[0].originalStartAt).toBeTruthy();
+    expect(instances[0].id).toContain(`${masterId}@`);
+  });
+
+  it('PATCH /v1/events/:id edits the recurring series (all events)', async () => {
+    const from = new Date('2026-02-01T00:00:00.000Z');
+    const to = new Date('2026-03-01T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', [authCookie])
+      .send({
+        title: 'Weekly Tuesday',
+        startAt: '2026-02-03T10:00:00.000Z',
+        endAt: '2026-02-03T11:00:00.000Z',
+        calendarId,
+        recurrenceRule: 'FREQ=WEEKLY;BYDAY=TU',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${masterId}`)
+      .set('Cookie', [authCookie])
+      .send({ title: 'Updated Series Title' })
+      .expect(200);
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', [authCookie])
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const instances = listRes.body.filter(
+      (e: any) => e.recurringEventId === masterId,
+    );
+    expect(instances.length).toBeGreaterThanOrEqual(1);
+    expect(
+      instances.every((e: any) => e.title === 'Updated Series Title'),
+    ).toBe(true);
+  });
 });

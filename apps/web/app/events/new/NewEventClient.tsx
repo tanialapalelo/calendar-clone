@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { parseISO } from 'date-fns';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
-import { createEvent } from '@/lib/api/events';
+import { createEvent, normalizeRuleOnly } from '@/lib/api/events';
 
 export default function NewEventClient() {
   const router = useRouter();
@@ -13,13 +13,23 @@ export default function NewEventClient() {
   const initialDate = dateParam ? parseISO(`${dateParam}T00:00:00`) : new Date();
 
   const handleCreate = async (evt: CalendarEvent) => {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     const res = await createEvent({
       title: evt.title,
       startAt: evt.start,
       endAt: evt.end,
-      allDay: !!evt.allDay,
+      allDay: evt.allDay,
+
+      startDate: evt.allDay ? evt.start.slice(0, 10) : undefined,
+      endDate: evt.allDay ? evt.end.slice(0, 10) : undefined,
+
       description: evt.description,
       location: evt.location,
+      color: evt.color,
+      recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
+      timeZone: tz,
+      recurrenceTimeZone: tz,
     });
 
     if (!res.ok) {

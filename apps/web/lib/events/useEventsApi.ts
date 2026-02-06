@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  normalizeRuleOnly,
   apiEventToCalendarEvent,
   createEvent,
   listEvents,
@@ -42,53 +43,82 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     void refresh();
   }, [refresh]);
 
-  const addEvent = useCallback(async (evt: CalendarEvent) => {
-    const res = await createEvent({
-      title: evt.title,
-      startAt: evt.start,
-      endAt: evt.end,
-      allDay: !!evt.allDay,
-      description: evt.description,
-      location: evt.location,
-    });
+  const addEvent = useCallback(
+    async (evt: CalendarEvent) => {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    if (!res.ok) {
-      if (res.status === 401) setUnauthorized(true);
-      throw new Error(res.error);
-    }
+      const res = await createEvent({
+        title: evt.title,
+        startAt: evt.start,
+        endAt: evt.end,
+        allDay: !!evt.allDay,
+        startDate: evt.allDay ? evt.start.slice(0, 10) : undefined,
+        endDate: evt.allDay ? evt.end.slice(0, 10) : undefined,
+        description: evt.description,
+        location: evt.location,
+        color: evt.color,
+        recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
+        timeZone: tz,
+        recurrenceTimeZone: tz,
+      });
+      if (!res.ok) {
+        if (res.status === 401) setUnauthorized(true);
+        throw new Error(res.error);
+      }
 
-    setEvents((prev) => [...prev, apiEventToCalendarEvent(res.data)]);
-  }, []);
+      await refresh();
+    },
+    [refresh],
+  );
 
-  const updateEventById = useCallback(async (next: CalendarEvent) => {
-    const res = await updateEvent(next.id, {
-      title: next.title,
-      startAt: next.start,
-      endAt: next.end,
-      allDay: !!next.allDay,
-      description: next.description ?? '',
-      location: next.location ?? '',
-    });
+  const updateEventById = useCallback(
+    async (next: CalendarEvent) => {
+      const targetId =
+        next.isRecurringInstance && next.recurringEventId ? next.recurringEventId : next.id;
 
-    if (!res.ok) {
-      if (res.status === 401) setUnauthorized(true);
-      throw new Error(res.error);
-    }
+      const res = await updateEvent(targetId, {
+        title: next.title,
+        startAt: next.start,
+        endAt: next.end,
+        allDay: !!next.allDay,
+        startDate: next.allDay ? next.start.slice(0, 10) : undefined,
+        endDate: next.allDay ? next.end.slice(0, 10) : undefined,
+        description: next.description ?? '',
+        location: next.location ?? '',
+        color: next.color,
+        recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
+      });
 
-    const mapped = apiEventToCalendarEvent(res.data);
-    setEvents((prev) => prev.map((e) => (e.id === mapped.id ? mapped : e)));
-  }, []);
+      if (!res.ok) {
+        if (res.status === 401) setUnauthorized(true);
+        throw new Error(res.error);
+      }
 
-  const removeEventById = useCallback(async (id: string) => {
-    const res = await deleteEvent(id);
+      await refresh();
+    },
+    [refresh],
+  );
 
-    if (!res.ok) {
-      if (res.status === 401) setUnauthorized(true);
-      throw new Error(res.error);
-    }
+  const removeEventById = useCallback(
+    async (next: CalendarEvent | string) => {
+      const id =
+        typeof next === 'string'
+          ? next
+          : next.isRecurringInstance && next.recurringEventId
+            ? next.recurringEventId
+            : next.id;
 
-    setEvents((prev) => prev.filter((e) => e.id !== id));
-  }, []);
+      const res = await deleteEvent(id);
+
+      if (!res.ok) {
+        if (res.status === 401) setUnauthorized(true);
+        throw new Error(res.error);
+      }
+
+      await refresh();
+    },
+    [refresh],
+  );
 
   return useMemo(
     () => ({

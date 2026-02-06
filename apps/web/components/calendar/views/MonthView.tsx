@@ -1,13 +1,14 @@
 'use client';
 
-import { generateMonthGrid } from '@/lib/month-grid';
-import { format, parseISO, startOfDay, addDays } from 'date-fns';
-import { eventsForDay } from '@/lib/events/day';
-import { daysOfWeek } from '@/constants';
-import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
-import { isBarEventInMonth } from '@/lib/events/month-classify';
+import { addDays, format, parseISO, startOfDay } from 'date-fns';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
-import { expandRecurringEvents, getSeriesOpenId } from '@/lib/events/recurrence';
+
+import { daysOfWeek } from '@/constants';
+import { eventsForDay } from '@/lib/events/day';
+import { getEventLayoutRange } from '@/lib/events/layout-range';
+import { isBarEventInMonth } from '@/lib/events/month-classify';
+import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
+import { generateMonthGrid } from '@/lib/month-grid';
 
 export function MonthView(props: {
   date: Date;
@@ -18,19 +19,24 @@ export function MonthView(props: {
   onOpenDayPopover?: (d: Date, rect: DOMRect) => void;
 }) {
   const { date, events, onSelectDate, onCreate, onOpenEvent, onOpenDayPopover } = props;
+
   const cells = generateMonthGrid(date);
   const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) =>
     cells.slice(w * 7, w * 7 + 7),
   );
+
   const ROW_HEIGHT = 18;
   const ROW_GAP = 4;
-  const BAR_ROWS = 2; // fixed number of bar lanes to reserve per week
-  const TOTAL_ROWS = 4; // total vertical rows per day (bars + timed)
+  const BAR_ROWS = 2;
+  const TOTAL_ROWS = 4;
   const OVERLAY_TOP = 44;
+
+  const DEBUG = true;
+  const DEBUG_TITLE_CONTAINS =
+    process.env.NEXT_PUBLIC_CAL_DEBUG_TITLE ?? 'tiap kamis dari tgl 12 allday';
 
   return (
     <div className="rounded-3xl bg-white p-4">
-      {/* Days of week header */}
       <div className="grid w-full grid-cols-7 text-center">
         {daysOfWeek.map((day) => (
           <div key={day}>
@@ -39,20 +45,45 @@ export function MonthView(props: {
         ))}
       </div>
 
-      {/* Weeks */}
       <div className="grid grid-cols-1">
         {weeks.map((weekCells, weekIdx) => {
           const weekDates = weekCells.map((c) => c.date);
 
-          // compute week window [weekStart, weekEnd) for expansion
           const weekStart = startOfDay(weekDates[0]);
           const weekEnd = addDays(startOfDay(weekDates[6]), 1); // exclusive
 
-          // expand recurring events into concrete instances within this week window
-          const eventsForWeek = expandRecurringEvents(events, weekStart, weekEnd);
+          const eventsForWeek = events.filter((ev) => {
+            const { startMs, endMsExclusive } = getEventLayoutRange(ev);
+            return endMsExclusive > weekStart.getTime() && startMs < weekEnd.getTime();
+          });
 
-          // layout using the expanded list
           const { segments, laneCount } = buildWeekBarLayout(weekDates, eventsForWeek);
+
+          // DEBUG: log only a subset of segments, once per render
+          if (DEBUG) {
+            const rows = segments
+              .filter((s) =>
+                String(s.event.title ?? '')
+                  .toLowerCase()
+                  .includes(DEBUG_TITLE_CONTAINS.toLowerCase()),
+              )
+              .map((s) => ({
+                weekIdx,
+                title: s.event.title,
+                allDay: s.event.allDay,
+                start: (s.event as any).start,
+                end: (s.event as any).end,
+                startDate: (s.event as any).startDate,
+                endDate: (s.event as any).endDate,
+                startCol: s.startCol,
+                endColExclusive: s.endColExclusive,
+                continuesFromPrevWeek: s.continuesFromPrevWeek,
+                continuesToNextWeek: s.continuesToNextWeek,
+                weekStart: weekStart.toISOString(),
+              }));
+
+            if (rows.length) console.log('[MonthView segments debug]', rows);
+          }
 
           const lanesShown = Math.min(laneCount, BAR_ROWS);
           const timedRowsPerDay = Math.max(0, TOTAL_ROWS - lanesShown);
@@ -60,7 +91,6 @@ export function MonthView(props: {
 
           return (
             <div key={weekIdx} className="relative">
-              {/* Day cells */}
               <div className="grid grid-cols-7">
                 {weekCells.map((cell, colIdx) => {
                   const label = format(cell.date, 'd');
@@ -70,7 +100,6 @@ export function MonthView(props: {
 
                   const dayAll = eventsForDay(eventsForWeek, cell.date);
 
-                  // timed single-day events only (exclude bars)
                   const timed = dayAll
                     .filter((ev) => !isBarEventInMonth(ev))
                     .sort((a, b) => parseISO(a.start).getTime() - parseISO(b.start).getTime());
@@ -104,10 +133,8 @@ export function MonthView(props: {
                         </button>
                       </div>
 
-                      {/* reserved overlay space */}
                       <div style={{ height: reservedOverlayHeight }} />
 
-                      {/* Timed single-day list */}
                       <div className="relative mt-1 space-y-1 text-left">
                         {visibleTimed.map((ev) => {
                           const isNotEvent = ev.isTask ? (
@@ -116,8 +143,10 @@ export function MonthView(props: {
                             <Grid2X2Icon size={8} />
                           ) : null;
 
-                          // gunakan parent id bila ini occurrence recurring, supaya edit series bisa menemukan event di storage
-                          const openId = getSeriesOpenId(ev);
+                          const openId =
+                            ev.isRecurringInstance && ev.recurringEventId
+                              ? ev.recurringEventId
+                              : ev.id;
 
                           return (
                             <div
@@ -152,9 +181,7 @@ export function MonthView(props: {
                             onClick={(clickEvt) => {
                               clickEvt.stopPropagation();
                               if (onOpenDayPopover) {
-                                const rect = (
-                                  clickEvt.currentTarget as HTMLButtonElement
-                                ).getBoundingClientRect();
+                                const rect = clickEvt.currentTarget.getBoundingClientRect();
                                 onOpenDayPopover(cell.date, rect);
                               }
                             }}
@@ -168,7 +195,6 @@ export function MonthView(props: {
                 })}
               </div>
 
-              {/* Bars overlay (week-level) */}
               <div className="absolute inset-x-0 px-1" style={{ top: OVERLAY_TOP }}>
                 <div
                   className="grid grid-cols-7"
@@ -183,12 +209,9 @@ export function MonthView(props: {
                       const leftCapClass = roundedLeft ? 'rounded-l-full' : 'rounded-l-none';
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
-                      const ev = s.event as CalendarEvent & {
-                        originalEventId?: string;
-                        isOccurrence?: boolean;
-                        color?: string;
-                      };
-                      const openId = getSeriesOpenId(ev);
+                      const ev = s.event as CalendarEvent & { color?: string };
+                      const openId =
+                        ev.isRecurringInstance && ev.recurringEventId ? ev.recurringEventId : ev.id;
 
                       return (
                         <div
@@ -202,9 +225,7 @@ export function MonthView(props: {
                           title={s.event.title}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const rect = (
-                              e.currentTarget as HTMLDivElement
-                            ).getBoundingClientRect();
+                            const rect = e.currentTarget.getBoundingClientRect();
                             onOpenEvent(openId, rect);
                           }}
                         >

@@ -20,11 +20,8 @@ type Props = {
   onDelete: (id: string) => void;
 };
 
-function getSeriesParentId(ev: CalendarEvent | RecurringOccurrence): string {
-  if ((ev as RecurringOccurrence).isOccurrence && (ev as RecurringOccurrence).originalEventId) {
-    return (ev as RecurringOccurrence).originalEventId;
-  }
-  return ev.id;
+function getMasterId(ev: CalendarEvent): string {
+  return ev.isRecurringInstance && ev.recurringEventId ? ev.recurringEventId : ev.id;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -104,20 +101,23 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
       return;
     }
 
-    // untuk recurring occurrence, buka editor parent series
-    const parentId = getSeriesParentId(event);
-    router.push('/events/edit/' + parentId);
+    const masterId = getMasterId(event as CalendarEvent);
+    router.push('/events/edit/' + masterId);
   };
 
   const submitEdit = () => {
     if (!event) return;
+    const masterId = getMasterId(event as CalendarEvent);
+
     const updated: CalendarEvent = {
       ...event,
+      id: masterId,
       title: title.trim(),
       start: new Date(start).toISOString(),
       end: new Date(end).toISOString(),
     };
     onUpdate(updated);
+
     setEditing(false);
     onClose();
   };
@@ -151,7 +151,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             className="rounded-full p-1 text-sm text-gray-600 hover:bg-gray-100"
             onClick={() => {
               if (confirm('Delete this event?')) {
-                onDelete(event.id);
+                onDelete(getMasterId(event));
                 onClose();
               }
             }}

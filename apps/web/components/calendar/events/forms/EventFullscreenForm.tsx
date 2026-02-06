@@ -212,23 +212,9 @@ export function EventFullscreenForm({
   const submit = () => {
     if (!validateBeforeSubmit()) return;
 
-    let startDate: Date;
-    let endDate: Date;
-    if (allDay) {
-      const rawStart = new Date(start);
-      const dayStart = startOfDay(rawStart);
-      startDate = dayStart;
-      endDate = addDays(dayStart, 1); // exclusive end at next midnight
-    } else {
-      startDate = new Date(start);
-      endDate = new Date(end);
-    }
-
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
       title,
-      start: startDate.toISOString(),
-      end: endDate.toISOString(),
       allDay,
       guests: guests.length ? guests : undefined,
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
@@ -238,7 +224,30 @@ export function EventFullscreenForm({
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
       color: color || '#0B57D0',
+      // start/end filled below
+      start: '',
+      end: '',
     };
+
+    if (allDay) {
+      const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
+      const startDateObj = parseISO(`${startDateStr}T00:00:00`);
+      const endDateObj = addDays(startDateObj, 1);
+
+      const endDateStr = format(endDateObj, 'yyyy-MM-dd'); // exclusive endDate
+
+      payload.startDate = startDateStr;
+      payload.endDate = endDateStr;
+
+      // Keep ISO instants for backward compatibility (optional)
+      payload.start = startDateObj.toISOString();
+      payload.end = endDateObj.toISOString();
+    } else {
+      const startObj = new Date(start);
+      const endObj = new Date(end);
+      payload.start = startObj.toISOString();
+      payload.end = endObj.toISOString();
+    }
 
     if (event) onSave?.({ ...payload, id: event.id });
     else onCreate?.(payload);

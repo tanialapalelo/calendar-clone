@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -28,14 +29,31 @@ export class EventsController {
     @Query('to') to?: string,
   ) {
     const userId = req.user!.sub;
-    const fromDate = from ? new Date(from) : undefined;
-    const toDate = to ? new Date(to) : undefined;
 
-    return this.events.listForUser(
-      userId,
-      fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : undefined,
-      toDate && !Number.isNaN(toDate.getTime()) ? toDate : undefined,
-    );
+    // For recurrence expansion + performance, require a bounded window
+    if (!from || !to) {
+      throw new BadRequestException('from and to query params are required');
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      throw new BadRequestException('Invalid from/to');
+    }
+    if (toDate <= fromDate) {
+      throw new BadRequestException('to must be after from');
+    }
+
+    // Guardrail: prevent massive windows
+    const MAX_WINDOW_DAYS = 180;
+    const maxWindowMs = MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    if (toDate.getTime() - fromDate.getTime() > maxWindowMs) {
+      throw new BadRequestException(
+        `Date range too large (max ${MAX_WINDOW_DAYS} days)`,
+      );
+    }
+    return this.events.listForUser(userId, fromDate, toDate);
   }
 
   @Post()
