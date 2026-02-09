@@ -21,8 +21,8 @@ export default function NewEventClient() {
       endAt: evt.end,
       allDay: evt.allDay,
 
-      startDate: evt.allDay ? evt.start.slice(0, 10) : undefined,
-      endDate: evt.allDay ? evt.end.slice(0, 10) : undefined,
+      startDate: evt.allDay ? (evt.startDate ?? undefined) : undefined,
+      endDate: evt.allDay ? (evt.endDate ?? undefined) : undefined,
 
       description: evt.description,
       location: evt.location,
