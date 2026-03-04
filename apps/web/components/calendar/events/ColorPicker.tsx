@@ -7,7 +7,7 @@ import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 type Props = {
   value?: string;
   onChange: (hex: string) => void;
-  palette?: string[]; // optional override, defaults to constants PALETTE
+  palette?: string[];
   ariaLabel?: string;
 };
 
@@ -37,8 +37,8 @@ export default function ColorPicker({
     const rect = el.getBoundingClientRect();
     const W = 90;
 
-    let left = rect.left;
-    let top = rect.bottom;
+    const left = rect.left;
+    const top = rect.bottom;
 
     setPopupStyle({
       position: 'fixed',

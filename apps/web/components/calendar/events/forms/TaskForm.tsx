@@ -1,7 +1,7 @@
 'use client';
 
 import { addDays, addMinutes } from 'date-fns';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 
 function startOfDayLocal(d: Date) {
@@ -19,22 +19,14 @@ type Props = {
 export function TaskForm({ initialDate, onClose, onCreate }: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
+  const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
+  const defaultEnd = useMemo(() => addDays(startOfDayLocal(initialEnd), 1), [initialEnd]);
 
   const [title, setTitle] = useState('');
-  const [dueStart, setDueStart] = useState(toLocalDateTimeInputValue(initialStart));
-  const [dueEnd, setDueEnd] = useState(toLocalDateTimeInputValue(initialEnd));
+  const [dueStart, setDueStart] = useState(toLocalDateTimeInputValue(defaultStart));
+  const [dueEnd, setDueEnd] = useState(toLocalDateTimeInputValue(defaultEnd));
   const [allDay, setAllDay] = useState(true);
   const [showTime, setShowTime] = useState(false);
-
-  useEffect(() => {
-    const s = startOfDayLocal(initialStart);
-    const e = addDays(startOfDayLocal(initialEnd), 1);
-    setDueStart(toLocalDateTimeInputValue(s));
-    setDueEnd(toLocalDateTimeInputValue(e));
-    setAllDay(true);
-    setShowTime(false);
-    setTitle('');
-  }, [initialStart, initialEnd]);
 
   function submit() {
     let startDate: Date;

@@ -17,6 +17,15 @@ import { CreateEventDto } from './dto/create-event.dto';
 import type { RequestWithUser } from '../auth/auth.types';
 import { UpdateEventDto } from './dto/update-event.dto';
 
+type RecurrenceScope = 'this' | 'following' | 'all';
+
+function parseScope(scope?: string): RecurrenceScope {
+  if (!scope) return 'all';
+  if (scope === 'this' || scope === 'following' || scope === 'all')
+    return scope;
+  throw new BadRequestException('Invalid scope');
+}
+
 @Controller('events')
 export class EventsController {
   constructor(private readonly events: EventsService) {}
@@ -75,15 +84,20 @@ export class EventsController {
     @Req() req: RequestWithUser,
     @Param('id') id: string,
     @Body() dto: UpdateEventDto,
+    @Query('scope') scope?: string,
   ) {
     const userId = req.user!.sub;
-    return this.events.updateForUser(userId, id, dto);
+    return this.events.updateForUser(userId, id, dto, parseScope(scope));
   }
 
   @Delete(':id')
   @UseGuards(JwtCookieGuard)
-  async delete(@Req() req: RequestWithUser, @Param('id') id: string) {
+  async delete(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Query('scope') scope?: string,
+  ) {
     const userId = req.user!.sub;
-    return this.events.deleteForUser(userId, id);
+    return this.events.deleteForUser(userId, id, parseScope(scope));
   }
 }

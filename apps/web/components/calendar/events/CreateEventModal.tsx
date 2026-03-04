@@ -54,11 +54,26 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
 
         {/* Body */}
         {mode === 'event' ? (
-          <EventForm initialDate={initialDate} onClose={onClose} onCreate={onCreate} />
+          <EventForm
+            key={`event-${initialDate.toISOString()}`}
+            initialDate={initialDate}
+            onClose={onClose}
+            onCreate={onCreate}
+          />
         ) : mode === 'task' ? (
-          <TaskForm initialDate={initialDate} onClose={onClose} onCreate={onCreate} />
+          <TaskForm
+            key={`task-${initialDate.toISOString()}`}
+            initialDate={initialDate}
+            onClose={onClose}
+            onCreate={onCreate}
+          />
         ) : (
-          <AppointmentForm initialDate={initialDate} onClose={onClose} onCreate={onCreate} />
+          <AppointmentForm
+            key={`appointment-${initialDate.toISOString()}`}
+            initialDate={initialDate}
+            onClose={onClose}
+            onCreate={onCreate}
+          />
         )}
       </div>
     </div>

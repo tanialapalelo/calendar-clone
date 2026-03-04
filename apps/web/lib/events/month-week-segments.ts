@@ -1,4 +1,4 @@
-import { addDays, parseISO, startOfDay, subMilliseconds } from 'date-fns';
+import { addDays, parseISO, startOfDay } from 'date-fns';
 import { isBarEventInMonth } from './month-classify';
 
 export type WeekBarSegment = {

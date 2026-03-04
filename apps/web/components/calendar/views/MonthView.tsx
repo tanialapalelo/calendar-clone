@@ -67,20 +67,23 @@ export function MonthView(props: {
                   .toLowerCase()
                   .includes(DEBUG_TITLE_CONTAINS.toLowerCase()),
               )
-              .map((s) => ({
-                weekIdx,
-                title: s.event.title,
-                allDay: s.event.allDay,
-                start: (s.event as any).start,
-                end: (s.event as any).end,
-                startDate: (s.event as any).startDate,
-                endDate: (s.event as any).endDate,
-                startCol: s.startCol,
-                endColExclusive: s.endColExclusive,
-                continuesFromPrevWeek: s.continuesFromPrevWeek,
-                continuesToNextWeek: s.continuesToNextWeek,
-                weekStart: weekStart.toISOString(),
-              }));
+              .map((s) => {
+                const debugEvent = s.event as CalendarEvent;
+                return {
+                  weekIdx,
+                  title: s.event.title,
+                  allDay: s.event.allDay,
+                  start: debugEvent.start,
+                  end: debugEvent.end,
+                  startDate: debugEvent.startDate,
+                  endDate: debugEvent.endDate,
+                  startCol: s.startCol,
+                  endColExclusive: s.endColExclusive,
+                  continuesFromPrevWeek: s.continuesFromPrevWeek,
+                  continuesToNextWeek: s.continuesToNextWeek,
+                  weekStart: weekStart.toISOString(),
+                };
+              });
 
             if (rows.length) console.log('[MonthView segments debug]', rows);
           }
@@ -143,10 +146,7 @@ export function MonthView(props: {
                             <Grid2X2Icon size={8} />
                           ) : null;
 
-                          const openId =
-                            ev.isRecurringInstance && ev.recurringEventId
-                              ? ev.recurringEventId
-                              : ev.id;
+                          const openId = ev.id;
 
                           return (
                             <div
@@ -210,8 +210,7 @@ export function MonthView(props: {
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
                       const ev = s.event as CalendarEvent & { color?: string };
-                      const openId =
-                        ev.isRecurringInstance && ev.recurringEventId ? ev.recurringEventId : ev.id;
+                      const openId = ev.id;
 
                       return (
                         <div

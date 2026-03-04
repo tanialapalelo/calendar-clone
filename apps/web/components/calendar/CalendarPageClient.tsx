@@ -24,8 +24,6 @@ export default function CalendarPageClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [isMounted, setIsMounted] = useState(false);
-
   const view = useMemo(() => parseView(searchParams.get('view')), [searchParams]);
   const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
 
@@ -37,8 +35,6 @@ export default function CalendarPageClient() {
   }, [date]);
 
   const { events, addEvent, updateEvent, removeEvent, unauthorized } = useEventsApi(range);
-
-  useEffect(() => setIsMounted(true), []);
 
   // Redirect to login if user is not authenticated
   useEffect(() => {
@@ -59,14 +55,27 @@ export default function CalendarPageClient() {
   const activeEvent = useMemo(() => {
     if (!popoverEventId) return null;
 
-    // direct match (non-recurring or if API returns masters)
+    // direct match (instance id or master id if masters are returned)
     const direct = events.find((e) => e.id === popoverEventId);
     if (direct) return direct;
 
-    // if we opened a series master id, find any instance of that series
-    const instance = events.find((e) => e.recurringEventId === popoverEventId);
-    return instance ?? null;
-  }, [events, popoverEventId]);
+    // If popoverEventId is a master id, pick the best matching instance.
+    // Prefer the one nearest to the anchor rect (the thing the user clicked).
+    const candidates = events.filter((e) => e.recurringEventId === popoverEventId);
+    if (candidates.length === 0) return null;
+
+    if (popoverRect) {
+      // We don't have each event's DOMRect, but we can approximate:
+      // choose by date proximity to the day column under the anchor.
+      // Fallback: choose the one with the smallest startAt in the current range.
+      // (Better fix is Fix 1: pass instance id into openEventPopover.)
+      // Here we just pick the earliest candidate to keep deterministic behavior.
+      // You can improve this once you pass actual instance ids.
+      return candidates[0] ?? null;
+    }
+
+    return candidates[0] ?? null;
+  }, [events, popoverEventId, popoverRect]);
 
   const dayPopoverEvents = useMemo(() => {
     if (!dayPopoverDate) return [];
@@ -80,7 +89,7 @@ export default function CalendarPageClient() {
     });
   }, [events, dayPopoverDate]);
 
-  if (!isMounted) return null;
+  const popoverKey = activeEvent?.id ?? popoverEventId ?? 'popover';
 
   const setQuery = (next: { view?: CalendarView; date?: Date }) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -155,6 +164,7 @@ export default function CalendarPageClient() {
       />
 
       <EventPopover
+        key={popoverKey}
         open={popoverOpen}
         anchorRect={popoverRect}
         event={activeEvent}

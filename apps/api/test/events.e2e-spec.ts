@@ -343,4 +343,313 @@ describe('Events (e2e)', () => {
       instances.every((e: any) => e.title === 'Updated Series Title'),
     ).toBe(true);
   });
+  it('PATCH /v1/events/:id can update a single occurrence with scope=this', async () => {
+    const from = new Date('2026-03-10T00:00:00.000Z');
+    const to = new Date('2026-03-14T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Daily Standup',
+        startAt: '2026-03-10T10:00:00.000Z',
+        endAt: '2026-03-10T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+        recurrenceRule: 'FREQ=DAILY;COUNT=3',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const occurrences = (listRes.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+    expect(occurrences.length).toBeGreaterThanOrEqual(3);
+
+    const target = occurrences[0];
+
+    const patchRes = await request(app.getHttpServer())
+      .patch(`/v1/events/${encodeURIComponent(target.id)}?scope=this`)
+      .set('Cookie', authCookie)
+      .send({ title: 'Standup (this only)' })
+      .expect(200);
+
+    expect(patchRes.body.title).toBe('Standup (this only)');
+
+    const listAfter = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const afterOccurrences = (listAfter.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+
+    const updated = afterOccurrences.find(
+      (e) => e.originalStartAt === target.originalStartAt,
+    );
+    const unchanged = afterOccurrences.find(
+      (e) => e.originalStartAt !== target.originalStartAt,
+    );
+
+    expect(updated?.title).toBe('Standup (this only)');
+    expect(unchanged?.title).toBe('Daily Standup');
+  });
+
+  it('DELETE /v1/events/:id can remove a single occurrence with scope=this', async () => {
+    const from = new Date('2026-03-10T00:00:00.000Z');
+    const to = new Date('2026-03-14T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Daily Sync',
+        startAt: '2026-03-10T10:00:00.000Z',
+        endAt: '2026-03-10T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+        recurrenceRule: 'FREQ=DAILY;COUNT=3',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const occurrences = (listRes.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+    expect(occurrences.length).toBeGreaterThanOrEqual(3);
+
+    const target = occurrences[1];
+
+    await request(app.getHttpServer())
+      .delete(`/v1/events/${encodeURIComponent(target.id)}?scope=this`)
+      .set('Cookie', authCookie)
+      .expect(200);
+
+    const listAfter = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const afterOccurrences = (listAfter.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+
+    const removed = afterOccurrences.find(
+      (e) => e.originalStartAt === target.originalStartAt,
+    );
+    const remaining = afterOccurrences.find(
+      (e) => e.originalStartAt !== target.originalStartAt,
+    );
+
+    expect(removed).toBeUndefined();
+    expect(remaining?.title).toBe('Daily Sync');
+  });
+  it('PATCH /v1/events/:id updates this and following occurrences with scope=following', async () => {
+    const from = new Date('2026-03-10T00:00:00.000Z');
+    const to = new Date('2026-03-16T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Daily Series',
+        startAt: '2026-03-10T10:00:00.000Z',
+        endAt: '2026-03-10T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+        recurrenceRule: 'FREQ=DAILY;COUNT=5',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const occurrences = (listRes.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+    expect(occurrences.length).toBeGreaterThanOrEqual(5);
+
+    const target = occurrences[2];
+
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${encodeURIComponent(target.id)}?scope=following`)
+      .set('Cookie', authCookie)
+      .send({ title: 'Daily Series (updated)' })
+      .expect(200);
+
+    const listAfter = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const after = listAfter.body as any[];
+
+    const beforeTarget = after.find(
+      (e) =>
+        e.recurringEventId === masterId &&
+        e.originalStartAt === occurrences[0].originalStartAt,
+    );
+    const fromTarget = after.find(
+      (e) =>
+        e.title === 'Daily Series (updated)' &&
+        e.originalStartAt === target.originalStartAt,
+    );
+
+    expect(beforeTarget?.title).toBe('Daily Series');
+    expect(fromTarget?.title).toBe('Daily Series (updated)');
+  });
+  it('DELETE /v1/events/:id removes this and following occurrences with scope=following', async () => {
+    const from = new Date('2026-03-10T00:00:00.000Z');
+    const to = new Date('2026-03-16T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Series To Truncate',
+        startAt: '2026-03-10T10:00:00.000Z',
+        endAt: '2026-03-10T11:00:00.000Z',
+        allDay: false,
+        calendarId,
+        recurrenceRule: 'FREQ=DAILY;COUNT=5',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const occurrences = (listRes.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+    expect(occurrences.length).toBeGreaterThanOrEqual(5);
+
+    const target = occurrences[2];
+
+    await request(app.getHttpServer())
+      .delete(`/v1/events/${encodeURIComponent(target.id)}?scope=following`)
+      .set('Cookie', authCookie)
+      .expect(200);
+
+    const listAfter = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const after = listAfter.body as any[];
+
+    const beforeTarget = after.find(
+      (e) =>
+        e.recurringEventId === masterId &&
+        e.originalStartAt === occurrences[0].originalStartAt,
+    );
+    const removedTarget = after.find(
+      (e) =>
+        e.recurringEventId === masterId &&
+        e.originalStartAt === target.originalStartAt,
+    );
+
+    expect(beforeTarget?.title).toBe('Series To Truncate');
+    expect(removedTarget).toBeUndefined();
+  });
+  it('PATCH /v1/events/:id updates following occurrences for all-day series with scope=following', async () => {
+    const from = new Date('2026-02-10T00:00:00.000Z');
+    const to = new Date('2026-02-16T00:00:00.000Z');
+
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'All Day Weekdays',
+        startAt: '2026-02-10T00:00:00.000Z',
+        endAt: '2026-02-11T00:00:00.000Z',
+        allDay: true,
+        startDate: '2026-02-10',
+        endDate: '2026-02-11',
+        calendarId,
+        recurrenceRule: 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;COUNT=5',
+        timeZone: 'UTC',
+        recurrenceTimeZone: 'UTC',
+      })
+      .expect(201);
+
+    const masterId = createRes.body.id as string;
+
+    const listRes = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const occurrences = (listRes.body as any[]).filter(
+      (e) => e.isRecurringInstance && e.recurringEventId === masterId,
+    );
+    expect(occurrences.length).toBeGreaterThanOrEqual(5);
+
+    const target = occurrences[2];
+
+    await request(app.getHttpServer())
+      .patch(`/v1/events/${encodeURIComponent(target.id)}?scope=following`)
+      .set('Cookie', authCookie)
+      .send({ title: 'All Day Weekdays (updated)' })
+      .expect(200);
+
+    const listAfter = await request(app.getHttpServer())
+      .get('/v1/events')
+      .set('Cookie', authCookie)
+      .query({ from: from.toISOString(), to: to.toISOString() })
+      .expect(200);
+
+    const after = listAfter.body as any[];
+
+    const beforeTarget = after.find(
+      (e) =>
+        e.recurringEventId === masterId &&
+        e.originalStartAt === occurrences[0].originalStartAt,
+    );
+    const fromTarget = after.find(
+      (e) =>
+        e.title === 'All Day Weekdays (updated)' &&
+        e.originalStartAt === target.originalStartAt,
+    );
+
+    expect(beforeTarget?.title).toBe('All Day Weekdays');
+    expect(fromTarget?.title).toBe('All Day Weekdays (updated)');
+  });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { addDays, addMinutes, format, parseISO } from 'date-fns';
-import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { KeyboardEvent, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { MapPinIcon, UsersIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -33,10 +33,12 @@ type Props = {
 export function EventForm({ initialDate, onClose, onCreate }: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
+  const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
+  const defaultEnd = useMemo(() => addDays(startOfDayLocal(initialEnd), 1), [initialEnd]);
 
   const [title, setTitle] = useState('');
-  const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
-  const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
+  const [start, setStart] = useState(toLocalDateTimeInputValue(defaultStart));
+  const [end, setEnd] = useState(toLocalDateTimeInputValue(defaultEnd));
   const [showTime, setShowTime] = useState(false);
   const [allDay, setAllDay] = useState(true);
 
@@ -45,19 +47,6 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
   const [location, setLocation] = useState('');
 
   const router = useRouter();
-
-  useEffect(() => {
-    const s = startOfDayLocal(initialStart);
-    const e = addDays(startOfDayLocal(initialEnd), 1);
-    setStart(toLocalDateTimeInputValue(s));
-    setEnd(toLocalDateTimeInputValue(s));
-    setAllDay(true);
-    setShowTime(false);
-    setGuests([]);
-    setGuestInput('');
-    setLocation('');
-    setTitle('');
-  }, [initialStart, initialEnd]);
 
   const submit = () => {
     let startDate: Date;

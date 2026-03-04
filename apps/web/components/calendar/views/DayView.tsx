@@ -31,8 +31,6 @@ export function DayView(props: {
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
   // Expand recurring events for the visible day window so occurrences are included.
-  const dayStart = startOfDayDefaultHour(date);
-  const dayEnd = endOfDayExclusive(date);
   const dayEvents = eventsForDay(events, date);
 
   // Compute overlapping layout (positions in minutes columns/cols etc.)
@@ -136,10 +134,7 @@ export function DayView(props: {
               const leftPct = (p.col / p.colCount) * 100;
               const widthPct = (1 / p.colCount) * 100;
 
-              const openId =
-                p.event.isRecurringInstance && p.event.recurringEventId
-                  ? p.event.recurringEventId
-                  : p.event.id;
+              const openId = p.event.id; // use instance id for accurate popover actions
 
               // optional icons for tasks/appointments if you want to surface them
               const isNotEvent = p.event.isTask ? (

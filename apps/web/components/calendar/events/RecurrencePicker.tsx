@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { RRule, type Weekday } from 'rrule';
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 
 type RecurrenceValue = { rrule?: string | null };
 
@@ -13,41 +13,11 @@ export default function RecurrencePicker(props: {
 }) {
   const { value, onChange, startDate } = props;
 
-  const [preset, setPreset] = useState<string>(() => (value?.rrule ? 'custom' : 'none'));
-  const [preview, setPreview] = useState<string[]>([]);
-
   // helper: map JS getDay() (0 = Sun) to RRule weekdays safely
-  const jsDayToRRule = [
-    RRule.SU, // 0 -> Sunday
-    RRule.MO, // 1 -> Monday
-    RRule.TU, // 2 -> Tuesday
-    RRule.WE, // 3 -> Wednesday
-    RRule.TH, // 4 -> Thursday
-    RRule.FR, // 5 -> Friday
-    RRule.SA, // 6 -> Saturday
-  ];
+  const jsDayToRRule = [RRule.SU, RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA];
 
-  // Helper to produce a "local anchored" Date from startDate
-  // This avoids timezone/UTC shifts when using dtstart with rrule.
-  function localStartDate(sd?: Date) {
-    if (!sd) return undefined;
-    return new Date(
-      sd.getFullYear(),
-      sd.getMonth(),
-      sd.getDate(),
-      sd.getHours(),
-      sd.getMinutes(),
-      sd.getSeconds(),
-      sd.getMilliseconds(),
-    );
-  }
-
-  // When value.rrule or startDate changes, try to infer a preset from the rrule
-  useEffect(() => {
-    if (!value?.rrule || !startDate) {
-      setPreset('none');
-      return;
-    }
+  const [preset, setPreset] = useState<string>(() => {
+    if (!value?.rrule || !startDate) return 'none';
     try {
       const opts = RRule.parseString(value.rrule);
 
@@ -75,35 +45,29 @@ export default function RecurrencePicker(props: {
 
       const isYearly = opts.freq === RRule.YEARLY;
 
-      if (isDaily) setPreset('daily');
-      else if (isWeeklySameDay) setPreset('weekly');
-      else if (isWeekday) setPreset('weekday');
-      else if (isMonthlySameDay) setPreset('monthly');
-      else if (isYearly) setPreset('yearly');
-      else setPreset('custom');
+      if (isDaily) return 'daily';
+      if (isWeeklySameDay) return 'weekly';
+      if (isWeekday) return 'weekday';
+      if (isMonthlySameDay) return 'monthly';
+      if (isYearly) return 'yearly';
+      return 'custom';
     } catch {
-      setPreset('custom');
+      return 'custom';
     }
-  }, [value?.rrule, startDate]);
+  });
 
-  // compute next occurrences preview
-  useEffect(() => {
-    if (!value?.rrule || !startDate) {
-      setPreview([]);
-      return;
-    }
-    try {
-      // IMPORTANT: for preview, trust the DTSTART embedded in the RRULE string
-      // and do not override dtstart here; this avoids off-by-one when mixing
-      // UTC/Z strings with local dates.
-      const opts = RRule.parseString(value.rrule);
-      const rule = new RRule(opts);
-      const dates = rule.all((_, i) => i < 5);
-      setPreview(dates.map((d) => format(d, 'EEE, MMM d, yyyy')));
-    } catch {
-      setPreview([]);
-    }
-  }, [value?.rrule]);
+  function localStartDate(sd?: Date) {
+    if (!sd) return undefined;
+    return new Date(
+      sd.getFullYear(),
+      sd.getMonth(),
+      sd.getDate(),
+      sd.getHours(),
+      sd.getMinutes(),
+      sd.getSeconds(),
+      sd.getMilliseconds(),
+    );
+  }
 
   function setNone() {
     setPreset('none');
@@ -171,7 +135,7 @@ export default function RecurrencePicker(props: {
   }
 
   function recurringOptions() {
-    if (!startDate) {
+    if (!startDate || !isValid(startDate)) {
       return [
         ['none', 'Does not repeat'],
         ['daily', 'Daily'],

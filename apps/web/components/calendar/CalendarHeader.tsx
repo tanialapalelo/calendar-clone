@@ -1,7 +1,6 @@
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
-import { exportEventsToICS } from '@/lib/events/ical';
 import { useRef } from 'react';
 
 export function CalendarHeader(props: {
@@ -15,7 +14,17 @@ export function CalendarHeader(props: {
   onExportCalendar?: () => void;
   onImportCalendar?: (file: File) => void;
 }) {
-  const { view, date, onToday, onPrev, onNext, onChangeView, onCreate, onExportCalendar, onImportCalendar } = props;
+  const {
+    view,
+    date,
+    onToday,
+    onPrev,
+    onNext,
+    onChangeView,
+    onCreate,
+    onExportCalendar,
+    onImportCalendar,
+  } = props;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 

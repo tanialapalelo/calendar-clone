@@ -6,12 +6,14 @@ import {
 } from '@nestjs/common';
 import { addDays, addMilliseconds } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
+import { Prisma } from '@prisma/client';
 import { RRule, rrulestr } from 'rrule';
 
 import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { stripUntil, withUntil, withUntilFloating } from './rrule-until';
 
 type EventInstance = {
   id: string;
@@ -20,21 +22,16 @@ type EventInstance = {
   description: string | null;
   location: string | null;
   allDay: boolean;
-
   startAt: Date;
   endAt: Date;
-
-  /**
-   * All-day source of truth (half-open):
-   * - startDate inclusive
-   * - endDate exclusive
-   * null for timed events
-   */
   startDate: Date | null;
   endDate: Date | null;
-
   timeZone: string | null;
   color: string | null;
+  guests: unknown | null;
+  notifications: unknown | null;
+  visibility: string | null;
+  busyStatus: string | null;
   createdAt: Date;
   updatedAt: Date;
 
@@ -116,9 +113,7 @@ function ensureEndAfterStartDateExclusive(
 
 function buildFloatingRule(ruleOnly: string, dtstartNaive: Date): RRule {
   const s = `${formatFloatingDtstart(dtstartNaive)}\nRRULE:${ruleOnly}`;
-  const parsed = rrulestr(s);
-  if (!(parsed instanceof RRule)) throw new Error('Expected RRule');
-  return parsed;
+  return rrulestr(s) as RRule;
 }
 
 function toLocalNaiveInTz(instantUtc: Date, tz: string): Date {
@@ -162,6 +157,99 @@ function generateAfterExclusive(args: {
   return out;
 }
 
+function parseInstanceId(
+  id: string,
+): { masterId: string; originalStartAt: Date } | null {
+  const at = id.indexOf('@');
+  if (at < 0) return null;
+  const masterId = id.slice(0, at);
+  const iso = id.slice(at + 1);
+  const d = new Date(iso);
+  if (!masterId || Number.isNaN(d.getTime())) return null;
+  return { masterId, originalStartAt: d };
+}
+
+function exceptionKey(eventId: string, originalStartAt: Date | string) {
+  const iso =
+    typeof originalStartAt === 'string'
+      ? originalStartAt
+      : originalStartAt.toISOString();
+  return `${eventId}|${iso}`;
+}
+
+function applyExceptionToInstance(
+  instance: EventInstance,
+  ex: {
+    cancelled: boolean;
+    title: string | null;
+    description: string | null;
+    location: string | null;
+    allDay: boolean | null;
+    startAt: Date | null;
+    endAt: Date | null;
+    startDate: Date | null;
+    endDate: Date | null;
+    color: string | null;
+    timeZone: string | null;
+    guests: unknown | null;
+    notifications: unknown | null;
+    visibility: string | null;
+    busyStatus: string | null;
+  },
+  tz: string,
+): EventInstance | null {
+  if (ex.cancelled) return null;
+
+  const nextAllDay = ex.allDay ?? instance.allDay;
+
+  let nextStartAt = ex.startAt ?? instance.startAt;
+  let nextEndAt = ex.endAt ?? instance.endAt;
+  let nextStartDate = ex.startDate ?? instance.startDate;
+  let nextEndDate = ex.endDate ?? instance.endDate;
+
+  if (ex.allDay === false) {
+    nextStartDate = null;
+    nextEndDate = null;
+  }
+
+  if (nextAllDay) {
+    if (!nextStartDate)
+      nextStartDate = dateOnlyFromInstantInTz(nextStartAt, tz);
+    nextEndDate = ensureEndAfterStartDateExclusive(
+      nextStartDate,
+      nextEndDate ?? dateOnlyFromInstantInTz(nextEndAt, tz),
+    );
+
+    if (ex.startDate || ex.endDate || ex.allDay === true) {
+      nextStartAt = fromZonedTime(naiveFromDateColumn(nextStartDate), tz);
+      nextEndAt = fromZonedTime(naiveFromDateColumn(nextEndDate), tz);
+    }
+  } else {
+    nextStartDate = null;
+    nextEndDate = null;
+  }
+
+  return {
+    ...instance,
+    title: ex.title ?? instance.title,
+    description: ex.description ?? instance.description,
+    location: ex.location ?? instance.location,
+    allDay: nextAllDay,
+    startAt: nextStartAt,
+    endAt: nextEndAt,
+    startDate: nextStartDate,
+    endDate: nextEndDate,
+    timeZone: ex.timeZone ?? instance.timeZone,
+    color: ex.color ?? instance.color,
+    guests: ex.guests ?? instance.guests,
+    notifications: ex.notifications ?? instance.notifications,
+    visibility: ex.visibility ?? instance.visibility,
+    busyStatus: ex.busyStatus ?? instance.busyStatus,
+  };
+}
+
+type RecurrenceScope = 'this' | 'following' | 'all';
+
 @Injectable()
 export class EventsService {
   constructor(
@@ -198,10 +286,51 @@ export class EventsService {
         color: true,
         recurrenceRule: true,
         recurrenceTimeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
         createdAt: true,
         updatedAt: true,
       },
     });
+
+    const recurringIds = events
+      .filter((ev) => !!ev.recurrenceRule)
+      .map((ev) => ev.id);
+
+    const exceptions = recurringIds.length
+      ? await this.prisma.eventRecurrenceException.findMany({
+          where: {
+            eventId: { in: recurringIds },
+            originalStartAt: { gte: from, lt: to },
+          },
+          select: {
+            eventId: true,
+            originalStartAt: true,
+            cancelled: true,
+            title: true,
+            description: true,
+            location: true,
+            allDay: true,
+            startAt: true,
+            endAt: true,
+            startDate: true,
+            endDate: true,
+            color: true,
+            timeZone: true,
+            guests: true,
+            notifications: true,
+            visibility: true,
+            busyStatus: true,
+          },
+        })
+      : [];
+
+    const exceptionMap = new Map<string, (typeof exceptions)[number]>();
+    for (const ex of exceptions) {
+      exceptionMap.set(exceptionKey(ex.eventId, ex.originalStartAt), ex);
+    }
 
     const out: EventInstance[] = [];
     const MAX_OCCURRENCES = 2000;
@@ -231,6 +360,10 @@ export class EventsService {
             endDate: ev.endDate,
             timeZone: ev.timeZone,
             color: ev.color,
+            guests: ev.guests,
+            notifications: ev.notifications,
+            visibility: ev.visibility,
+            busyStatus: ev.busyStatus,
             recurrenceRule: null,
             recurrenceTimeZone: ev.recurrenceTimeZone,
             createdAt: ev.createdAt,
@@ -255,6 +388,10 @@ export class EventsService {
           endDate: ev.endDate,
           timeZone: ev.timeZone,
           color: ev.color,
+          guests: ev.guests,
+          notifications: ev.notifications,
+          visibility: ev.visibility,
+          busyStatus: ev.busyStatus,
           recurrenceRule: ev.recurrenceRule,
           recurrenceTimeZone: ev.recurrenceTimeZone,
           createdAt: ev.createdAt,
@@ -321,7 +458,7 @@ export class EventsService {
             const originalStartAt = occStartUtc.toISOString();
             const instanceId = `${ev.id}@${originalStartAt}`;
 
-            out.push({
+            const instance: EventInstance = {
               id: instanceId,
               calendarId: ev.calendarId,
               title: ev.title,
@@ -334,6 +471,10 @@ export class EventsService {
               endDate: occEndDateCol,
               timeZone: ev.timeZone,
               color: ev.color,
+              guests: ev.guests,
+              notifications: ev.notifications,
+              visibility: ev.visibility,
+              busyStatus: ev.busyStatus,
               recurrenceRule: ev.recurrenceRule,
               recurrenceTimeZone: ev.recurrenceTimeZone,
               createdAt: ev.createdAt,
@@ -341,7 +482,14 @@ export class EventsService {
               recurringEventId: ev.id,
               originalStartAt,
               isRecurringInstance: true,
-            });
+            };
+
+            const ex = exceptionMap.get(exceptionKey(ev.id, originalStartAt));
+            const applied = ex
+              ? applyExceptionToInstance(instance, ex, tz)
+              : instance;
+            if (!applied) continue;
+            out.push(applied);
           }
         } else {
           // TIMED recurrence (timezone-aware):
@@ -369,7 +517,7 @@ export class EventsService {
             const originalStartAt = occStartUtc.toISOString();
             const instanceId = `${ev.id}@${originalStartAt}`;
 
-            out.push({
+            const instance: EventInstance = {
               id: instanceId,
               calendarId: ev.calendarId,
               title: ev.title,
@@ -382,6 +530,10 @@ export class EventsService {
               endDate: null,
               timeZone: ev.timeZone,
               color: ev.color,
+              guests: ev.guests,
+              notifications: ev.notifications,
+              visibility: ev.visibility,
+              busyStatus: ev.busyStatus,
               recurrenceRule: ev.recurrenceRule,
               recurrenceTimeZone: ev.recurrenceTimeZone,
               createdAt: ev.createdAt,
@@ -389,7 +541,14 @@ export class EventsService {
               recurringEventId: ev.id,
               originalStartAt,
               isRecurringInstance: true,
-            });
+            };
+
+            const ex = exceptionMap.get(exceptionKey(ev.id, originalStartAt));
+            const applied = ex
+              ? applyExceptionToInstance(instance, ex, tz)
+              : instance;
+            if (!applied) continue;
+            out.push(applied);
           }
         }
       } catch {
@@ -407,6 +566,10 @@ export class EventsService {
           endDate: ev.endDate,
           timeZone: ev.timeZone,
           color: ev.color,
+          guests: ev.guests,
+          notifications: ev.notifications,
+          visibility: ev.visibility,
+          busyStatus: ev.busyStatus,
           recurrenceRule: ev.recurrenceRule,
           recurrenceTimeZone: ev.recurrenceTimeZone,
           createdAt: ev.createdAt,
@@ -491,6 +654,12 @@ export class EventsService {
         color: dto.color,
         recurrenceRule,
         recurrenceTimeZone,
+        guests: (dto.guests ?? undefined) as Prisma.InputJsonValue | undefined,
+        notifications: (dto.notifications ?? undefined) as
+          | Prisma.InputJsonValue
+          | undefined,
+        visibility: dto.visibility,
+        busyStatus: dto.busyStatus,
       },
       select: {
         id: true,
@@ -507,6 +676,10 @@ export class EventsService {
         color: true,
         recurrenceRule: true,
         recurrenceTimeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -514,20 +687,166 @@ export class EventsService {
   }
 
   async getForUser(userId: string, eventId: string) {
-    const ev = await this.prisma.event.findFirst({
-      where: { id: eventId, calendar: { ownerId: userId } },
-    });
+    const inst = parseInstanceId(eventId);
 
-    if (!ev) throw new NotFoundException('Event not found');
-    return ev;
-  }
+    // Case 1: master id (existing behavior)
+    if (!inst) {
+      const ev = await this.prisma.event.findFirst({
+        where: { id: eventId, calendar: { ownerId: userId } },
+        select: {
+          id: true,
+          calendarId: true,
+          title: true,
+          description: true,
+          location: true,
+          allDay: true,
+          startAt: true,
+          endAt: true,
+          startDate: true,
+          endDate: true,
+          timeZone: true,
+          color: true,
+          recurrenceRule: true,
+          recurrenceTimeZone: true,
+          guests: true,
+          notifications: true,
+          visibility: true,
+          busyStatus: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!ev) throw new NotFoundException('Event not found');
+      return {
+        ...ev,
+        recurringEventId: null,
+        originalStartAt: null,
+        isRecurringInstance: false,
+      };
+    }
 
-  async updateForUser(userId: string, eventId: string, dto: UpdateEventDto) {
-    const existing = await this.prisma.event.findUnique({
-      where: { id: eventId },
+    // Case 2: instance id => return a synthetic occurrence
+    const master = await this.prisma.event.findFirst({
+      where: { id: inst.masterId, calendar: { ownerId: userId } },
       select: {
         id: true,
         calendarId: true,
+        title: true,
+        description: true,
+        location: true,
+        allDay: true,
+        startAt: true,
+        endAt: true,
+        startDate: true,
+        endDate: true,
+        timeZone: true,
+        color: true,
+        recurrenceRule: true,
+        recurrenceTimeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!master) throw new NotFoundException('Event not found');
+    if (!master.recurrenceRule) throw new NotFoundException('Event not found');
+
+    // Build the occurrence at originalStartAt exactly
+    const durationMs = master.endAt.getTime() - master.startAt.getTime();
+    const occStartUtc = inst.originalStartAt;
+    const occEndUtc = new Date(occStartUtc.getTime() + durationMs);
+
+    // For all-day, also set startDate/endDate for the occurrence
+    const tz = master.recurrenceTimeZone ?? master.timeZone ?? 'UTC';
+    const occStartDateCol = master.allDay
+      ? dateOnlyFromInstantInTz(occStartUtc, tz)
+      : null;
+    const occEndDateCol = master.allDay
+      ? addDays(
+          occStartDateCol!,
+          Math.max(1, Math.round(durationMs / 86400000)),
+        )
+      : null;
+
+    const base: EventInstance = {
+      id: eventId, // keep instance id
+      calendarId: master.calendarId,
+      title: master.title,
+      description: master.description,
+      location: master.location,
+      allDay: master.allDay,
+      startAt: occStartUtc,
+      endAt: occEndUtc,
+      startDate: occStartDateCol,
+      endDate: occEndDateCol,
+      timeZone: master.timeZone,
+      color: master.color,
+      guests: master.guests,
+      notifications: master.notifications,
+      visibility: master.visibility,
+      busyStatus: master.busyStatus,
+      recurrenceRule: master.recurrenceRule,
+      recurrenceTimeZone: master.recurrenceTimeZone,
+      createdAt: master.createdAt,
+      updatedAt: master.updatedAt,
+      recurringEventId: master.id,
+      originalStartAt: occStartUtc.toISOString(),
+      isRecurringInstance: true,
+    };
+
+    const ex = await this.prisma.eventRecurrenceException.findUnique({
+      where: {
+        eventId_originalStartAt: {
+          eventId: master.id,
+          originalStartAt: inst.originalStartAt,
+        },
+      },
+      select: {
+        cancelled: true,
+        title: true,
+        description: true,
+        location: true,
+        allDay: true,
+        startAt: true,
+        endAt: true,
+        startDate: true,
+        endDate: true,
+        color: true,
+        timeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
+      },
+    });
+
+    if (!ex) return base;
+
+    const applied = applyExceptionToInstance(base, ex, tz);
+    if (!applied) throw new NotFoundException('Event not found');
+    return applied;
+  }
+
+  async updateForUser(
+    userId: string,
+    eventId: string,
+    dto: UpdateEventDto,
+    scope: RecurrenceScope = 'all',
+  ) {
+    const inst = parseInstanceId(eventId);
+    const masterId = inst?.masterId ?? eventId;
+
+    const existing = await this.prisma.event.findUnique({
+      where: { id: masterId },
+      select: {
+        id: true,
+        calendarId: true,
+        title: true,
+        description: true,
+        location: true,
         allDay: true,
         startAt: true,
         endAt: true,
@@ -536,6 +855,11 @@ export class EventsService {
         timeZone: true,
         recurrenceTimeZone: true,
         recurrenceRule: true,
+        color: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
         calendar: { select: { ownerId: true } },
       },
     });
@@ -543,6 +867,342 @@ export class EventsService {
     if (!existing) throw new NotFoundException('Event not found');
     if (existing.calendar.ownerId !== userId)
       throw new ForbiddenException('Forbidden');
+
+    if ((scope === 'this' || scope === 'following') && !inst) {
+      throw new BadRequestException('scope requires instance id');
+    }
+    if (
+      (scope === 'this' || scope === 'following') &&
+      !existing.recurrenceRule
+    ) {
+      throw new BadRequestException('scope requires recurring event');
+    }
+
+    if (scope === 'this') {
+      const tz = existing.recurrenceTimeZone ?? existing.timeZone ?? 'UTC';
+      const durationMs = existing.endAt.getTime() - existing.startAt.getTime();
+      const occStartUtc = inst!.originalStartAt;
+      const occEndUtc = new Date(occStartUtc.getTime() + durationMs);
+
+      const baseStartDate = existing.allDay
+        ? dateOnlyFromInstantInTz(occStartUtc, tz)
+        : null;
+      const baseDurationDays = existing.allDay
+        ? Math.max(
+            1,
+            Math.round(
+              ((
+                existing.endDate ?? dateOnlyFromInstantInTz(existing.endAt, tz)
+              ).getTime() -
+                (
+                  existing.startDate ??
+                  dateOnlyFromInstantInTz(existing.startAt, tz)
+                ).getTime()) /
+                86400000,
+            ),
+          )
+        : 0;
+      const baseEndDate = existing.allDay
+        ? addDays(baseStartDate!, baseDurationDays)
+        : null;
+
+      const nextAllDay = dto.allDay ?? existing.allDay;
+
+      const parsedStartAt =
+        dto.startAt !== undefined ? new Date(dto.startAt) : undefined;
+      const parsedEndAt =
+        dto.endAt !== undefined ? new Date(dto.endAt) : undefined;
+
+      if (parsedStartAt && Number.isNaN(parsedStartAt.getTime())) {
+        throw new BadRequestException('Invalid startAt');
+      }
+      if (parsedEndAt && Number.isNaN(parsedEndAt.getTime())) {
+        throw new BadRequestException('Invalid endAt');
+      }
+
+      const nextStartAtInput = parsedStartAt ?? occStartUtc;
+      const nextEndAtInput = parsedEndAt ?? occEndUtc;
+
+      if (nextEndAtInput <= nextStartAtInput) {
+        throw new BadRequestException('endAt must be after startAt');
+      }
+
+      const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
+      const nextRecurrenceTimeZone =
+        dto.recurrenceTimeZone !== undefined
+          ? dto.recurrenceTimeZone
+          : dto.timeZone !== undefined
+            ? dto.timeZone
+            : (existing.recurrenceTimeZone ?? undefined);
+
+      const tzForNormalize = nextRecurrenceTimeZone ?? nextTimeZone ?? 'UTC';
+
+      let nextStartDateCol = baseStartDate;
+      let nextEndDateCol = baseEndDate;
+
+      if (nextAllDay) {
+        if (dto.startDate !== undefined) {
+          nextStartDateCol = dto.startDate
+            ? parseDateOnly(dto.startDate)
+            : null;
+        }
+        if (dto.endDate !== undefined) {
+          nextEndDateCol = dto.endDate ? parseDateOnly(dto.endDate) : null;
+        }
+
+        if (!nextStartDateCol)
+          nextStartDateCol = dateOnlyFromInstantInTz(
+            nextStartAtInput,
+            tzForNormalize,
+          );
+
+        nextEndDateCol = ensureEndAfterStartDateExclusive(
+          nextStartDateCol,
+          nextEndDateCol ??
+            dateOnlyFromInstantInTz(nextEndAtInput, tzForNormalize),
+        );
+      } else {
+        nextStartDateCol = null;
+        nextEndDateCol = null;
+      }
+
+      const normalizedStartAt = nextAllDay
+        ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
+        : nextStartAtInput;
+
+      const normalizedEndAt = nextAllDay
+        ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
+        : nextEndAtInput;
+
+      const hasTimeChange =
+        dto.startAt !== undefined ||
+        dto.endAt !== undefined ||
+        dto.allDay !== undefined ||
+        dto.startDate !== undefined ||
+        dto.endDate !== undefined ||
+        dto.timeZone !== undefined ||
+        dto.recurrenceTimeZone !== undefined;
+
+      const exceptionData: Record<string, unknown> = {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description }
+          : {}),
+        ...(dto.location !== undefined ? { location: dto.location } : {}),
+        ...(dto.color !== undefined ? { color: dto.color } : {}),
+        ...(dto.guests !== undefined ? { guests: dto.guests } : {}),
+        ...(dto.notifications !== undefined
+          ? { notifications: dto.notifications }
+          : {}),
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility } : {}),
+        ...(dto.busyStatus !== undefined ? { busyStatus: dto.busyStatus } : {}),
+        ...(dto.timeZone !== undefined ? { timeZone: dto.timeZone } : {}),
+        ...(dto.allDay !== undefined ? { allDay: nextAllDay } : {}),
+      };
+
+      if (hasTimeChange) {
+        Object.assign(exceptionData, {
+          startAt: normalizedStartAt,
+          endAt: normalizedEndAt,
+          ...(nextAllDay
+            ? { startDate: nextStartDateCol, endDate: nextEndDateCol }
+            : {}),
+        });
+      }
+
+      await this.prisma.eventRecurrenceException.upsert({
+        where: {
+          eventId_originalStartAt: {
+            eventId: masterId,
+            originalStartAt: inst!.originalStartAt,
+          },
+        },
+        create: {
+          event: { connect: { id: masterId } },
+          originalStartAt: inst!.originalStartAt,
+          cancelled: false,
+          ...exceptionData,
+        },
+        update: {
+          cancelled: false,
+          ...exceptionData,
+        },
+      });
+
+      return this.getForUser(userId, eventId);
+    }
+
+    if (scope === 'following') {
+      const tz = existing.recurrenceTimeZone ?? existing.timeZone ?? 'UTC';
+      const durationMs = existing.endAt.getTime() - existing.startAt.getTime();
+      const occStartUtc = inst!.originalStartAt;
+      const occEndUtc = new Date(occStartUtc.getTime() + durationMs);
+      const occStartLocal = toZonedTime(occStartUtc, tz);
+      const occStartLocalMidnight = new Date(
+        occStartLocal.getFullYear(),
+        occStartLocal.getMonth(),
+        occStartLocal.getDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+
+      const baseStartDate = existing.allDay
+        ? dateOnlyFromInstantInTz(occStartUtc, tz)
+        : null;
+      const baseDurationDays = existing.allDay
+        ? Math.max(
+            1,
+            Math.round(
+              ((
+                existing.endDate ?? dateOnlyFromInstantInTz(existing.endAt, tz)
+              ).getTime() -
+                (
+                  existing.startDate ??
+                  dateOnlyFromInstantInTz(existing.startAt, tz)
+                ).getTime()) /
+                86400000,
+            ),
+          )
+        : 0;
+      const baseEndDate = existing.allDay
+        ? addDays(baseStartDate!, baseDurationDays)
+        : null;
+
+      const nextAllDay = dto.allDay ?? existing.allDay;
+
+      const parsedStartAt =
+        dto.startAt !== undefined ? new Date(dto.startAt) : undefined;
+      const parsedEndAt =
+        dto.endAt !== undefined ? new Date(dto.endAt) : undefined;
+
+      if (parsedStartAt && Number.isNaN(parsedStartAt.getTime())) {
+        throw new BadRequestException('Invalid startAt');
+      }
+      if (parsedEndAt && Number.isNaN(parsedEndAt.getTime())) {
+        throw new BadRequestException('Invalid endAt');
+      }
+
+      const nextStartAtInput = parsedStartAt ?? occStartUtc;
+      const nextEndAtInput = parsedEndAt ?? occEndUtc;
+
+      if (nextEndAtInput <= nextStartAtInput) {
+        throw new BadRequestException('endAt must be after startAt');
+      }
+
+      const nextRecurrenceRule =
+        dto.recurrenceRule !== undefined
+          ? normalizeRuleOnly(dto.recurrenceRule)
+          : stripUntil(existing.recurrenceRule!);
+
+      const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
+      const nextRecurrenceTimeZone =
+        dto.recurrenceTimeZone !== undefined
+          ? dto.recurrenceTimeZone
+          : dto.timeZone !== undefined
+            ? dto.timeZone
+            : (existing.recurrenceTimeZone ?? undefined);
+
+      const tzForNormalize = nextRecurrenceTimeZone ?? nextTimeZone ?? 'UTC';
+
+      let nextStartDateCol = baseStartDate;
+      let nextEndDateCol = baseEndDate;
+
+      if (nextAllDay) {
+        if (dto.startDate !== undefined) {
+          nextStartDateCol = dto.startDate
+            ? parseDateOnly(dto.startDate)
+            : null;
+        }
+        if (dto.endDate !== undefined) {
+          nextEndDateCol = dto.endDate ? parseDateOnly(dto.endDate) : null;
+        }
+
+        if (!nextStartDateCol)
+          nextStartDateCol = dateOnlyFromInstantInTz(
+            nextStartAtInput,
+            tzForNormalize,
+          );
+
+        nextEndDateCol = ensureEndAfterStartDateExclusive(
+          nextStartDateCol,
+          nextEndDateCol ??
+            dateOnlyFromInstantInTz(nextEndAtInput, tzForNormalize),
+        );
+      } else {
+        nextStartDateCol = null;
+        nextEndDateCol = null;
+      }
+
+      const normalizedStartAt = nextAllDay
+        ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
+        : nextStartAtInput;
+
+      const normalizedEndAt = nextAllDay
+        ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
+        : nextEndAtInput;
+
+      const truncatedRule = existing.allDay
+        ? withUntilFloating(
+            existing.recurrenceRule!,
+            addMilliseconds(occStartLocalMidnight, -1),
+          )
+        : withUntil(existing.recurrenceRule!, addMilliseconds(occStartUtc, -1));
+
+      await this.prisma.event.update({
+        where: { id: masterId },
+        data: { recurrenceRule: truncatedRule },
+      });
+
+      return this.prisma.event.create({
+        data: {
+          calendarId: existing.calendarId,
+          title: dto.title ?? existing.title,
+          description: dto.description ?? existing.description,
+          location: dto.location ?? existing.location,
+          allDay: nextAllDay,
+          startAt: normalizedStartAt,
+          endAt: normalizedEndAt,
+          startDate: nextAllDay ? nextStartDateCol! : null,
+          endDate: nextAllDay ? nextEndDateCol! : null,
+          timeZone: nextTimeZone,
+          color: dto.color ?? existing.color,
+          recurrenceRule: nextRecurrenceRule,
+          recurrenceTimeZone: nextRecurrenceTimeZone,
+          guests: (dto.guests ?? existing.guests ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
+          notifications: (dto.notifications ??
+            existing.notifications ??
+            undefined) as Prisma.InputJsonValue | undefined,
+          visibility: dto.visibility ?? existing.visibility ?? undefined,
+          busyStatus: dto.busyStatus ?? existing.busyStatus ?? undefined,
+        },
+        select: {
+          id: true,
+          calendarId: true,
+          title: true,
+          description: true,
+          location: true,
+          allDay: true,
+          startAt: true,
+          endAt: true,
+          startDate: true,
+          endDate: true,
+          timeZone: true,
+          color: true,
+          recurrenceRule: true,
+          recurrenceTimeZone: true,
+          guests: true,
+          notifications: true,
+          visibility: true,
+          busyStatus: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    }
 
     const nextAllDay = dto.allDay ?? existing.allDay;
 
@@ -556,13 +1216,6 @@ export class EventsService {
     }
     if (parsedEndAt && Number.isNaN(parsedEndAt.getTime())) {
       throw new BadRequestException('Invalid endAt');
-    }
-
-    const nextStartAtInput = parsedStartAt ?? existing.startAt;
-    const nextEndAtInput = parsedEndAt ?? existing.endAt;
-
-    if (nextEndAtInput <= nextStartAtInput) {
-      throw new BadRequestException('endAt must be after startAt');
     }
 
     const nextRecurrenceRule =
@@ -581,15 +1234,49 @@ export class EventsService {
 
     const tz = nextRecurrenceTimeZone ?? nextTimeZone ?? 'UTC';
 
+    const isInstanceScopeAll = !!inst && scope === 'all';
+
+    const setUtcTime = (base: Date, src: Date) =>
+      new Date(
+        Date.UTC(
+          base.getUTCFullYear(),
+          base.getUTCMonth(),
+          base.getUTCDate(),
+          src.getUTCHours(),
+          src.getUTCMinutes(),
+          src.getUTCSeconds(),
+          src.getUTCMilliseconds(),
+        ),
+      );
+
+    const nextStartAtInput = isInstanceScopeAll
+      ? parsedStartAt
+        ? setUtcTime(existing.startAt, parsedStartAt)
+        : existing.startAt
+      : (parsedStartAt ?? existing.startAt);
+
+    const nextEndAtInput = isInstanceScopeAll
+      ? parsedEndAt
+        ? setUtcTime(existing.endAt, parsedEndAt)
+        : existing.endAt
+      : (parsedEndAt ?? existing.endAt);
+
     let nextStartDateCol = existing.startDate;
     let nextEndDateCol = existing.endDate;
 
     if (nextAllDay) {
-      if (dto.startDate !== undefined) {
-        nextStartDateCol = dto.startDate ? parseDateOnly(dto.startDate) : null;
+      const effectiveStartDate = isInstanceScopeAll ? undefined : dto.startDate;
+      const effectiveEndDate = isInstanceScopeAll ? undefined : dto.endDate;
+
+      if (effectiveStartDate !== undefined) {
+        nextStartDateCol = effectiveStartDate
+          ? parseDateOnly(effectiveStartDate)
+          : null;
       }
-      if (dto.endDate !== undefined) {
-        nextEndDateCol = dto.endDate ? parseDateOnly(dto.endDate) : null;
+      if (effectiveEndDate !== undefined) {
+        nextEndDateCol = effectiveEndDate
+          ? parseDateOnly(effectiveEndDate)
+          : null;
       }
 
       if (!nextStartDateCol)
@@ -613,7 +1300,7 @@ export class EventsService {
       : nextEndAtInput;
 
     return this.prisma.event.update({
-      where: { id: eventId },
+      where: { id: masterId },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         ...(dto.description !== undefined
@@ -621,6 +1308,14 @@ export class EventsService {
           : {}),
         ...(dto.location !== undefined ? { location: dto.location } : {}),
         ...(dto.color !== undefined ? { color: dto.color } : {}),
+        ...(dto.guests !== undefined
+          ? { guests: dto.guests as Prisma.InputJsonValue }
+          : {}),
+        ...(dto.notifications !== undefined
+          ? { notifications: dto.notifications as Prisma.InputJsonValue }
+          : {}),
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility } : {}),
+        ...(dto.busyStatus !== undefined ? { busyStatus: dto.busyStatus } : {}),
         ...(dto.allDay !== undefined ? { allDay: dto.allDay } : {}),
         ...(dto.timeZone !== undefined ? { timeZone: dto.timeZone } : {}),
         ...(dto.recurrenceTimeZone !== undefined
@@ -651,17 +1346,32 @@ export class EventsService {
         color: true,
         recurrenceRule: true,
         recurrenceTimeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
         createdAt: true,
         updatedAt: true,
       },
     });
   }
 
-  async deleteForUser(userId: string, eventId: string) {
+  async deleteForUser(
+    userId: string,
+    eventId: string,
+    scope: RecurrenceScope = 'all',
+  ) {
+    const inst = parseInstanceId(eventId);
+    const masterId = inst?.masterId ?? eventId;
+
     const existing = await this.prisma.event.findUnique({
-      where: { id: eventId },
+      where: { id: masterId },
       select: {
         id: true,
+        recurrenceRule: true,
+        timeZone: true,
+        recurrenceTimeZone: true,
+        allDay: true,
         calendar: { select: { ownerId: true } },
       },
     });
@@ -670,7 +1380,63 @@ export class EventsService {
     if (existing.calendar.ownerId !== userId)
       throw new ForbiddenException('Forbidden');
 
-    await this.prisma.event.delete({ where: { id: eventId } });
+    if ((scope === 'this' || scope === 'following') && !inst) {
+      throw new BadRequestException('scope requires instance id');
+    }
+    if (
+      (scope === 'this' || scope === 'following') &&
+      !existing.recurrenceRule
+    ) {
+      throw new BadRequestException('scope requires recurring event');
+    }
+
+    if (scope === 'this') {
+      await this.prisma.eventRecurrenceException.upsert({
+        where: {
+          eventId_originalStartAt: {
+            eventId: masterId,
+            originalStartAt: inst!.originalStartAt,
+          },
+        },
+        create: {
+          event: { connect: { id: masterId } },
+          originalStartAt: inst!.originalStartAt,
+          cancelled: true,
+        },
+        update: { cancelled: true },
+      });
+      return { ok: true };
+    }
+
+    if (scope === 'following') {
+      const tz = existing.recurrenceTimeZone ?? existing.timeZone ?? 'UTC';
+      const occStartLocal = toZonedTime(inst!.originalStartAt, tz);
+      const occStartLocalMidnight = new Date(
+        occStartLocal.getFullYear(),
+        occStartLocal.getMonth(),
+        occStartLocal.getDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      const truncatedRule = existing.allDay
+        ? withUntilFloating(
+            existing.recurrenceRule!,
+            addMilliseconds(occStartLocalMidnight, -1),
+          )
+        : withUntil(
+            existing.recurrenceRule!,
+            addMilliseconds(inst!.originalStartAt, -1),
+          );
+      await this.prisma.event.update({
+        where: { id: masterId },
+        data: { recurrenceRule: truncatedRule },
+      });
+      return { ok: true };
+    }
+
+    await this.prisma.event.delete({ where: { id: masterId } });
     return { ok: true };
   }
 }

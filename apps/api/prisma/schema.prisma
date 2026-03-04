@@ -56,10 +56,50 @@ model Event {
   color              String?
   recurrenceRule     String?
   recurrenceTimeZone String?
+  guests        Json?
+  notifications Json?
+  visibility    String?
+  busyStatus    String?
+
+  // recurrence exceptions (per-occurrence overrides/cancellations)
+  recurrenceExceptions EventRecurrenceException[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([calendarId, startAt])
   @@index([calendarId, startDate])
+}
+
+model EventRecurrenceException {
+  id              String   @id @default(cuid())
+  eventId          String
+  event            Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // identifies which occurrence of the series this exception applies to
+  originalStartAt  DateTime
+
+  // if true -> this occurrence is removed from the series
+  cancelled        Boolean  @default(false)
+
+  // optional overrides (null = no override)
+  title            String?
+  description      String?
+  location         String?
+  allDay           Boolean?
+  startAt          DateTime?
+  endAt            DateTime?
+  startDate        DateTime? @db.Date
+  endDate          DateTime? @db.Date
+  color            String?
+  timeZone         String?
+  guests           Json?
+  notifications    Json?
+  visibility       String?
+  busyStatus       String?
+  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+
+  @@unique([eventId, originalStartAt])
+  @@index([eventId, originalStartAt])
 }

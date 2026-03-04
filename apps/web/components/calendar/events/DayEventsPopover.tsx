@@ -141,8 +141,7 @@ export function DayEventsPopover({
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
-                const openId =
-                  ev.isRecurringInstance && ev.recurringEventId ? ev.recurringEventId : ev.id;
+                const openId = ev.id;
 
                 // Only show time for non-bar (timed single-day) events
                 const evStart = parseISO(ev.start);

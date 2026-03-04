@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { useRouter } from 'next/navigation';
+import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
+import type { RecurrenceScope } from '@/lib/api/events';
 
 type RecurringOccurrence = CalendarEvent & {
   isOccurrence: true;
@@ -16,13 +18,9 @@ type Props = {
   anchorRect: DOMRect | null;
   event: CalendarEvent | RecurringOccurrence | null;
   onClose: () => void;
-  onUpdate: (event: CalendarEvent) => void;
-  onDelete: (id: string) => void;
+  onUpdate: (event: CalendarEvent, scope?: RecurrenceScope) => void;
+  onDelete: (event: CalendarEvent | string, scope?: RecurrenceScope) => void;
 };
-
-function getMasterId(ev: CalendarEvent): string {
-  return ev.isRecurringInstance && ev.recurringEventId ? ev.recurringEventId : ev.id;
-}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -31,20 +29,27 @@ function clamp(n: number, min: number, max: number) {
 export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDelete }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
+  const initialTitle = event?.title ?? '';
+  const initialStart = event ? toLocalDateTimeInputValue(parseISO(event.start)) : '';
+  const initialEnd = event ? toLocalDateTimeInputValue(parseISO(event.end)) : '';
+
   const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
+  const [title, setTitle] = useState(initialTitle);
+  const [start, setStart] = useState(initialStart);
+  const [end, setEnd] = useState(initialEnd);
 
   const router = useRouter();
-  // Reset form whenever we open on a new event
-  useEffect(() => {
-    if (!open || !event) return;
-    setEditing(false);
-    setTitle(event.title ?? '');
-    setStart(toLocalDateTimeInputValue(parseISO(event.start)));
-    setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
-  }, [open, event?.id, event?.start, event?.end]);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    { type: 'update'; payload: CalendarEvent } | { type: 'delete'; payload: CalendarEvent } | null
+  >(null);
+
+  const ensureInstanceId = (ev: CalendarEvent): CalendarEvent => {
+    if (ev.isRecurringInstance && ev.recurringEventId && ev.originalStartAt) {
+      return { ...ev, id: `${ev.recurringEventId}@${ev.originalStartAt}` };
+    }
+    return ev;
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -95,27 +100,43 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
   const editEvent = () => {
     if (!event) return;
-    // appointments / tasks tetap quick-edit
-    if (event.isAppointment || event.isTask) {
+
+    const ev = event as CalendarEvent;
+
+    if (ev.isAppointment || ev.isTask) {
       setEditing(true);
       return;
     }
 
-    const masterId = getMasterId(event as CalendarEvent);
-    router.push('/events/edit/' + masterId);
+    if (ev.isRecurringInstance && ev.recurringEventId && ev.originalStartAt) {
+      router.push(
+        `/events/edit/${encodeURIComponent(ev.recurringEventId)}?occ=${encodeURIComponent(
+          ev.originalStartAt,
+        )}`,
+      );
+      return;
+    }
+
+    router.push(`/events/edit/${encodeURIComponent(ev.id)}`);
   };
 
   const submitEdit = () => {
     if (!event) return;
-    const masterId = getMasterId(event as CalendarEvent);
 
     const updated: CalendarEvent = {
       ...event,
-      id: masterId,
+      // keep event.id as-is (instance id stays instance id)
       title: title.trim(),
       start: new Date(start).toISOString(),
       end: new Date(end).toISOString(),
     };
+
+    if (event.isRecurringInstance) {
+      setPendingAction({ type: 'update', payload: ensureInstanceId(updated) });
+      setScopeOpen(true);
+      return;
+    }
+
     onUpdate(updated);
 
     setEditing(false);
@@ -150,8 +171,17 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             type="button"
             className="rounded-full p-1 text-sm text-gray-600 hover:bg-gray-100"
             onClick={() => {
+              if (event.isRecurringInstance) {
+                setPendingAction({
+                  type: 'delete',
+                  payload: ensureInstanceId(event as CalendarEvent),
+                });
+                setScopeOpen(true);
+                return;
+              }
+
               if (confirm('Delete this event?')) {
-                onDelete(getMasterId(event));
+                onDelete(event as CalendarEvent);
                 onClose();
               }
             }}
@@ -225,6 +255,33 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
           </div>
         )}
       </div>
+
+      <RecurrenceScopeModal
+        key={`${pendingAction?.payload?.id ?? 'none'}-${pendingAction?.type ?? 'none'}-${scopeOpen ? 'open' : 'closed'}`}
+        open={scopeOpen}
+        title={
+          pendingAction?.type === 'delete' ? 'Delete recurring event' : 'Update recurring event'
+        }
+        defaultScope="this"
+        onCancel={() => {
+          setScopeOpen(false);
+          setPendingAction(null);
+        }}
+        onConfirm={(scope) => {
+          if (!pendingAction) return;
+
+          if (pendingAction.type === 'update') {
+            onUpdate(pendingAction.payload, scope);
+          } else {
+            onDelete(pendingAction.payload, scope);
+          }
+
+          setScopeOpen(false);
+          setPendingAction(null);
+          setEditing(false);
+          onClose();
+        }}
+      />
     </div>
   );
 }

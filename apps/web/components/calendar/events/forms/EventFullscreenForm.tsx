@@ -1,7 +1,7 @@
 'use client';
 
-import { addDays, format, parseISO, startOfDay } from 'date-fns';
-import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { addDays, format, isValid, parseISO, subDays } from 'date-fns';
+import { KeyboardEvent, useMemo, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
   BellIcon,
@@ -36,6 +36,17 @@ function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   }
 }
 
+function dateOnlyToInputValue(dateOnly: string) {
+  return `${dateOnly}T00:00`;
+}
+
+function displayEndDateFromExclusive(endDateExclusive: string) {
+  const d = parseISO(`${endDateExclusive}T00:00:00`);
+  if (!isValid(d)) return endDateExclusive;
+  const prev = subDays(d, 1);
+  return format(prev, 'yyyy-MM-dd');
+}
+
 type Props = {
   event?: CalendarEvent;
   initialDate: Date;
@@ -53,88 +64,108 @@ export function EventFullscreenForm({
   onSave,
   onDelete,
 }: Props) {
-  const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
-  const initialEnd = useMemo(() => new Date(initialDate), [initialDate]);
-
-  const [title, setTitle] = useState('');
-  const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
-  const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
-  const [showTime, setShowTime] = useState(false);
-  const [allDay, setAllDay] = useState(true);
-
-  const [guests, setGuests] = useState<string[]>([]);
-  const [guestInput, setGuestInput] = useState('');
-  const [guestError, setGuestError] = useState<string | null>(null);
-
-  const [location, setLocation] = useState(''); // display name
-  const [locationPlace, setLocationPlace] = useState<PlaceSuggestion | null>(null); // optional full place
-
-  const [tab, setTab] = useState('detail');
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-
-  const [description, setDescription] = useState('');
-  const [busy, setBusy] = useState<'busy' | 'free'>('busy');
-  const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>('default');
-  const [recurrence, setRecurrence] = useState<RecurrenceValue>({
-    rrule: event?.recurrence ?? null,
-  });
-  const [color, setColor] = useState('');
-
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
+  const initialValues = useMemo(() => {
     if (event) {
-      setTitle(event.title ?? '');
-      setStart(toLocalDateTimeInputValue(parseISO(event.start)));
-      setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
-      setAllDay(event.allDay);
-      setShowTime(!event.allDay);
-      setGuests(event.guests ?? []);
-      setGuestInput('');
-      setGuestError(null);
+      const startDateOnly = event.startDate ?? undefined;
+      const endDateOnly = event.endDate ?? undefined;
+      const allDayStart = startDateOnly ? dateOnlyToInputValue(startDateOnly) : undefined;
+      const allDayEnd = endDateOnly
+        ? dateOnlyToInputValue(displayEndDateFromExclusive(endDateOnly))
+        : undefined;
+
+      const fallbackStart = toLocalDateTimeInputValue(parseISO(event.start));
+      const fallbackEnd = toLocalDateTimeInputValue(parseISO(event.end));
+
+      let locationText = '';
+      let locationPlaceValue: PlaceSuggestion | null = null;
+
       try {
         const parsed = typeof event.location === 'string' ? JSON.parse(event.location) : null;
         if (parsed && parsed.display_name) {
-          setLocation(parsed.display_name ?? '');
-          setLocationPlace(parsed);
-        } else {
-          setLocationPlace(null);
+          locationText = parsed.display_name ?? '';
+          locationPlaceValue = parsed;
         }
       } catch {
-        setLocationPlace(null);
+        // fall back to plain string below
       }
-      setNotifications(event.notifications ?? []);
-      setDescription(event.description ?? '');
-      setBusy(event.busyStatus ?? 'busy');
-      setVisibility(event.visibility ?? 'default');
-      setColor(event.color ?? '#0B57D0');
-      setRecurrence({ rrule: event.recurrence ?? null });
-      setSubmitError(null);
-    } else {
-      const s = startOfDayDefaultHour(initialStart);
-      const e = startOfDayDefaultHour(initialEnd);
-      setStart(toLocalDateTimeInputValue(s));
-      setEnd(toLocalDateTimeInputValue(e));
-      setAllDay(true);
-      setShowTime(false);
-      setGuests([]);
-      setGuestInput('');
-      setGuestError(null);
-      setLocation('');
-      setLocationPlace(null);
-      setColor('#0B57D0');
-      setNotifications([
-        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
-      ]);
-      setDescription('');
-      setBusy('busy');
-      setVisibility('default');
-      setTitle('');
-      setRecurrence({ rrule: null });
-      setSubmitError(null);
+
+      if (!locationText) locationText = event.location ?? '';
+
+      return {
+        title: event.title ?? '',
+        start: event.allDay ? (allDayStart ?? fallbackStart) : fallbackStart,
+        end: event.allDay ? (allDayEnd ?? fallbackEnd) : fallbackEnd,
+        allDay: event.allDay,
+        showTime: !event.allDay,
+        guests: event.guests ?? [],
+        guestInput: '',
+        guestError: null as string | null,
+        location: locationText,
+        locationPlace: locationPlaceValue,
+        notifications: event.notifications ?? [],
+        description: event.description ?? '',
+        busy: event.busyStatus ?? 'busy',
+        visibility: event.visibility ?? 'default',
+        recurrence: { rrule: event.recurrence ?? null } as RecurrenceValue,
+        color: event.color ?? '#0B57D0',
+      };
     }
+
+    const s = startOfDayDefaultHour(new Date(initialDate));
+    const e = startOfDayDefaultHour(new Date(initialDate));
+
+    return {
+      title: '',
+      start: toLocalDateTimeInputValue(s),
+      end: toLocalDateTimeInputValue(e),
+      allDay: true,
+      showTime: false,
+      guests: [] as string[],
+      guestInput: '',
+      guestError: null as string | null,
+      location: '',
+      locationPlace: null as PlaceSuggestion | null,
+      notifications: [
+        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
+      ] as NotificationItem[],
+      description: '',
+      busy: 'busy' as 'busy' | 'free',
+      visibility: 'default' as 'default' | 'public' | 'private',
+      recurrence: { rrule: null } as RecurrenceValue,
+      color: '#0B57D0',
+    };
   }, [event, initialDate]);
+
+  const [title, setTitle] = useState(initialValues.title);
+  const [start, setStart] = useState(initialValues.start);
+  const [end, setEnd] = useState(initialValues.end);
+  const [showTime, setShowTime] = useState(initialValues.showTime);
+  const [allDay, setAllDay] = useState(initialValues.allDay);
+
+  const [guests, setGuests] = useState<string[]>(initialValues.guests);
+  const [guestInput, setGuestInput] = useState(initialValues.guestInput);
+  const [guestError, setGuestError] = useState<string | null>(initialValues.guestError);
+
+  const [location, setLocation] = useState(initialValues.location); // display name
+  const [locationPlace, setLocationPlace] = useState<PlaceSuggestion | null>(
+    initialValues.locationPlace,
+  ); // optional full place
+
+  const [tab, setTab] = useState('detail');
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>(
+    initialValues.notifications,
+  );
+
+  const [description, setDescription] = useState(initialValues.description);
+  const [busy, setBusy] = useState<'busy' | 'free'>(initialValues.busy);
+  const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>(
+    initialValues.visibility,
+  );
+  const [recurrence, setRecurrence] = useState<RecurrenceValue>(initialValues.recurrence);
+  const [color, setColor] = useState(initialValues.color);
+
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function isValidEmail(email: string) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -224,9 +255,11 @@ export function EventFullscreenForm({
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
       color: color || '#0B57D0',
-      // start/end filled below
       start: '',
       end: '',
+      recurringEventId: event?.recurringEventId,
+      originalStartAt: event?.originalStartAt,
+      isRecurringInstance: event?.isRecurringInstance ?? false,
     };
 
     if (allDay) {

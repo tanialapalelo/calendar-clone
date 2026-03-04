@@ -30,6 +30,10 @@ export default function NewEventClient() {
       recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
       timeZone: tz,
       recurrenceTimeZone: tz,
+      guests: evt.guests,
+      notifications: evt.notifications,
+      visibility: evt.visibility,
+      busyStatus: evt.busyStatus,
     });
 
     if (!res.ok) {
@@ -46,6 +50,7 @@ export default function NewEventClient() {
 
   return (
     <EventFullscreenForm
+      key={initialDate.toISOString()}
       initialDate={initialDate}
       onClose={() => router.push('/')}
       onCreate={(evt) => {

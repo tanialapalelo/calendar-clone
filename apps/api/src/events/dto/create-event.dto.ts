@@ -5,6 +5,7 @@ import {
   IsString,
   Matches,
   MinLength,
+  IsArray,
 } from 'class-validator';
 
 export class CreateEventDto {
@@ -75,4 +76,20 @@ export class CreateEventDto {
   @IsOptional()
   @IsString()
   recurrenceTimeZone?: string;
+
+  @IsOptional()
+  @IsArray()
+  guests?: string[];
+
+  @IsOptional()
+  @IsArray()
+  notifications?: Record<string, unknown>[];
+
+  @IsOptional()
+  @IsString()
+  visibility?: string;
+
+  @IsOptional()
+  @IsString()
+  busyStatus?: string;
 }

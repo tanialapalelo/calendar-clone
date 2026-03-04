@@ -15,6 +15,10 @@ export type ApiEvent = {
   color: string | null;
   recurrenceRule: string | null;
   recurrenceTimeZone: string | null;
+  guests: string[] | null;
+  notifications: NotificationItem[] | null;
+  visibility: 'public' | 'private' | 'default' | null;
+  busyStatus: 'free' | 'busy' | null;
 
   // instance metadata (null for non-recurring)
   recurringEventId: string | null;
@@ -24,6 +28,11 @@ export type ApiEvent = {
   createdAt: string;
   updatedAt: string;
 };
+
+function toDateOnly(value?: string | null) {
+  if (!value) return undefined;
+  return value.includes('T') ? value.slice(0, 10) : value;
+}
 
 export function normalizeRuleOnly(rule: string | null | undefined) {
   if (!rule) return null;
@@ -38,8 +47,8 @@ export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
     title: ev.title,
     start: ev.startAt,
     end: ev.endAt,
-    startDate: ev.startDate ?? undefined,
-    endDate: ev.endDate ?? undefined,
+    startDate: toDateOnly(ev.startDate),
+    endDate: toDateOnly(ev.endDate),
     allDay: ev.allDay,
     description: ev.description ?? undefined,
     location: ev.location ?? undefined,
@@ -53,11 +62,10 @@ export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
     originalStartAt: ev.originalStartAt ?? undefined,
     isRecurringInstance: ev.isRecurringInstance,
 
-    // not implemented yet
-    guests: undefined,
-    notifications: undefined,
-    visibility: 'default',
-    busyStatus: 'busy',
+    guests: ev.guests ?? undefined,
+    notifications: ev.notifications ?? undefined,
+    visibility: ev.visibility ?? 'default',
+    busyStatus: ev.busyStatus ?? 'busy',
   };
 }
 
@@ -82,6 +90,10 @@ export async function createEvent(input: {
   recurrenceRule?: string | null;
   timeZone?: string;
   recurrenceTimeZone?: string;
+  guests?: string[];
+  notifications?: NotificationItem[];
+  visibility?: 'public' | 'private' | 'default';
+  busyStatus?: 'free' | 'busy';
 }) {
   return apiFetch<ApiEvent>('/v1/events', {
     method: 'POST',
@@ -92,6 +104,8 @@ export async function createEvent(input: {
 export async function getEvent(id: string) {
   return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}`);
 }
+
+export type RecurrenceScope = 'this' | 'following' | 'all';
 
 export async function updateEvent(
   id: string,
@@ -108,16 +122,23 @@ export async function updateEvent(
     recurrenceRule: string | null;
     timeZone: string;
     recurrenceTimeZone: string;
+    guests: string[];
+    notifications: NotificationItem[];
+    visibility: 'public' | 'private' | 'default';
+    busyStatus: 'free' | 'busy';
   }>,
+  scope?: RecurrenceScope,
 ) {
-  return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}`, {
+  const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  return apiFetch<ApiEvent>(`/v1/events/${encodeURIComponent(id)}${qs}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 }
 
-export async function deleteEvent(id: string) {
-  return apiFetch<{ ok: true }>(`/v1/events/${encodeURIComponent(id)}`, {
+export async function deleteEvent(id: string, scope?: RecurrenceScope) {
+  const qs = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  return apiFetch<{ ok: true }>(`/v1/events/${encodeURIComponent(id)}${qs}`, {
     method: 'DELETE',
   });
 }

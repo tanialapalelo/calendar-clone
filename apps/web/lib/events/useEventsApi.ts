@@ -10,6 +10,23 @@ import {
   deleteEvent,
 } from '@/lib/api/events';
 
+function getMasterIdFromInstanceId(id: string): string | null {
+  const at = id.indexOf('@');
+  if (at <= 0) return null;
+  const iso = id.slice(at + 1);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return id.slice(0, at);
+}
+
+function getInstanceId(event: CalendarEvent): string | null {
+  if (event.id.includes('@')) return event.id;
+  if (event.recurringEventId && event.originalStartAt) {
+    return `${event.recurringEventId}@${event.originalStartAt}`;
+  }
+  return null;
+}
+
 export function useEventsApi(range: { from: Date; to: Date }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +77,10 @@ export function useEventsApi(range: { from: Date; to: Date }) {
         recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
         timeZone: tz,
         recurrenceTimeZone: tz,
+        guests: evt.guests,
+        notifications: evt.notifications,
+        visibility: evt.visibility,
+        busyStatus: evt.busyStatus,
       });
       if (!res.ok) {
         if (res.status === 401) setUnauthorized(true);
@@ -72,22 +93,33 @@ export function useEventsApi(range: { from: Date; to: Date }) {
   );
 
   const updateEventById = useCallback(
-    async (next: CalendarEvent) => {
+    async (next: CalendarEvent, scope?: 'this' | 'following' | 'all') => {
+      const isInstance = !!next.isRecurringInstance && !!next.recurringEventId;
+      const masterId = next.recurringEventId ?? getMasterIdFromInstanceId(next.id) ?? next.id;
+      const instanceId = getInstanceId(next) ?? next.id;
       const targetId =
-        next.isRecurringInstance && next.recurringEventId ? next.recurringEventId : next.id;
+        isInstance && scope && scope !== 'all' ? instanceId : isInstance ? masterId : next.id;
 
-      const res = await updateEvent(targetId, {
-        title: next.title,
-        startAt: next.start,
-        endAt: next.end,
-        allDay: !!next.allDay,
-        startDate: next.allDay ? next.start.slice(0, 10) : undefined,
-        endDate: next.allDay ? next.end.slice(0, 10) : undefined,
-        description: next.description ?? '',
-        location: next.location ?? '',
-        color: next.color,
-        recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
-      });
+      const res = await updateEvent(
+        targetId,
+        {
+          title: next.title,
+          startAt: next.start,
+          endAt: next.end,
+          allDay: !!next.allDay,
+          startDate: next.allDay ? next.start.slice(0, 10) : undefined,
+          endDate: next.allDay ? next.end.slice(0, 10) : undefined,
+          description: next.description ?? '',
+          location: next.location ?? '',
+          color: next.color,
+          recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
+          guests: next.guests,
+          notifications: next.notifications,
+          visibility: next.visibility,
+          busyStatus: next.busyStatus,
+        },
+        scope,
+      );
 
       if (!res.ok) {
         if (res.status === 401) setUnauthorized(true);
@@ -100,15 +132,29 @@ export function useEventsApi(range: { from: Date; to: Date }) {
   );
 
   const removeEventById = useCallback(
-    async (next: CalendarEvent | string) => {
-      const id =
+    async (next: CalendarEvent | string, scope?: 'this' | 'following' | 'all') => {
+      const isInstance =
+        typeof next !== 'string' && next.isRecurringInstance && next.recurringEventId;
+
+      const masterId =
         typeof next === 'string'
           ? next
-          : next.isRecurringInstance && next.recurringEventId
-            ? next.recurringEventId
-            : next.id;
+          : (next.recurringEventId ?? getMasterIdFromInstanceId(next.id) ?? next.id);
 
-      const res = await deleteEvent(id);
+      const instanceId = typeof next === 'string' ? next : (getInstanceId(next) ?? next.id);
+
+      const rawId =
+        typeof next === 'string'
+          ? next
+          : isInstance && scope && scope !== 'all'
+            ? instanceId
+            : isInstance
+              ? masterId
+              : next.id;
+
+      const targetId = String(rawId);
+
+      const res = await deleteEvent(targetId, scope);
 
       if (!res.ok) {
         if (res.status === 401) setUnauthorized(true);

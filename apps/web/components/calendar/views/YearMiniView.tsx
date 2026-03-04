@@ -8,7 +8,7 @@ export function YearMiniView(props: {
   onPickMonth?: (date: Date) => void;
   onOpenDayPopover?: (date: Date, rect: DOMRect) => void;
 }) {
-  const { monthDate, onPickMonth, onOpenDayPopover } = props;
+  const { monthDate, onOpenDayPopover } = props;
 
   const cells = generateMonthGrid(monthDate);
   const [selectedDateIso, setSelectedDateIso] = useState<string | null>(null);

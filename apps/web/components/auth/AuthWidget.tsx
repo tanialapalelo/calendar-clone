@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type MeResponse =
   | { ok: true; user: { sub: string; email: string; name?: string; googleSub?: string } }
   | { ok?: boolean; user?: unknown };
+
+function isUserWithEmail(user: unknown): user is { email?: string } {
+  return !!user && typeof user === 'object' && 'email' in user;
+}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -21,8 +25,9 @@ export function AuthWidget() {
       });
       const data = await res.json();
       setMe(data);
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to load session');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Failed to load session';
+      setError(message);
     }
   }
 
@@ -34,11 +39,6 @@ export function AuthWidget() {
     });
     setMe(null);
   }
-
-  useEffect(() => {
-    // Try to detect existing session on page load
-    loadMe();
-  }, []);
 
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -52,8 +52,8 @@ export function AuthWidget() {
         Logout
       </button>
 
-      {me?.user && typeof me.user === 'object' ? (
-        <span style={{ fontSize: 12 }}>{(me as any).user?.email ?? 'signed in'}</span>
+      {me?.user && isUserWithEmail(me.user) ? (
+        <span style={{ fontSize: 12 }}>{me.user.email ?? 'signed in'}</span>
       ) : null}
 
       {error ? <span style={{ color: 'crimson', fontSize: 12 }}>{error}</span> : null}
