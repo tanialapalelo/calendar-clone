@@ -37,6 +37,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   const [title, setTitle] = useState(initialTitle);
   const [start, setStart] = useState(initialStart);
   const [end, setEnd] = useState(initialEnd);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   const router = useRouter();
   const [scopeOpen, setScopeOpen] = useState(false);
@@ -55,17 +56,19 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !scopeOpen && !confirmDeleteOpen) onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, scopeOpen, confirmDeleteOpen]);
 
   // Click outside to close
   useEffect(() => {
     if (!open) return;
 
     const onMouseDown = (e: MouseEvent) => {
+      // Don't close if a modal/dialog on top is open
+      if (scopeOpen || confirmDeleteOpen) return;
       const el = popoverRef.current;
       if (!el) return;
       if (e.target instanceof Node && !el.contains(e.target)) onClose();
@@ -73,7 +76,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
     window.addEventListener('mousedown', onMouseDown);
     return () => window.removeEventListener('mousedown', onMouseDown);
-  }, [open, onClose]);
+  }, [open, onClose, scopeOpen, confirmDeleteOpen]);
 
   const position = useMemo(() => {
     if (!anchorRect) return null;
@@ -180,10 +183,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
                 return;
               }
 
-              if (confirm('Delete this event?')) {
-                onDelete(event as CalendarEvent);
-                onClose();
-              }
+              setConfirmDeleteOpen(true);
             }}
           >
             <Trash2Icon size={16} />
@@ -282,6 +282,37 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
           onClose();
         }}
       />
+
+      {confirmDeleteOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="text-lg font-semibold text-gray-900">Delete event?</div>
+            <p className="mt-2 text-sm text-gray-600">
+              &ldquo;{event.title}&rdquo; will be permanently deleted.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-full px-5 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+                onClick={() => setConfirmDeleteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-red-600 px-6 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                onClick={() => {
+                  setConfirmDeleteOpen(false);
+                  onDelete(event as CalendarEvent);
+                  onClose();
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
