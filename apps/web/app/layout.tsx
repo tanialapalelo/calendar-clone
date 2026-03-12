@@ -31,8 +31,24 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="icon" href={`/icon.png?v=${ymd}`} />
+        {/* Apply theme before first paint to prevent flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var t = localStorage.getItem('theme') || 'light';
+                if (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `,
+          }}
+        />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} bg-[#F8FAFD] antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        style={{ backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)' }}
+      >
         {children}
       </body>
     </html>
