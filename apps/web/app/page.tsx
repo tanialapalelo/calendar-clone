@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { format } from 'date-fns';
 import CalendarPageClient from '@/components/calendar/CalendarPageClient';
-import { AuthWidget } from '@/components/auth/AuthWidget';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -24,7 +23,7 @@ function parseIsoDateOnly(value: string | undefined): Date {
 }
 
 function parseView(value: string | undefined): CalendarView {
-  if (value === 'year' || value === 'month' || value === 'day') return value;
+  if (value === 'year' || value === 'month' || value === 'week' || value === 'day') return value;
   return 'month';
 }
 
@@ -48,9 +47,6 @@ export async function generateMetadata({
 export default function HomePage() {
   return (
     <Suspense fallback={null}>
-      <div style={{ padding: 12 }}>
-        <AuthWidget />
-      </div>
       <CalendarPageClient />
     </Suspense>
   );

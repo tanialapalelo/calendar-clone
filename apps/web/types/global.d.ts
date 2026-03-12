@@ -1,4 +1,4 @@
-type CalendarView = 'year' | 'month' | 'day';
+type CalendarView = 'year' | 'month' | 'week' | 'day';
 
 type CalendarEvent = {
   id: string;
