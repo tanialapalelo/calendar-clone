@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { format, isSameMonth } from 'date-fns';
 import { generateMonthGrid } from '@/lib/month-grid';
 import { shortDaysOfWeek } from '@/constants';
 import { useState } from 'react';
@@ -25,14 +25,21 @@ export function YearMiniView(props: {
         {cells.map((cell) => {
           const iso = cell.date.toISOString();
           const isSelected = selectedDateIso === iso;
+          // Only highlight today/selected when the cell belongs to this month,
+          // not for overflow days from adjacent months
+          const belongsToMonth = isSameMonth(cell.date, monthDate);
+          const isToday = cell.isToday && belongsToMonth;
 
           const base =
             'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-center';
-          const todayClass = cell.isToday ? 'bg-[#0B57D0] font-bold text-white' : '';
-          const selectedClass = isSelected && !cell.isToday ? 'bg-[#C2E7FF] font-semibold' : '';
-          const hoverClass = !cell.isToday && !isSelected ? 'hover:bg-gray-100' : '';
+          const todayClass = isToday ? 'bg-[#0B57D0] font-bold text-white' : '';
+          const selectedClass = isSelected && !isToday ? 'bg-[#C2E7FF] font-semibold' : '';
+          const outsideClass = !belongsToMonth ? 'text-gray-300' : '';
+          const hoverClass = !isToday && !isSelected ? 'hover:bg-gray-100' : '';
 
-          const className = [base, todayClass, selectedClass, hoverClass].filter(Boolean).join(' ');
+          const className = [base, todayClass, selectedClass, outsideClass, hoverClass]
+            .filter(Boolean)
+            .join(' ');
 
           return (
             <div

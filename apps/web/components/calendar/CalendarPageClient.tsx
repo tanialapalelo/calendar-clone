@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { addDays, addMonths, startOfDay, startOfMonth } from 'date-fns';
+import { addDays, startOfDay, startOfWeek, endOfWeek } from 'date-fns';
 
 import { CalendarShell } from '@/components/calendar/CalendarShell';
 import { CreateEventModal } from '@/components/calendar/events/CreateEventModal';
@@ -15,7 +15,7 @@ import { useEventsApi } from '@/lib/events/useEventsApi';
 import { generateMonthGrid } from '@/lib/month-grid';
 
 function parseView(value: string | null): CalendarView {
-  if (value === 'year' || value === 'month' || value === 'day') return value;
+  if (value === 'year' || value === 'month' || value === 'week' || value === 'day') return value;
   return 'month';
 }
 
@@ -28,13 +28,29 @@ export default function CalendarPageClient() {
   const date = useMemo(() => parseIsoDateOrToday(searchParams.get('date')), [searchParams]);
 
   const range = useMemo(() => {
+    if (view === 'day') {
+      const from = startOfDay(date);
+      const to = addDays(from, 1);
+      return { from, to };
+    }
+    if (view === 'week') {
+      const from = startOfDay(startOfWeek(date, { weekStartsOn: 0 }));
+      const to = addDays(startOfDay(endOfWeek(date, { weekStartsOn: 0 })), 1);
+      return { from, to };
+    }
+    if (view === 'year') {
+      const from = new Date(date.getFullYear(), 0, 1);
+      const to = new Date(date.getFullYear() + 1, 0, 1);
+      return { from, to };
+    }
+    // month: use the 42-cell grid
     const cells = generateMonthGrid(date);
     const from = startOfDay(cells[0].date);
-    const to = addDays(startOfDay(cells[cells.length - 1].date), 1); // exclusive
+    const to = addDays(startOfDay(cells[cells.length - 1].date), 1);
     return { from, to };
-  }, [date]);
+  }, [view, date]);
 
-  const { events, addEvent, updateEvent, removeEvent, unauthorized } = useEventsApi(range);
+  const { events, addEvent, updateEvent, removeEvent, unauthorized, loading } = useEventsApi(range);
 
   // Redirect to login if user is not authenticated
   useEffect(() => {
@@ -144,6 +160,7 @@ export default function CalendarPageClient() {
         view={view}
         date={date}
         events={events}
+        loading={loading}
         onChangeView={(v) => onNavigate({ view: v })}
         onChangeDate={(d) => onNavigate({ date: d })}
         onNavigate={onNavigate}

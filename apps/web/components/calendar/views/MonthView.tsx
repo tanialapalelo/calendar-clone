@@ -31,16 +31,19 @@ export function MonthView(props: {
   const TOTAL_ROWS = 4;
   const OVERLAY_TOP = 44;
 
-  const DEBUG = true;
-  const DEBUG_TITLE_CONTAINS =
-    process.env.NEXT_PUBLIC_CAL_DEBUG_TITLE ?? 'tiap kamis dari tgl 12 allday';
-
   return (
-    <div className="rounded-3xl bg-white p-4">
-      <div className="grid w-full grid-cols-7 text-center">
+    <div className="overflow-hidden rounded-2xl bg-white">
+      {/* Day of week headers */}
+      <div className="grid w-full grid-cols-7 border-b border-gray-200 text-center">
         {daysOfWeek.map((day) => (
           <div key={day}>
-            <span className="px-3 py-2 text-sm font-semibold text-gray-600">{day}</span>
+            {/* Short on mobile */}
+            <span className="block px-1 py-2 text-xs font-semibold text-gray-500 sm:hidden">
+              {day.slice(0, 1)}
+            </span>
+            <span className="hidden px-3 py-2 text-sm font-semibold text-gray-600 sm:block">
+              {day}
+            </span>
           </div>
         ))}
       </div>
@@ -58,35 +61,6 @@ export function MonthView(props: {
           });
 
           const { segments, laneCount } = buildWeekBarLayout(weekDates, eventsForWeek);
-
-          // DEBUG: log only a subset of segments, once per render
-          if (DEBUG) {
-            const rows = segments
-              .filter((s) =>
-                String(s.event.title ?? '')
-                  .toLowerCase()
-                  .includes(DEBUG_TITLE_CONTAINS.toLowerCase()),
-              )
-              .map((s) => {
-                const debugEvent = s.event as CalendarEvent;
-                return {
-                  weekIdx,
-                  title: s.event.title,
-                  allDay: s.event.allDay,
-                  start: debugEvent.start,
-                  end: debugEvent.end,
-                  startDate: debugEvent.startDate,
-                  endDate: debugEvent.endDate,
-                  startCol: s.startCol,
-                  endColExclusive: s.endColExclusive,
-                  continuesFromPrevWeek: s.continuesFromPrevWeek,
-                  continuesToNextWeek: s.continuesToNextWeek,
-                  weekStart: weekStart.toISOString(),
-                };
-              });
-
-            if (rows.length) console.log('[MonthView segments debug]', rows);
-          }
 
           const lanesShown = Math.min(laneCount, BAR_ROWS);
           const timedRowsPerDay = Math.max(0, TOTAL_ROWS - lanesShown);
@@ -121,7 +95,7 @@ export function MonthView(props: {
                     <div
                       key={cell.date.toISOString()}
                       role="button"
-                      className="flex min-h-[120px] cursor-pointer flex-col border-r border-b border-[#E1E3E1] p-2 text-sm hover:bg-gray-50"
+                      className="flex min-h-[60px] cursor-pointer flex-col border-r border-b border-[#E1E3E1] p-1 text-sm hover:bg-gray-50 sm:min-h-[120px] sm:p-2"
                       onClick={() => onCreate(cell.date)}
                     >
                       <div className="flex items-center justify-center">
@@ -151,7 +125,7 @@ export function MonthView(props: {
                           return (
                             <div
                               key={ev.id}
-                              className="flex cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200"
+                              className="hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200 sm:flex"
                               title={ev.title}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -163,7 +137,7 @@ export function MonthView(props: {
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                                 style={{ background: ev.color ?? '#039BE5' }}
                               />
-                              <span className="shrink-0 text-gray-600">
+                              <span className="hidden shrink-0 text-gray-600 sm:inline">
                                 {format(parseISO(ev.start), 'h:mma').toLowerCase()}
                               </span>
                               <div className="flex items-center gap-1">
@@ -186,7 +160,8 @@ export function MonthView(props: {
                               }
                             }}
                           >
-                            {hiddenTotal} more
+                            <span className="hidden sm:inline">{hiddenTotal} more</span>
+                            <span className="sm:hidden">+{hiddenTotal}</span>
                           </button>
                         )}
                       </div>
