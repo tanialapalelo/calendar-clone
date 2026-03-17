@@ -54,8 +54,9 @@ export class EventsController {
       throw new BadRequestException('to must be after from');
     }
 
-    // Guardrail: prevent massive windows
-    const MAX_WINDOW_DAYS = 180;
+    // Guardrail: prevent massive windows.
+    // 366 days covers a full leap-year (needed by the year calendar view).
+    const MAX_WINDOW_DAYS = 366;
     const maxWindowMs = MAX_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     if (toDate.getTime() - fromDate.getTime() > maxWindowMs) {
       throw new BadRequestException(
