@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { API_URL } from '@/lib/api/client';
+import { apiFetch, ApiError } from '@/lib/api/client';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export type CurrentUser = {
   sub: string;
@@ -10,31 +14,42 @@ export type CurrentUser = {
   picture?: string;
 };
 
-type State =
+type AuthState =
   | { status: 'loading' }
   | { status: 'authenticated'; user: CurrentUser }
   | { status: 'unauthenticated' };
 
-export function useCurrentUser(): State {
-  const [state, setState] = useState<State>({ status: 'loading' });
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches the current user from /v1/auth/me.
+ * Returns a discriminated union so consumers can branch on status.
+ */
+export function useCurrentUser(): AuthState {
+  const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_URL}/v1/auth/me`, { credentials: 'include' })
-      .then((res) => {
-        if (!res.ok) throw new Error('unauthenticated');
-        return res.json() as Promise<{ ok: boolean; user: CurrentUser }>;
-      })
+
+    apiFetch<{ ok: boolean; user: CurrentUser }>('/v1/auth/me')
       .then((data) => {
-        if (!cancelled && data.ok && data.user) {
+        if (!cancelled) {
           setState({ status: 'authenticated', user: data.user });
-        } else if (!cancelled) {
-          setState({ status: 'unauthenticated' });
         }
       })
-      .catch(() => {
-        if (!cancelled) setState({ status: 'unauthenticated' });
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // 401 = not logged in — expected, not an error
+        if (err instanceof ApiError && err.status === 401) {
+          setState({ status: 'unauthenticated' });
+        } else {
+          // Network error, 5xx, etc. — treat as unauthenticated to avoid hanging
+          setState({ status: 'unauthenticated' });
+        }
       });
+
     return () => {
       cancelled = true;
     };

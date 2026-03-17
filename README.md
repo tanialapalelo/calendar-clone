@@ -1,13 +1,77 @@
-# Calendar Clone (MVP)
+# Calendar Clone
 
 A portfolio project: a Google Calendar–inspired app built as a TypeScript monorepo with a Next.js web app and a NestJS API.
 
-## Tech
+## Tech stack
 
-- **Web:** Next.js (App Router) + TypeScript
-- **API:** NestJS + Prisma
-- **DB:** PostgreSQL (local dev; Docker recommended)
-- **Auth:** Google OAuth 2.0 (API-driven redirect) + **HttpOnly cookie** session (JWT)
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 |
+| Backend | NestJS + Prisma ORM |
+| Database | PostgreSQL |
+| Auth | Google OAuth 2.0 + HttpOnly cookie (JWT) |
+| Monorepo | Turborepo + pnpm workspaces |
+
+---
+
+## Architecture
+
+```
+calendar-clone/
+├── apps/
+│   ├── web/                         # Next.js frontend
+│   │   ├── app/                     # App Router pages & layouts
+│   │   ├── components/
+│   │   │   ├── calendar/            # Calendar-specific components + views
+│   │   │   └── ui/                  # Generic reusable UI (SettingsMenu…)
+│   │   ├── lib/
+│   │   │   ├── api/                 # apiFetch wrapper + per-resource modules
+│   │   │   │   ├── client.ts        # Base fetch — throws ApiError on non-2xx
+│   │   │   │   └── events.ts        # listEvents / createEvent / updateEvent / deleteEvent
+│   │   │   ├── auth/
+│   │   │   │   └── useCurrentUser.ts
+│   │   │   ├── events/
+│   │   │   │   └── useEventsApi.ts  # Events data hook (fetch + optimistic CRUD)
+│   │   │   ├── hooks/
+│   │   │   │   ├── useCalendarNavigation.ts  # URL ↔ view/date/range state
+│   │   │   │   └── usePopoverState.ts        # Event + day popover state
+│   │   │   └── theme/
+│   │   │       └── useTheme.ts      # Dark / light / system theme (SSR-safe)
+│   │   └── types/
+│   │       └── global.d.ts          # Shared CalendarEvent / CalendarView types
+│   └── api/                         # NestJS backend
+│       ├── src/
+│       │   ├── auth/                # Google OAuth + JWT guard
+│       │   ├── calendars/           # Calendars CRUD (GET/POST/PATCH/DELETE)
+│       │   │   └── dto/             # CreateCalendarDto, UpdateCalendarDto
+│       │   ├── events/              # Events CRUD + recurrence expansion
+│       │   │   └── dto/             # CreateEventDto, UpdateEventDto
+│       │   └── prisma/              # PrismaService
+│       ├── prisma/
+│       │   ├── schema.prisma
+│       │   └── migrations/
+│       └── test/                    # e2e tests (supertest + real DB)
+```
+
+### Key architecture decisions
+
+**API-owned OAuth flow**  
+The backend owns the entire Google OAuth redirect flow. The frontend never sees tokens — it only receives an HttpOnly cookie containing a signed JWT. This eliminates XSS token-theft risk.
+
+**`apiFetch` throws, not returns `{ok}`**  
+The API client (`lib/api/client.ts`) throws an `ApiError` on non-2xx responses instead of returning a `{ ok: boolean }` union. This means callers write `await apiFetch(...)` and `catch(err)` once — no manual `.ok` check at every call site. `ApiError` carries `.status` so 401 detection still works.
+
+**Custom hooks for all stateful logic**  
+`CalendarPageClient` is a pure orchestrator — it composes three hooks and renders. No logic lives in the component itself:
+- `useCalendarNavigation` — view/date state in URL search params (deep-linkable, back button works)
+- `useEventsApi` — events list + CRUD, 401 → redirect
+- `usePopoverState` — event popover + day overflow popover
+
+**SSR-safe theme**  
+`useTheme` initialises state to `'system'` (matching the inline `<script>` in `layout.tsx`) to avoid hydration mismatches. `useCallback` wraps `setTheme` for a stable reference.
+
+**Thin controllers, fat services**  
+Every NestJS controller method is one line — it calls a service method and returns. All business logic (ownership checks, NotFoundException, etc.) lives in the service. `@UseGuards` is applied at the class level so it's never forgotten on a new route.
 
 ---
 
@@ -22,25 +86,17 @@ A portfolio project: a Google Calendar–inspired app built as a TypeScript mono
 
 ### Prerequisites
 
-- Node.js (LTS recommended)
-- pnpm
-- PostgreSQL running locally (or via Docker)
+- Node.js LTS
+- pnpm (`npm i -g pnpm`)
+- Docker (recommended for PostgreSQL)
 
-### Install dependencies
+### 1. Install dependencies
 
 ```bash
 pnpm install
 ```
 
----
-
-## Database
-
-The API uses `DATABASE_URL` (PostgreSQL). You can run Postgres locally or via Docker.
-
-### PostgreSQL via Docker (recommended)
-
-Run Postgres:
+### 2. Start PostgreSQL
 
 ```bash
 docker run --name calendar-clone-postgres \
@@ -51,74 +107,54 @@ docker run --name calendar-clone-postgres \
   -d postgres:16
 ```
 
-Create a separate **test database** in the same container (used by e2e tests):
+Create a separate **test database** (used by e2e tests):
 
 ```bash
 docker exec -it calendar-clone-postgres \
   psql -U postgres -c "CREATE DATABASE calendar_clone_test;"
 ```
 
-Stop/remove when needed:
+### 3. Environment variables
 
-```bash
-docker stop calendar-clone-postgres
-docker rm calendar-clone-postgres
-```
+> Do not commit `.env` files. Only commit `.env.*.example` files.
 
----
-
-## Environment variables
-
-> Do not commit real `.env` files. Commit only `.env.*.example` files.
-
-### API — `apps/api/.env` (local dev, do not commit)
-
-Create `apps/api/.env`:
+**`apps/api/.env`** (local dev):
 
 ```env
-# Server
 PORT=3001
 WEB_ORIGIN=http://localhost:3000
 
-# Database
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/calendar_clone?schema=public
 
-# Auth cookie + JWT
 JWT_SECRET=replace-with-a-long-random-string
 COOKIE_NAME=access_token
 
-# Google OAuth
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3001/v1/auth/google/callback
 ```
 
-Generate a good JWT secret quickly:
+Generate a secure `JWT_SECRET`:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-### API tests — `apps/api/.env.test` (do not commit)
-
-Create `apps/api/.env.test` based on `apps/api/.env.test.example`.
-
-This points to the dedicated test DB (`calendar_clone_test`) and uses a test-only `JWT_SECRET`.
-
-### Web — `apps/web/.env.local` (local dev, do not commit)
-
-Create `apps/web/.env.local`:
+**`apps/api/.env.test`** (e2e tests — do not commit):
 
 ```env
-NODE_ENV=development
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/calendar_clone_test?schema=public
+JWT_SECRET=test-secret
+COOKIE_NAME=access_token
+```
+
+**`apps/web/.env.local`** (local dev):
+
+```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
----
-
-## Prisma setup (dev DB)
-
-Run migrations + generate client + seed (development database):
+### 4. Run Prisma migrations + seed
 
 ```bash
 pnpm -C apps/api exec prisma migrate dev
@@ -126,174 +162,143 @@ pnpm -C apps/api exec prisma generate
 pnpm -C apps/api exec prisma db seed
 ```
 
-> Note: seeding creates demo user/calendar data for local development.
-
----
-
-## Run everything (web + api)
-
-From the repo root:
+### 5. Start both apps
 
 ```bash
 pnpm dev
 ```
 
-This runs both apps in parallel using Turborepo.
+- Web → `http://localhost:3000`
+- API → `http://localhost:3001`
+- API health: `GET /v1/health` · `GET /v1/db-health`
 
 ---
 
-## Run apps individually
+## Authentication
 
-### Run the API
+### Flow
 
-```bash
-pnpm -C apps/api dev
-```
-
-API runs on `http://localhost:3001` (default).
-
-Health checks:
-
-- `GET http://localhost:3001/v1/health`
-- `GET http://localhost:3001/v1/db-health`
-
-### Run the web app
-
-```bash
-pnpm -C apps/web dev
-```
-
-Web runs on `http://localhost:3000`.
-
----
-
-## Authentication (Google OAuth + HttpOnly Cookie)
-
-This project uses an **API-owned** auth flow (no NextAuth):
-
-1. The web app links the user to the API: `GET /v1/auth/google/start`
-2. The API redirects to Google’s consent screen
-3. Google redirects back to the API callback with an authorization code
-4. The API exchanges the code for tokens, verifies the **Google ID token**, upserts the user, and sets an **HttpOnly cookie** containing a signed JWT
-5. The API redirects back to the web app
+1. User clicks "Sign in with Google" → browser navigates to `GET /v1/auth/google/start`
+2. API redirects to Google's consent screen
+3. Google redirects to `GET /v1/auth/google/callback?code=…`
+4. API exchanges code → verifies ID token → upserts user → sets **HttpOnly JWT cookie**
+5. API redirects back to the web app (`WEB_ORIGIN`)
 
 ### Why HttpOnly cookies?
 
-- Tokens are not accessible to JavaScript (mitigates XSS token theft)
-- The browser automatically sends the cookie to the API on requests
-- The API authenticates requests using a Nest Guard that verifies the JWT and sets `req.user`
+- Tokens are not accessible to JavaScript — eliminates XSS token theft
+- Browser sends the cookie automatically on every API request
+- The `JwtCookieGuard` validates the JWT and sets `req.user` on every protected route
 
-### Auth endpoints
+### Endpoints
 
-- `GET /v1/auth/google/start` — redirect to Google
-- `GET /v1/auth/google/callback` — handle Google redirect, set cookie, redirect to web
-- `GET /v1/auth/me` — returns the current user (requires auth cookie)
-- `POST /v1/auth/logout` — clears the auth cookie
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/v1/auth/google/start` | No | Redirect to Google |
+| `GET` | `/v1/auth/google/callback` | No | Handle Google callback, set cookie |
+| `GET` | `/v1/auth/me` | Required | Return current user |
+| `POST` | `/v1/auth/logout` | No | Clear cookie |
 
-### CORS note (local dev)
+---
 
-Web and API run on different origins (`localhost:3000` and `localhost:3001`), so the API enables CORS with credentials.  
-From the web app, requests to the API must use:
+## API reference
 
-```ts
-fetch('http://localhost:3001/v1/auth/me', { credentials: 'include' })
-```
+### Calendars
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/calendars` | List all calendars for current user |
+| `GET` | `/v1/calendars/:id` | Get a single calendar |
+| `POST` | `/v1/calendars` | Create a calendar `{ name, color? }` |
+| `PATCH` | `/v1/calendars/:id` | Rename / recolor `{ name?, color? }` |
+| `DELETE` | `/v1/calendars/:id` | Delete calendar + all its events |
+
+### Events
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v1/events?from=&to=` | List events in date range (required) |
+| `GET` | `/v1/events/:id` | Get a single event |
+| `POST` | `/v1/events` | Create an event |
+| `PATCH` | `/v1/events/:id?scope=` | Update event (`scope`: `this`/`following`/`all`) |
+| `DELETE` | `/v1/events/:id?scope=` | Delete event (`scope`: `this`/`following`/`all`) |
+
+All routes require the auth cookie.
 
 ---
 
 ## Google OAuth setup (local)
 
-In Google Cloud Console:
-
-1. Create/select a project
-2. Configure **OAuth consent screen**
-- Choose “External” (fine for local dev)
-- Add your Google account as a **test user** if required
-3. Create credentials:
-- **APIs & Services → Credentials → Create Credentials → OAuth client ID**
-- Application type: **Web application**
-4. Configure URLs:
-
-**Authorized redirect URIs**
-- `http://localhost:3001/v1/auth/google/callback`
-
-**Authorized JavaScript origins**
-- `http://localhost:3000`
-- `http://localhost:3001`
+1. Open [Google Cloud Console](https://console.cloud.google.com)
+2. Create / select a project
+3. **APIs & Services → OAuth consent screen** — choose "External", add yourself as a test user
+4. **APIs & Services → Credentials → Create OAuth client ID** (Web application)
+5. **Authorised redirect URIs:** `http://localhost:3001/v1/auth/google/callback`
+6. **Authorised JavaScript origins:** `http://localhost:3000`, `http://localhost:3001`
+7. Copy Client ID + Secret into `apps/api/.env`
 
 ---
 
 ## Testing
 
-### API e2e tests
-
-E2E tests run against a dedicated database (`calendar_clone_test`) so tests can freely create/delete data without affecting your dev database.
-
-#### One-time setup
-
-1) Ensure Postgres is running and the test database exists:
-
-```bash
-docker exec -it calendar-clone-postgres \
-  psql -U postgres -c "CREATE DATABASE calendar_clone_test;"
-```
-
-2) Create `apps/api/.env.test` based on `apps/api/.env.test.example`
-
-#### Run e2e tests
+### e2e tests (API)
 
 ```bash
 pnpm -C apps/api test:e2e
 ```
 
-This runs:
-- `pretest:e2e`: `dotenv -e .env.test -- prisma migrate deploy` (applies migrations to the test DB)
-- then `test:e2e`: runs Jest (`*.e2e-spec.ts`)
+`pretest:e2e` runs `prisma migrate deploy` against the test DB automatically.
 
-#### How auth works in tests (no Google)
+### How auth works in tests (no Google)
 
-E2E tests do not call Google OAuth. Instead they:
-- create a test user + calendar directly in the test DB (via Prisma)
-- generate a signed JWT using `JWT_SECRET` from `.env.test`
-- send it as a cookie (`COOKIE_NAME`, default `access_token`)
-- call real API endpoints using `supertest`
+- Test user + calendar created directly via Prisma
+- JWT signed with `JWT_SECRET` from `.env.test`
+- Sent as a cookie in `supertest` requests
+- The real `JwtCookieGuard` validates it — tests exercise actual HTTP handlers end-to-end
 
 ---
-## Milestones / roadmap
 
-### Milestone 1 ✅ — UI prototype
-- UI-only calendar prototype (localStorage)
+## Milestones
 
-### Milestone 2 ✅ — Backend foundation
-- NestJS API + Prisma + Postgres foundation
-- Health + db-health endpoints
+### ✅ Milestone 1 — UI prototype
+- Calendar UI: month / week / day / year views
+- Sidebar with mini-calendar + calendar visibility toggles
+- Dark mode (light / dark / system) persisted to localStorage
+- Settings menu with appearance + export/import
+- Responsive layout with collapsible sidebar (hamburger toggle)
+- Create button in sidebar (Google Calendar style)
 
-### Milestone 3 ✅ — Authentication
-- Google OAuth login
+### ✅ Milestone 2 — Backend foundation
+- NestJS + Prisma + PostgreSQL
+- `GET /v1/health` + `GET /v1/db-health`
+- Docker Compose for local Postgres
+
+### ✅ Milestone 3 — Authentication
+- Google OAuth 2.0 (API-owned flow)
 - HttpOnly cookie session (JWT)
-- `/v1/auth/me` protected route using a JWT cookie Guard
+- `JwtCookieGuard` protecting all private routes
+- `GET /v1/auth/me`, `POST /v1/auth/logout`
 
-### Milestone 4 🚧 — API-backed core calendar/events (data correctness + tests)
-- Replace localStorage event data with API-backed events scoped to the authenticated user ✅
-- Replace localStorage calendar data with API-backed calendars scoped to the authenticated user 🚧
-- Request validation (DTOs) for core endpoints ✅ (create/update events)
-- Core error handling (consistent 400/401/403/404) 🚧
-- Tests:
-  - API e2e tests for events CRUD ✅
-  - Auth e2e smoke tests (me/logout) 🚧
-  - Unit tests for tricky logic (recurrence/timezone) 🚧
-- Docs:
-  - README “How to run + test” ✅
-  - API endpoint docs / Swagger (optional) 🚧
+### ✅ Milestone 4 — API-backed core data
+- Events CRUD (`GET /POST /PATCH /DELETE /v1/events`)
+- Calendars CRUD (`GET /POST /PATCH /DELETE /v1/calendars`)
+- Request validation with class-validator DTOs
+- Consistent 400 / 401 / 403 / 404 error responses
+- Centralised `apiFetch` wrapper — throws `ApiError`, no `.ok` union
+- `useCalendarNavigation` — URL-driven view/date state (deep-linkable)
+- `usePopoverState` — event + day popover state extracted from page component
+- e2e tests: events CRUD + auth smoke tests
 
-### Milestone 5 ⏭️ — Google Calendar features (clone direction)
-- Recurring events (RRULE + exceptions) + correct all-day/timezone behavior
-- Event color (calendar default + optional event override)
-- Reminders/notifications (persist config first; delivery later)
-- Search (title/description/location) + optional pagination for list/search endpoints
+### ⏭️ Milestone 5 — Google Calendar feature parity
+- Recurring events with RRULE + per-instance exceptions
+- Correct all-day / timezone handling
+- Event colour: calendar default + per-event override
+- Reminders / notifications
+- Full-text search (title / description / location)
 
-### Milestone 6 ⏭️ — UI polish + layout parity
-- Sidebar (mini calendar + calendars list)
-- Responsive layout + skeleton/loading states
-- Better event editor UX (all-day handling, timezone display)
-- Keyboard & accessibility improvements
+### ⏭️ Milestone 6 — Polish
+- Skeleton loading states
+- Keyboard accessibility (arrow key navigation, Escape to close)
+- Event drag-and-drop to reschedule
+- Better event editor: all-day toggle, timezone display
+- Swagger / OpenAPI documentation
