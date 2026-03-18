@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { parseISO } from 'date-fns';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
 import { createEvent, normalizeRuleOnly } from '@/lib/api/events';
+import { ApiError } from '@/lib/api/client';
 
 export default function NewEventClient() {
   const router = useRouter();
@@ -15,37 +16,35 @@ export default function NewEventClient() {
   const handleCreate = async (evt: CalendarEvent) => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    const res = await createEvent({
-      title: evt.title,
-      startAt: evt.start,
-      endAt: evt.end,
-      allDay: evt.allDay,
+    try {
+      await createEvent({
+        title: evt.title,
+        startAt: evt.start,
+        endAt: evt.end,
+        allDay: evt.allDay,
+        startDate: evt.allDay ? (evt.startDate ?? undefined) : undefined,
+        endDate: evt.allDay ? (evt.endDate ?? undefined) : undefined,
+        description: evt.description,
+        location: evt.location,
+        color: evt.color,
+        recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
+        timeZone: tz,
+        recurrenceTimeZone: tz,
+        guests: evt.guests,
+        notifications: evt.notifications,
+        visibility: evt.visibility,
+        busyStatus: evt.busyStatus,
+      });
 
-      startDate: evt.allDay ? (evt.startDate ?? undefined) : undefined,
-      endDate: evt.allDay ? (evt.endDate ?? undefined) : undefined,
-
-      description: evt.description,
-      location: evt.location,
-      color: evt.color,
-      recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
-      timeZone: tz,
-      recurrenceTimeZone: tz,
-      guests: evt.guests,
-      notifications: evt.notifications,
-      visibility: evt.visibility,
-      busyStatus: evt.busyStatus,
-    });
-
-    if (!res.ok) {
-      if (res.status === 401) {
+      // Success — go back to the calendar
+      router.push('/');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
         router.replace('/login');
         return;
       }
-      console.error('createEvent failed', res.status, res.error);
-      return;
+      console.error('createEvent failed', err);
     }
-
-    router.push('/');
   };
 
   return (

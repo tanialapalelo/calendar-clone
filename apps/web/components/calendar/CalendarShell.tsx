@@ -80,25 +80,51 @@ export function CalendarShell(props: {
           />
         )}
 
-        {/* Sidebar: togglable on ALL screen sizes */}
+        {/* Sidebar: togglable on ALL screen sizes.
+            Collapsed state: narrow 48px strip showing only the + button (desktop).
+            Mobile: slides off-screen entirely when closed. */}
         <div
           className={[
             'z-30 shrink-0 transition-all duration-200 ease-in-out',
-            // On mobile: fixed overlay; on desktop: inline
             'fixed inset-y-0 left-0 sm:relative sm:inset-auto',
-            sidebarOpen ? 'w-56 translate-x-0' : 'w-0 -translate-x-full sm:translate-x-0',
+            sidebarOpen ? 'w-56 translate-x-0' : '-translate-x-full sm:w-12 sm:translate-x-0',
           ].join(' ')}
-          style={{ overflow: sidebarOpen ? undefined : 'hidden' }}
         >
-          <Sidebar
-            currentDate={date}
-            selectedDate={date}
-            onPickDate={(d) => {
-              onNavigate({ date: d, view: 'day' });
-              setSidebarOpen(false);
-            }}
-            onCreate={() => onCreateEvent(date)}
-          />
+          {/* Full sidebar — visible when open */}
+          <div className={sidebarOpen ? 'block' : 'hidden'}>
+            <Sidebar
+              currentDate={date}
+              selectedDate={date}
+              onPickDate={(d) => {
+                onNavigate({ date: d, view: 'day' });
+                setSidebarOpen(false);
+              }}
+              onCreate={() => onCreateEvent(date)}
+            />
+          </div>
+
+          {/* Collapsed strip — visible on desktop when sidebar is closed */}
+          {!sidebarOpen && (
+            <div className="hidden h-full w-12 flex-col items-center border-r border-gray-100 bg-[#F8FAFD] pt-3 sm:flex">
+              <button
+                type="button"
+                onClick={() => onCreateEvent(date)}
+                title="Create event"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md transition-shadow hover:shadow-lg"
+                aria-label="Create event"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
 
         <main className="relative flex-1 overflow-auto p-2 sm:p-4">

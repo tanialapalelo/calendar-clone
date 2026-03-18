@@ -128,12 +128,14 @@ export function Sidebar(props: {
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    apiFetch<ApiCalendar[]>('/v1/calendars').then((res) => {
-      if (res.ok) {
-        setCalendars(res.data);
-        setVisibleCalendarIds(new Set(res.data.map((c) => c.id)));
-      }
-    });
+    apiFetch<ApiCalendar[]>('/v1/calendars')
+      .then((data) => {
+        setCalendars(data);
+        setVisibleCalendarIds(new Set(data.map((c) => c.id)));
+      })
+      .catch(() => {
+        // unauthenticated or network error — sidebar just shows no calendars
+      });
   }, []);
 
   const toggleCalendar = (id: string) => {
@@ -150,7 +152,7 @@ export function Sidebar(props: {
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col gap-4 overflow-y-auto bg-[#F8FAFD] py-2 pt-14 sm:pt-2">
-      {/* Create button — Google Calendar style */}
+      {/* Create button */}
       <div className="px-3">
         <button
           type="button"

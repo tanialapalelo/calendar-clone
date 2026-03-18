@@ -56,7 +56,6 @@ export function UserMenu() {
         title={user.name ?? user.email}
       >
         {user.picture ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={user.picture}
             alt={user.name ?? user.email}

@@ -10,6 +10,7 @@ import {
   normalizeRuleOnly,
   updateEvent,
 } from '@/lib/api/events';
+import { ApiError } from '@/lib/api/client';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
 import type { RecurrenceScope } from '@/lib/api/events';
 
@@ -43,7 +44,7 @@ export default function EditEventPage() {
   const searchParams = useSearchParams();
 
   const id = String(params?.id ?? '');
-  const occ = searchParams.get('occ'); // ISO string or null
+  const occ = searchParams.get('occ');
 
   const [ev, setEv] = useState<CalendarEvent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,21 +58,17 @@ export default function EditEventPage() {
 
     const run = async () => {
       setLoading(true);
-
-      // If occ is present, fetch the synthetic occurrence by using instance id format
       const fetchId = occ ? `${id}@${occ}` : id;
 
-      const res = await getEvent(fetchId);
-
-      if (!res.ok) {
-        if (res.status === 401) router.replace('/login');
-        else console.error('getEvent failed', res.status, res.error);
+      try {
+        const data = await getEvent(fetchId);
+        setEv(apiEventToCalendarEvent(data));
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) router.replace('/login');
+        else console.error('getEvent failed', err);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      setEv(apiEventToCalendarEvent(res.data));
-      setLoading(false);
     };
 
     void run();
@@ -82,8 +79,6 @@ export default function EditEventPage() {
   const handleSave = async (updated: CalendarEvent, scope?: RecurrenceScope) => {
     const isInstance = updated.isRecurringInstance && updated.recurringEventId;
     const masterIdFromRoute = id;
-    const masterId =
-      updated.recurringEventId ?? getMasterIdFromInstanceId(updated.id) ?? updated.id;
     const instanceId =
       getInstanceId(updated) ?? getInstanceIdFromRoute(masterIdFromRoute, occ) ?? updated.id;
     const targetId =
@@ -93,43 +88,37 @@ export default function EditEventPage() {
           ? masterIdFromRoute
           : updated.id;
 
-    const res = await updateEvent(
-      targetId,
-      {
-        title: updated.title,
-        startAt: updated.start,
-        endAt: updated.end,
-        allDay: !!updated.allDay,
-        startDate: updated.allDay ? (updated.startDate ?? undefined) : undefined,
-        endDate: updated.allDay ? (updated.endDate ?? undefined) : undefined,
-        description: updated.description ?? '',
-        location: updated.location ?? '',
-        color: updated.color ?? null,
-        recurrenceRule: normalizeRuleOnly(updated.recurrence ?? null),
-        guests: updated.guests ?? [],
-        notifications: updated.notifications ?? [],
-        visibility: updated.visibility ?? 'default',
-        busyStatus: updated.busyStatus ?? 'busy',
-      },
-      scope,
-    );
-
-    if (!res.ok) {
-      if (res.status === 401) router.replace('/login');
-      else console.error('updateEvent failed', res.status, res.error);
-      return;
+    try {
+      await updateEvent(
+        targetId,
+        {
+          title: updated.title,
+          startAt: updated.start,
+          endAt: updated.end,
+          allDay: updated.allDay,
+          startDate: updated.allDay ? (updated.startDate ?? undefined) : undefined,
+          endDate: updated.allDay ? (updated.endDate ?? undefined) : undefined,
+          description: updated.description ?? '',
+          location: updated.location ?? '',
+          color: updated.color ?? null,
+          recurrenceRule: normalizeRuleOnly(updated.recurrence ?? null),
+          guests: updated.guests ?? [],
+          notifications: updated.notifications ?? [],
+          visibility: updated.visibility ?? 'default',
+          busyStatus: updated.busyStatus ?? 'busy',
+        },
+        scope,
+      );
+      router.push('/');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) router.replace('/login');
+      else console.error('updateEvent failed', err);
     }
-
-    router.push('/');
   };
 
   const handleDelete = async (eventToDelete: CalendarEvent, scope?: RecurrenceScope) => {
     const isInstance = eventToDelete.isRecurringInstance && eventToDelete.recurringEventId;
     const masterIdFromRoute = id;
-    const masterId =
-      eventToDelete.recurringEventId ??
-      getMasterIdFromInstanceId(eventToDelete.id) ??
-      eventToDelete.id;
     const instanceId =
       getInstanceId(eventToDelete) ??
       getInstanceIdFromRoute(masterIdFromRoute, occ) ??
@@ -141,15 +130,13 @@ export default function EditEventPage() {
           ? masterIdFromRoute
           : eventToDelete.id;
 
-    const res = await deleteEvent(targetId, scope);
-
-    if (!res.ok) {
-      if (res.status === 401) router.replace('/login');
-      else console.error('deleteEvent failed', res.status, res.error);
-      return;
+    try {
+      await deleteEvent(String(targetId), scope);
+      router.push('/');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) router.replace('/login');
+      else console.error('deleteEvent failed', err);
     }
-
-    router.push('/');
   };
 
   return (
@@ -174,7 +161,6 @@ export default function EditEventPage() {
             setScopeOpen(true);
             return;
           }
-
           if (confirm('Delete this event?')) {
             void handleDelete({ ...ev, id: eventId });
           }
@@ -194,13 +180,11 @@ export default function EditEventPage() {
         }}
         onConfirm={(scope) => {
           if (!pendingAction) return;
-
           if (pendingAction.type === 'save') {
             void handleSave(pendingAction.payload, scope);
           } else {
             void handleDelete(pendingAction.payload, scope);
           }
-
           setScopeOpen(false);
           setPendingAction(null);
         }}
