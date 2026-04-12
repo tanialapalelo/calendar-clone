@@ -73,6 +73,12 @@ export class EventsController {
     return this.events.createForUser(userId, dto);
   }
 
+  @Get('search')
+  @UseGuards(JwtCookieGuard)
+  async search(@Req() req: RequestWithUser, @Query('q') q?: string) {
+    return this.events.searchForUser(req.user!.sub, q ?? '');
+  }
+
   @Get(':id')
   @UseGuards(JwtCookieGuard)
   async getOne(@Req() req: RequestWithUser, @Param('id') id: string) {

@@ -686,6 +686,75 @@ export class EventsService {
     });
   }
 
+  async searchForUser(
+    userId: string,
+    query: string,
+    limit = 20,
+  ): Promise<EventInstance[]> {
+    if (!query.trim()) return [];
+
+    const events = await this.prisma.event.findMany({
+      where: {
+        calendar: { ownerId: userId },
+        OR: [
+          { title: { contains: query, mode: 'insensitive' } },
+          { description: { contains: query, mode: 'insensitive' } },
+          { location: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { startAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        calendarId: true,
+        title: true,
+        description: true,
+        location: true,
+        allDay: true,
+        startAt: true,
+        endAt: true,
+        startDate: true,
+        endDate: true,
+        timeZone: true,
+        color: true,
+        recurrenceRule: true,
+        recurrenceTimeZone: true,
+        guests: true,
+        notifications: true,
+        visibility: true,
+        busyStatus: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return events.map((ev) => ({
+      id: ev.id,
+      calendarId: ev.calendarId,
+      title: ev.title,
+      description: ev.description,
+      location: ev.location,
+      allDay: ev.allDay,
+      startAt: ev.startAt,
+      endAt: ev.endAt,
+      startDate: ev.startDate,
+      endDate: ev.endDate,
+      timeZone: ev.timeZone,
+      color: ev.color,
+      guests: ev.guests,
+      notifications: ev.notifications,
+      visibility: ev.visibility,
+      busyStatus: ev.busyStatus,
+      recurrenceRule: ev.recurrenceRule,
+      recurrenceTimeZone: ev.recurrenceTimeZone,
+      createdAt: ev.createdAt,
+      updatedAt: ev.updatedAt,
+      recurringEventId: null,
+      originalStartAt: null,
+      isRecurringInstance: false,
+    }));
+  }
+
   async getForUser(userId: string, eventId: string) {
     const inst = parseInstanceId(eventId);
 

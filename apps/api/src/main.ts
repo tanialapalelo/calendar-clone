@@ -3,9 +3,19 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Security headers (allow Swagger UI inline scripts in dev)
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production' ? undefined : false,
+    }),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -16,16 +26,22 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('v1');
-
-  // Needed so Nest can read req.cookies.access_token
   app.use(cookieParser());
 
-  // Needed so the browser is allowed to send cookies cross-origin (3000 -> 3001)
   const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
-  app.enableCors({
-    origin: webOrigin,
-    credentials: true,
-  });
+  app.enableCors({ origin: webOrigin, credentials: true });
+
+  // Swagger docs — only in non-production
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Calendar API')
+      .setDescription('Google Calendar clone REST API')
+      .setVersion('1.0')
+      .addCookieAuth('access_token')
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('v1/docs', app, document);
+  }
 
   app.enableShutdownHooks();
 

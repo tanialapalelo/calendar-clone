@@ -33,7 +33,7 @@ export class AuthController {
     res.cookie(cookieName, jwt, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: false, // localhost over http; set true in prod (https)
+      secure: process.env.NODE_ENV === 'production',
       path: '/',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     });
