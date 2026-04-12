@@ -218,6 +218,7 @@ pnpm dev
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/v1/events?from=&to=` | List events in date range (required) |
+| `GET` | `/v1/events/search?q=` | Full-text search across title, description, location |
 | `GET` | `/v1/events/:id` | Get a single event |
 | `POST` | `/v1/events` | Create an event |
 | `PATCH` | `/v1/events/:id?scope=` | Update event (`scope`: `this`/`following`/`all`) |
@@ -258,6 +259,42 @@ pnpm -C apps/api test:e2e
 
 ---
 
+## Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `t` | Go to today |
+| `d` | Day view |
+| `w` | Week view |
+| `m` | Month view |
+| `y` | Year view |
+| `c` | Create new event |
+| `←` / `p` / `k` | Previous period |
+| `→` / `n` / `j` | Next period |
+
+---
+
+## Production deployment
+
+### Docker Compose (all-in-one)
+
+```bash
+cp apps/api/.env.example .env.prod
+# Fill in JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, etc.
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+```
+
+Services:
+- `db` — PostgreSQL 16
+- `api` — NestJS API on port 3001
+- `web` — Next.js on port 3000
+
+### API documentation (dev only)
+
+Swagger UI available at `http://localhost:3001/v1/docs` when `NODE_ENV != production`.
+
+---
+
 ## Milestones
 
 ### ✅ Milestone 1 — UI prototype
@@ -266,7 +303,6 @@ pnpm -C apps/api test:e2e
 - Dark mode (light / dark / system) persisted to localStorage
 - Settings menu with appearance + export/import
 - Responsive layout with collapsible sidebar (hamburger toggle)
-- Create button in sidebar (Google Calendar style)
 
 ### ✅ Milestone 2 — Backend foundation
 - NestJS + Prisma + PostgreSQL
@@ -277,28 +313,28 @@ pnpm -C apps/api test:e2e
 - Google OAuth 2.0 (API-owned flow)
 - HttpOnly cookie session (JWT)
 - `JwtCookieGuard` protecting all private routes
-- `GET /v1/auth/me`, `POST /v1/auth/logout`
 
 ### ✅ Milestone 4 — API-backed core data
-- Events CRUD (`GET /POST /PATCH /DELETE /v1/events`)
-- Calendars CRUD (`GET /POST /PATCH /DELETE /v1/calendars`)
-- Request validation with class-validator DTOs
-- Consistent 400 / 401 / 403 / 404 error responses
-- Centralised `apiFetch` wrapper — throws `ApiError`, no `.ok` union
-- `useCalendarNavigation` — URL-driven view/date state (deep-linkable)
-- `usePopoverState` — event + day popover state extracted from page component
+- Events + Calendars CRUD with DTOs and validation
+- URL-driven view/date navigation (deep-linkable, back button works)
 - e2e tests: events CRUD + auth smoke tests
 
-### ⏭️ Milestone 5 — Google Calendar feature parity
-- Recurring events with RRULE + per-instance exceptions
+### ✅ Milestone 5 — Google Calendar feature parity
+- Recurring events with RRULE + per-instance exceptions (`this` / `following` / `all`)
 - Correct all-day / timezone handling
-- Event colour: calendar default + per-event override
-- Reminders / notifications
-- Full-text search (title / description / location)
+- Event colour: per-calendar default + per-event override
+- Reminders / notifications editor
+- Custom recurrence rule builder dialog
 
-### ⏭️ Milestone 6 — Polish
-- Skeleton loading states
-- Keyboard accessibility (arrow key navigation, Escape to close)
-- Event drag-and-drop to reschedule
-- Better event editor: all-day toggle, timezone display
-- Swagger / OpenAPI documentation
+### ✅ Milestone 6 — Polish & FAANG-portfolio level
+- **Calendar visibility filtering** — unchecking a calendar hides its events live
+- **Calendar management UI** — create, rename, recolor, delete calendars from sidebar
+- **Full-text event search** — debounced search bar in header with dropdown results
+- **Keyboard shortcuts** — `t/d/w/m/y/c/←/→` (matches Google Calendar)
+- **Google-style ViewSwitcher** — pill tab bar replacing native `<select>`
+- **Event Page Shell** — proper header with back-arrow on `/events/new` and `/events/edit/[id]`
+- **Toast notifications** — success/error/info feedback on all CRUD operations
+- **Security hardening** — `helmet` headers, rate limiting (120 req/min), production-secure cookies
+- **API documentation** — Swagger UI at `/v1/docs` (dev only)
+- **Docker production setup** — multi-stage Dockerfiles + `docker-compose.prod.yml`
+- **Next.js standalone output** — minimal self-contained production server
