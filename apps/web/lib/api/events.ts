@@ -52,6 +52,7 @@ export function normalizeRuleOnly(rule: string | null | undefined): string | nul
 export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
   return {
     id: ev.id,
+    calendarId: ev.calendarId,
     title: ev.title,
     start: ev.startAt,
     end: ev.endAt,
@@ -98,6 +99,7 @@ export function createEvent(input: {
   description?: string;
   location?: string;
   color?: string;
+  calendarId?: string;
   recurrenceRule?: string | null;
   timeZone?: string;
   recurrenceTimeZone?: string;

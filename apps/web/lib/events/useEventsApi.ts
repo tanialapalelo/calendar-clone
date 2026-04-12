@@ -81,6 +81,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           description: evt.description,
           location: evt.location,
           color: evt.color,
+          calendarId: evt.calendarId,
           recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
           timeZone: tz,
           recurrenceTimeZone: tz,

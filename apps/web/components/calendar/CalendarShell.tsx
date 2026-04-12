@@ -8,12 +8,19 @@ import { MonthView } from './views/MonthView';
 import { WeekView } from './views/WeekView';
 import { YearView } from './views/YearView';
 import { Sidebar } from './Sidebar';
+import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 
 export function CalendarShell(props: {
   view: CalendarView;
   date: Date;
   events: CalendarEvent[];
   loading?: boolean;
+  calendars: ApiCalendar[];
+  visibleCalendarIds: Set<string>;
+  onToggleCalendar: (id: string) => void;
+  onCreateCalendar: (name: string, color?: string) => Promise<void>;
+  onUpdateCalendar: (id: string, updates: { name?: string; color?: string }) => Promise<void>;
+  onDeleteCalendar: (id: string) => Promise<void>;
   onChangeView: (v: CalendarView) => void;
   onChangeDate: (d: Date) => void;
   onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
@@ -28,6 +35,12 @@ export function CalendarShell(props: {
     date,
     events,
     loading = false,
+    calendars,
+    visibleCalendarIds,
+    onToggleCalendar,
+    onCreateCalendar,
+    onUpdateCalendar,
+    onDeleteCalendar,
     onChangeView,
     onChangeDate,
     onNavigate,
@@ -39,7 +52,6 @@ export function CalendarShell(props: {
   } = props;
 
   const onToday = () => onChangeDate(new Date());
-  // Start open on desktop, closed on mobile (we detect via useState initial)
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const onPrev = () => {
@@ -69,10 +81,11 @@ export function CalendarShell(props: {
         onExportCalendar={onExportCalendar}
         onImportCalendar={onImportCalendar}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onOpenEvent={onOpenEvent}
       />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Mobile overlay backdrop — only when sidebar open on small screens */}
+        {/* Mobile overlay backdrop */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-20 bg-black/30 sm:hidden"
@@ -80,9 +93,6 @@ export function CalendarShell(props: {
           />
         )}
 
-        {/* Sidebar: togglable on ALL screen sizes.
-            Collapsed state: narrow 48px strip showing only the + button (desktop).
-            Mobile: slides off-screen entirely when closed. */}
         <div
           className={[
             'z-30 shrink-0 transition-all duration-200 ease-in-out',
@@ -90,11 +100,17 @@ export function CalendarShell(props: {
             sidebarOpen ? 'w-56 translate-x-0' : '-translate-x-full sm:w-12 sm:translate-x-0',
           ].join(' ')}
         >
-          {/* Full sidebar — visible when open */}
+          {/* Full sidebar */}
           <div className={sidebarOpen ? 'block' : 'hidden'}>
             <Sidebar
               currentDate={date}
               selectedDate={date}
+              calendars={calendars}
+              visibleCalendarIds={visibleCalendarIds}
+              onToggleCalendar={onToggleCalendar}
+              onCreateCalendar={onCreateCalendar}
+              onUpdateCalendar={onUpdateCalendar}
+              onDeleteCalendar={onDeleteCalendar}
               onPickDate={(d) => {
                 onNavigate({ date: d, view: 'day' });
                 setSidebarOpen(false);
@@ -103,7 +119,7 @@ export function CalendarShell(props: {
             />
           </div>
 
-          {/* Collapsed strip — visible on desktop when sidebar is closed */}
+          {/* Collapsed strip on desktop */}
           {!sidebarOpen && (
             <div className="hidden h-full w-12 flex-col items-center border-r border-gray-100 bg-[#F8FAFD] pt-3 sm:flex">
               <button

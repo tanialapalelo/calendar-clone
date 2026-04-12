@@ -2,6 +2,7 @@ type CalendarView = 'year' | 'month' | 'week' | 'day';
 
 type CalendarEvent = {
   id: string;
+  calendarId?: string;
   title: string;
   start: string;
   end: string;
