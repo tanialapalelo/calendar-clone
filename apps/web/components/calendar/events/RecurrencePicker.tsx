@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { RRule, type Weekday } from 'rrule';
 import { format, isValid } from 'date-fns';
+import { CustomRecurrenceDialog } from './CustomRecurrenceDialog';
 
 type RecurrenceValue = { rrule?: string | null };
 
@@ -157,11 +158,13 @@ export default function RecurrencePicker(props: {
     ] as [string, string][];
   }
 
+  const [customOpen, setCustomOpen] = useState(false);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <select
-          className="rounded border p-3 text-sm text-gray-700 hover:bg-gray-100"
+          className="rounded bg-gray-200 p-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none"
           value={preset}
           onChange={(e) => {
             const v = e.target.value;
@@ -173,6 +176,7 @@ export default function RecurrencePicker(props: {
             else if (v === 'yearly') setYearly();
             else if (v === 'custom') {
               setPreset('custom');
+              setCustomOpen(true);
             }
           }}
         >
@@ -183,10 +187,29 @@ export default function RecurrencePicker(props: {
           ))}
         </select>
 
-        {preset === 'custom' && (
-          <div className="text-sm text-gray-500">Custom rule — advanced UI coming soon</div>
+        {preset === 'custom' && !customOpen && (
+          <button
+            type="button"
+            className="text-xs text-[#0B57D0] underline hover:no-underline"
+            onClick={() => setCustomOpen(true)}
+          >
+            Edit rule
+          </button>
         )}
       </div>
+
+      {customOpen && (
+        <CustomRecurrenceDialog
+          startDate={startDate}
+          initialRule={value?.rrule}
+          onClose={() => setCustomOpen(false)}
+          onSave={(rrule) => {
+            setPreset('custom');
+            onChange({ rrule });
+            setCustomOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
