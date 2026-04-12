@@ -5,6 +5,7 @@ import { KeyboardEvent, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { MapPinIcon, UsersIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 
 function startOfDayLocal(d: Date) {
   const dt = new Date(d);
@@ -26,11 +27,12 @@ function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
 
 type Props = {
   initialDate: Date;
+  calendars?: ApiCalendar[];
   onClose: () => void;
   onCreate: (event: CalendarEvent & { guests?: string[]; location?: string }) => void;
 };
 
-export function EventForm({ initialDate, onClose, onCreate }: Props) {
+export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
   const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
@@ -41,6 +43,7 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
   const [end, setEnd] = useState(toLocalDateTimeInputValue(defaultEnd));
   const [showTime, setShowTime] = useState(false);
   const [allDay, setAllDay] = useState(true);
+  const [calendarId, setCalendarId] = useState<string>(calendars?.[0]?.id ?? '');
 
   const [guests, setGuests] = useState<string[]>([]);
   const [guestInput, setGuestInput] = useState('');
@@ -65,6 +68,7 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
       start: startDate.toISOString(),
       end: endDate.toISOString(),
       allDay,
+      calendarId: calendarId || undefined,
       guests: guests.length ? guests : undefined,
       location: location || undefined,
       color: '#0B57D0',
@@ -228,6 +232,24 @@ export function EventForm({ initialDate, onClose, onCreate }: Props) {
           placeholder="Add location"
         />
       </div>
+
+      {/* Calendar selector */}
+      {calendars && calendars.length > 1 && (
+        <div className="flex items-center gap-2 border-t pt-3">
+          <span className="text-xs font-semibold text-gray-500">Calendar</span>
+          <select
+            className="flex-1 rounded border px-2 py-1.5 text-sm"
+            value={calendarId}
+            onChange={(e) => setCalendarId(e.target.value)}
+          >
+            {calendars.map((cal) => (
+              <option key={cal.id} value={cal.id}>
+                {cal.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 px-4 py-3">

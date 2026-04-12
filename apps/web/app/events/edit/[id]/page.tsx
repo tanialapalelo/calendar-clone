@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
+import { EventPageShell } from '@/components/calendar/events/EventPageShell';
 import {
   apiEventToCalendarEvent,
   deleteEvent,
@@ -13,15 +14,6 @@ import {
 import { ApiError } from '@/lib/api/client';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
 import type { RecurrenceScope } from '@/lib/api/events';
-
-function getMasterIdFromInstanceId(id: string): string | null {
-  const at = id.indexOf('@');
-  if (at <= 0) return null;
-  const iso = id.slice(at + 1);
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return id.slice(0, at);
-}
 
 function getInstanceId(event: CalendarEvent): string | null {
   if (event.id.includes('@')) return event.id;
@@ -73,8 +65,6 @@ export default function EditEventPage() {
 
     void run();
   }, [id, occ, router]);
-
-  if (loading || !ev) return <div className="p-6">Loading…</div>;
 
   const handleSave = async (updated: CalendarEvent, scope?: RecurrenceScope) => {
     const isInstance = updated.isRecurringInstance && updated.recurringEventId;
@@ -139,8 +129,19 @@ export default function EditEventPage() {
     }
   };
 
+  if (loading || !ev) {
+    return (
+      <EventPageShell title="Edit event">
+        <div className="flex items-center gap-3 text-sm text-gray-500">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#0B57D0] border-t-transparent" />
+          Loading event…
+        </div>
+      </EventPageShell>
+    );
+  }
+
   return (
-    <div className="p-6">
+    <EventPageShell title="Edit event">
       <EventFullscreenForm
         key={ev.id}
         event={ev}
@@ -189,6 +190,6 @@ export default function EditEventPage() {
           setPendingAction(null);
         }}
       />
-    </div>
+    </EventPageShell>
   );
 }

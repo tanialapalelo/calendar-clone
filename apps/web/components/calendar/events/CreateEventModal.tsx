@@ -6,15 +6,17 @@ import { EventForm } from '@/components/calendar/events/forms/EventForm';
 import { TaskForm } from '@/components/calendar/events/forms/TaskForm';
 import { modeOptions } from '@/constants';
 import { AppointmentForm } from '@/components/calendar/events/forms/AppointmentForm';
+import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 
 type Props = {
   open: boolean;
   initialDate: Date;
+  calendars?: ApiCalendar[];
   onClose: () => void;
   onCreate: (event: CalendarEvent) => void;
 };
 
-export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props) {
+export function CreateEventModal({ open, initialDate, calendars, onClose, onCreate }: Props) {
   const [mode, setMode] = useState('event');
 
   if (!open) return null;
@@ -57,6 +59,7 @@ export function CreateEventModal({ open, initialDate, onClose, onCreate }: Props
           <EventForm
             key={`event-${initialDate.toISOString()}`}
             initialDate={initialDate}
+            calendars={calendars}
             onClose={onClose}
             onCreate={onCreate}
           />

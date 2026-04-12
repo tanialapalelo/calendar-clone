@@ -1,12 +1,13 @@
 import { Suspense } from 'react';
 import NewEventClient from './NewEventClient';
+import { EventPageShell } from '@/components/calendar/events/EventPageShell';
 
 export default function NewEventPage() {
   return (
-    <div className="p-6">
+    <EventPageShell title="New event">
       <Suspense fallback={null}>
         <NewEventClient />
       </Suspense>
-    </div>
+    </EventPageShell>
   );
 }
