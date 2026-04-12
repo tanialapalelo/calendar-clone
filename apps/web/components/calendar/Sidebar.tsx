@@ -1,17 +1,20 @@
 'use client';
 
 import { format, addMonths, isSameMonth, isSameDay, startOfMonth } from 'date-fns';
-import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, PlusIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CheckIcon,
+  PlusIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  Trash2Icon,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { generateMonthGrid } from '@/lib/month-grid';
 import { shortDaysOfWeek } from '@/constants';
-import { apiFetch } from '@/lib/api/client';
-
-type ApiCalendar = {
-  id: string;
-  name: string;
-  color: string | null;
-};
+import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
+import { CALENDAR_COLORS, getCalendarColor } from '@/lib/calendars/useCalendarsApi';
 
 /** Compact mini-calendar that lets you pick a date */
 function MiniCalendar(props: {
@@ -22,7 +25,6 @@ function MiniCalendar(props: {
   const { currentDate, selectedDate, onPickDate } = props;
   const [monthDate, setMonthDate] = useState(() => startOfMonth(currentDate));
 
-  // Keep month in sync when parent date changes month
   useEffect(() => {
     if (!isSameMonth(monthDate, currentDate)) {
       setMonthDate(startOfMonth(currentDate));
@@ -34,13 +36,14 @@ function MiniCalendar(props: {
 
   return (
     <div className="px-2 py-2">
-      {/* Month nav */}
       <div className="flex items-center justify-between px-1 pb-1">
-        <span className="text-xs font-semibold text-gray-700">{format(monthDate, 'MMM yyyy')}</span>
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          {format(monthDate, 'MMM yyyy')}
+        </span>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
-            className="rounded-full p-0.5 hover:bg-gray-100"
+            className="rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700"
             onClick={() => setMonthDate((d) => addMonths(d, -1))}
             aria-label="Previous month"
           >
@@ -48,7 +51,7 @@ function MiniCalendar(props: {
           </button>
           <button
             type="button"
-            className="rounded-full p-0.5 hover:bg-gray-100"
+            className="rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700"
             onClick={() => setMonthDate((d) => addMonths(d, 1))}
             aria-label="Next month"
           >
@@ -57,34 +60,28 @@ function MiniCalendar(props: {
         </div>
       </div>
 
-      {/* Day headers */}
       <div className="grid grid-cols-7 text-center">
         {shortDaysOfWeek.map((d, i) => (
           <div key={`${d}-${i}`} className="py-0.5 text-[10px] font-semibold text-gray-400">
             {d}
           </div>
         ))}
-
-        {/* Day cells */}
         {cells.map((cell) => {
           const isCurrentMonth = isSameMonth(cell.date, monthDate);
-          // Only highlight today if the cell belongs to the displayed month
           const isToday = cell.isToday && isCurrentMonth;
           const isSelected = isSameDay(cell.date, selectedDate) && isCurrentMonth;
 
           let cls =
             'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-[11px] transition-colors';
 
-          if (isToday && isSelected) {
-            cls += ' bg-[#0B57D0] font-bold text-white';
-          } else if (isToday) {
+          if (isToday) {
             cls += ' bg-[#0B57D0] font-bold text-white';
           } else if (isSelected) {
             cls += ' bg-[#C2E7FF] font-semibold text-gray-900';
           } else if (!isCurrentMonth) {
             cls += ' text-gray-300 hover:bg-gray-50';
           } else {
-            cls += ' text-gray-700 hover:bg-gray-100';
+            cls += ' text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700';
           }
 
           return (
@@ -95,6 +92,7 @@ function MiniCalendar(props: {
                 tabIndex={0}
                 onClick={() => onPickDate(cell.date)}
                 onKeyDown={(e) => e.key === 'Enter' && onPickDate(cell.date)}
+                aria-label={format(cell.date, 'MMMM d, yyyy')}
               >
                 {format(cell.date, 'd')}
               </div>
@@ -106,88 +104,292 @@ function MiniCalendar(props: {
   );
 }
 
-const CALENDAR_COLORS = [
-  '#039BE5',
-  '#0B57D0',
-  '#4CAF50',
-  '#FFB300',
-  '#F44336',
-  '#9C27B0',
-  '#FF7043',
-  '#607D8B',
-];
+// ---------------------------------------------------------------------------
+// CalendarContextMenu — "…" menu per calendar
+// ---------------------------------------------------------------------------
+function CalendarContextMenu(props: {
+  calendar: ApiCalendar;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  const { calendar, onRename, onDelete } = props;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label={`Options for ${calendar.name}`}
+        className="rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-600"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <MoreHorizontalIcon size={14} />
+      </button>
+
+      {open && (
+        <div className="absolute top-6 right-0 z-50 w-40 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+          >
+            <PencilIcon size={14} />
+            Rename
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            <Trash2Icon size={14} />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RenameCalendarModal
+// ---------------------------------------------------------------------------
+function RenameCalendarModal(props: {
+  calendar: ApiCalendar;
+  onSave: (name: string, color: string) => void;
+  onClose: () => void;
+}) {
+  const { calendar, onSave, onClose } = props;
+  const [name, setName] = useState(calendar.name);
+  const [color, setColor] = useState(calendar.color ?? '#039BE5');
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
+      <div className="w-80 rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
+        <h2 className="mb-4 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          Edit calendar
+        </h2>
+        <input
+          autoFocus
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0B57D0] focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Calendar name"
+        />
+        <div className="mb-4 flex flex-wrap gap-2">
+          {CALENDAR_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-label={c}
+              className="h-6 w-6 rounded-full transition-transform hover:scale-110"
+              style={{
+                backgroundColor: c,
+                outline: color === c ? `3px solid ${c}` : 'none',
+                outlineOffset: 2,
+              }}
+              onClick={() => setColor(c)}
+            />
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-full px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!name.trim()}
+            className="rounded-full bg-[#0B57D0] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#044dc2] disabled:opacity-50"
+            onClick={() => onSave(name.trim(), color)}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NewCalendarModal
+// ---------------------------------------------------------------------------
+function NewCalendarModal(props: {
+  onSave: (name: string, color: string) => void;
+  onClose: () => void;
+}) {
+  const { onSave, onClose } = props;
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#039BE5');
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
+      <div className="w-80 rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
+        <h2 className="mb-4 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          New calendar
+        </h2>
+        <input
+          autoFocus
+          className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0B57D0] focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && name.trim()) onSave(name.trim(), color);
+          }}
+          placeholder="Calendar name"
+        />
+        <div className="mb-4 flex flex-wrap gap-2">
+          {CALENDAR_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-label={c}
+              className="h-6 w-6 rounded-full transition-transform hover:scale-110"
+              style={{
+                backgroundColor: c,
+                outline: color === c ? `3px solid ${c}` : 'none',
+                outlineOffset: 2,
+              }}
+              onClick={() => setColor(c)}
+            />
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-full px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!name.trim()}
+            className="rounded-full bg-[#0B57D0] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#044dc2] disabled:opacity-50"
+            onClick={() => onSave(name.trim(), color)}
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
 export function Sidebar(props: {
   currentDate: Date;
   selectedDate: Date;
+  calendars: ApiCalendar[];
+  visibleCalendarIds: Set<string>;
+  onToggleCalendar: (id: string) => void;
+  onCreateCalendar: (name: string, color?: string) => Promise<void>;
+  onUpdateCalendar: (id: string, updates: { name?: string; color?: string }) => Promise<void>;
+  onDeleteCalendar: (id: string) => Promise<void>;
   onPickDate: (d: Date) => void;
   onCreate?: () => void;
 }) {
-  const { currentDate, selectedDate, onPickDate, onCreate } = props;
-  const [calendars, setCalendars] = useState<ApiCalendar[]>([]);
-  const [visibleCalendarIds, setVisibleCalendarIds] = useState<Set<string>>(new Set());
+  const {
+    currentDate,
+    selectedDate,
+    calendars,
+    visibleCalendarIds,
+    onToggleCalendar,
+    onCreateCalendar,
+    onUpdateCalendar,
+    onDeleteCalendar,
+    onPickDate,
+    onCreate,
+  } = props;
 
-  useEffect(() => {
-    apiFetch<ApiCalendar[]>('/v1/calendars')
-      .then((data) => {
-        setCalendars(data);
-        setVisibleCalendarIds(new Set(data.map((c) => c.id)));
-      })
-      .catch(() => {
-        // unauthenticated or network error — sidebar just shows no calendars
-      });
-  }, []);
+  const [newCalOpen, setNewCalOpen] = useState(false);
+  const [renamingCal, setRenamingCal] = useState<ApiCalendar | null>(null);
 
-  const toggleCalendar = (id: string) => {
-    setVisibleCalendarIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
+  const handleDelete = async (cal: ApiCalendar) => {
+    if (confirm(`Delete calendar "${cal.name}" and all its events? This cannot be undone.`)) {
+      await onDeleteCalendar(cal.id);
+    }
   };
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col gap-4 overflow-y-auto bg-[#F8FAFD] py-2 pt-14 sm:pt-2">
-      {/* Create button */}
-      <div className="px-3">
-        <button
-          type="button"
-          onClick={onCreate}
-          className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-shadow hover:shadow-lg"
-        >
-          <PlusIcon size={20} className="text-gray-600" />
-          <span>Create</span>
-        </button>
-      </div>
-      {/* Mini calendar */}
-      <MiniCalendar currentDate={currentDate} selectedDate={selectedDate} onPickDate={onPickDate} />
-
-      {/* Divider */}
-      {calendars.length > 0 && <div className="mx-3" />}
-
-      {/* My Calendars */}
-      {calendars.length > 0 && (
+    <>
+      <aside className="flex h-full w-56 shrink-0 flex-col gap-4 overflow-y-auto bg-[#F8FAFD] py-2 pt-14 sm:pt-2 dark:bg-gray-900">
+        {/* Create button */}
         <div className="px-3">
-          <p className="mb-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
-            My Calendars
-          </p>
+          <button
+            type="button"
+            onClick={onCreate}
+            className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-shadow hover:shadow-lg dark:bg-gray-800 dark:text-gray-200"
+          >
+            <PlusIcon size={20} className="text-gray-600 dark:text-gray-400" />
+            <span>Create</span>
+          </button>
+        </div>
+
+        {/* Mini calendar */}
+        <MiniCalendar
+          currentDate={currentDate}
+          selectedDate={selectedDate}
+          onPickDate={onPickDate}
+        />
+
+        {/* My Calendars */}
+        <div className="px-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+              My Calendars
+            </p>
+            <button
+              type="button"
+              aria-label="Add calendar"
+              className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              onClick={() => setNewCalOpen(true)}
+            >
+              <PlusIcon size={14} />
+            </button>
+          </div>
+
+          {calendars.length === 0 && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">No calendars yet</p>
+          )}
+
           <ul className="space-y-0.5">
             {calendars.map((cal, idx) => {
-              const color = cal.color ?? CALENDAR_COLORS[idx % CALENDAR_COLORS.length];
+              const color = getCalendarColor(cal, idx);
               const isVisible = visibleCalendarIds.has(cal.id);
 
               return (
-                <li key={cal.id}>
+                <li key={cal.id} className="group flex items-center gap-1">
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => toggleCalendar(cal.id)}
+                    className="flex flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
+                    onClick={() => onToggleCalendar(cal.id)}
+                    aria-pressed={isVisible}
+                    aria-label={`${isVisible ? 'Hide' : 'Show'} ${cal.name}`}
                   >
-                    {/* Checkbox-style color swatch */}
                     <span
                       className="flex h-4 w-4 shrink-0 items-center justify-center rounded"
                       style={{
@@ -199,12 +401,50 @@ export function Sidebar(props: {
                     </span>
                     <span className="truncate">{cal.name}</span>
                   </button>
+
+                  <CalendarContextMenu
+                    calendar={cal}
+                    onRename={() => setRenamingCal(cal)}
+                    onDelete={() => void handleDelete(cal)}
+                  />
                 </li>
               );
             })}
           </ul>
+
+          {/* Add new calendar row */}
+          <button
+            type="button"
+            className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            onClick={() => setNewCalOpen(true)}
+          >
+            <PlusIcon size={14} />
+            <span>Add calendar</span>
+          </button>
         </div>
+      </aside>
+
+      {/* Modals */}
+      {newCalOpen && (
+        <NewCalendarModal
+          onClose={() => setNewCalOpen(false)}
+          onSave={async (name, color) => {
+            await onCreateCalendar(name, color);
+            setNewCalOpen(false);
+          }}
+        />
       )}
-    </aside>
+
+      {renamingCal && (
+        <RenameCalendarModal
+          calendar={renamingCal}
+          onClose={() => setRenamingCal(null)}
+          onSave={async (name, color) => {
+            await onUpdateCalendar(renamingCal.id, { name, color });
+            setRenamingCal(null);
+          }}
+        />
+      )}
+    </>
   );
 }
