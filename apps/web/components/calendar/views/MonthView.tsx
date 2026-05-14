@@ -34,16 +34,14 @@ export function MonthView(props: {
   return (
     <div className="overflow-hidden rounded-2xl bg-white">
       {/* Day of week headers */}
-      <div className="grid w-full grid-cols-7 border-b border-gray-200 text-center">
+      <div className="grid w-full grid-cols-7 border-b border-[var(--gcal-border,#dadce0)] text-center">
         {daysOfWeek.map((day) => (
-          <div key={day}>
-            {/* Short on mobile */}
-            <span className="block px-1 py-2 text-xs font-semibold text-gray-500 sm:hidden">
-              {day.slice(0, 1)}
-            </span>
-            <span className="hidden px-3 py-2 text-sm font-semibold text-gray-600 sm:block">
-              {day}
-            </span>
+          <div
+            key={day}
+            className="py-2 text-[11px] font-medium tracking-wider text-[var(--gcal-text-muted,#70757a)] uppercase"
+          >
+            <span className="sm:hidden">{day.slice(0, 1)}</span>
+            <span className="hidden sm:inline">{day.slice(0, 3)}</span>
           </div>
         ))}
       </div>
