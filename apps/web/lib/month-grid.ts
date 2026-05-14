@@ -7,10 +7,8 @@ export type MonthCell = {
 
 export function generateMonthGrid(anchorDate: Date, today: Date = new Date()): MonthCell[] {
   const monthStart = startOfMonth(anchorDate);
-  // const monthEnd = endOfMonth(anchorDate);
 
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  // const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
   const cells: MonthCell[] = [];
   for (let i = 0; i < 42; i++) {

@@ -1,4 +1,4 @@
-import { differenceInMinutes, max, min, parseISO, startOfDay } from 'date-fns';
+import { differenceInMinutes, max, min } from 'date-fns';
 import { dayInterval, eventInterval } from '@/lib/events/interval';
 
 export function clamp(n: number, minN: number, maxN: number) {

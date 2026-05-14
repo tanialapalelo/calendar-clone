@@ -1,11 +1,12 @@
 'use client';
 
-import { addDays, format, parseISO, startOfDay } from 'date-fns';
-import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { addDays, format, isValid, parseISO, subDays } from 'date-fns';
+import { KeyboardEvent, useMemo, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
   BellIcon,
   BriefcaseBusinessIcon,
+  CalendarIcon,
   MapPinIcon,
   NotebookPenIcon,
   UsersIcon,
@@ -36,6 +37,17 @@ function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   }
 }
 
+function dateOnlyToInputValue(dateOnly: string) {
+  return `${dateOnly}T00:00`;
+}
+
+function displayEndDateFromExclusive(endDateExclusive: string) {
+  const d = parseISO(`${endDateExclusive}T00:00:00`);
+  if (!isValid(d)) return endDateExclusive;
+  const prev = subDays(d, 1);
+  return format(prev, 'yyyy-MM-dd');
+}
+
 type Props = {
   event?: CalendarEvent;
   initialDate: Date;
@@ -53,88 +65,108 @@ export function EventFullscreenForm({
   onSave,
   onDelete,
 }: Props) {
-  const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
-  const initialEnd = useMemo(() => new Date(initialDate), [initialDate]);
-
-  const [title, setTitle] = useState('');
-  const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
-  const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
-  const [showTime, setShowTime] = useState(false);
-  const [allDay, setAllDay] = useState(true);
-
-  const [guests, setGuests] = useState<string[]>([]);
-  const [guestInput, setGuestInput] = useState('');
-  const [guestError, setGuestError] = useState<string | null>(null);
-
-  const [location, setLocation] = useState(''); // display name
-  const [locationPlace, setLocationPlace] = useState<PlaceSuggestion | null>(null); // optional full place
-
-  const [tab, setTab] = useState('detail');
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-
-  const [description, setDescription] = useState('');
-  const [busy, setBusy] = useState<'busy' | 'free'>('busy');
-  const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>('default');
-  const [recurrence, setRecurrence] = useState<RecurrenceValue>({
-    rrule: event?.recurrence ?? null,
-  });
-  const [color, setColor] = useState('');
-
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
+  const initialValues = useMemo(() => {
     if (event) {
-      setTitle(event.title ?? '');
-      setStart(toLocalDateTimeInputValue(parseISO(event.start)));
-      setEnd(toLocalDateTimeInputValue(parseISO(event.end)));
-      setAllDay(event.allDay);
-      setShowTime(!event.allDay);
-      setGuests(event.guests ?? []);
-      setGuestInput('');
-      setGuestError(null);
+      const startDateOnly = event.startDate ?? undefined;
+      const endDateOnly = event.endDate ?? undefined;
+      const allDayStart = startDateOnly ? dateOnlyToInputValue(startDateOnly) : undefined;
+      const allDayEnd = endDateOnly
+        ? dateOnlyToInputValue(displayEndDateFromExclusive(endDateOnly))
+        : undefined;
+
+      const fallbackStart = toLocalDateTimeInputValue(parseISO(event.start));
+      const fallbackEnd = toLocalDateTimeInputValue(parseISO(event.end));
+
+      let locationText = '';
+      let locationPlaceValue: PlaceSuggestion | null = null;
+
       try {
         const parsed = typeof event.location === 'string' ? JSON.parse(event.location) : null;
         if (parsed && parsed.display_name) {
-          setLocation(parsed.display_name ?? '');
-          setLocationPlace(parsed);
-        } else {
-          setLocationPlace(null);
+          locationText = parsed.display_name ?? '';
+          locationPlaceValue = parsed;
         }
       } catch {
-        setLocationPlace(null);
+        // fall back to plain string below
       }
-      setNotifications(event.notifications ?? []);
-      setDescription(event.description ?? '');
-      setBusy(event.busyStatus ?? 'busy');
-      setVisibility(event.visibility ?? 'default');
-      setColor(event.color ?? '#0B57D0');
-      setRecurrence({ rrule: event.recurrence ?? null });
-      setSubmitError(null);
-    } else {
-      const s = startOfDayDefaultHour(initialStart);
-      const e = startOfDayDefaultHour(initialEnd);
-      setStart(toLocalDateTimeInputValue(s));
-      setEnd(toLocalDateTimeInputValue(e));
-      setAllDay(true);
-      setShowTime(false);
-      setGuests([]);
-      setGuestInput('');
-      setGuestError(null);
-      setLocation('');
-      setLocationPlace(null);
-      setColor('#0B57D0');
-      setNotifications([
-        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
-      ]);
-      setDescription('');
-      setBusy('busy');
-      setVisibility('default');
-      setTitle('');
-      setRecurrence({ rrule: null });
-      setSubmitError(null);
+
+      if (!locationText) locationText = event.location ?? '';
+
+      return {
+        title: event.title ?? '',
+        start: event.allDay ? (allDayStart ?? fallbackStart) : fallbackStart,
+        end: event.allDay ? (allDayEnd ?? fallbackEnd) : fallbackEnd,
+        allDay: event.allDay,
+        showTime: !event.allDay,
+        guests: event.guests ?? [],
+        guestInput: '',
+        guestError: null as string | null,
+        location: locationText,
+        locationPlace: locationPlaceValue,
+        notifications: event.notifications ?? [],
+        description: event.description ?? '',
+        busy: event.busyStatus ?? 'busy',
+        visibility: event.visibility ?? 'default',
+        recurrence: { rrule: event.recurrence ?? null } as RecurrenceValue,
+        color: event.color ?? '#0B57D0',
+      };
     }
+
+    const s = startOfDayDefaultHour(new Date(initialDate));
+    const e = startOfDayDefaultHour(new Date(initialDate));
+
+    return {
+      title: '',
+      start: toLocalDateTimeInputValue(s),
+      end: toLocalDateTimeInputValue(e),
+      allDay: true,
+      showTime: false,
+      guests: [] as string[],
+      guestInput: '',
+      guestError: null as string | null,
+      location: '',
+      locationPlace: null as PlaceSuggestion | null,
+      notifications: [
+        { id: crypto.randomUUID(), method: 'notification', amount: 30, unit: 'minutes' },
+      ] as NotificationItem[],
+      description: '',
+      busy: 'busy' as 'busy' | 'free',
+      visibility: 'default' as 'default' | 'public' | 'private',
+      recurrence: { rrule: null } as RecurrenceValue,
+      color: '#0B57D0',
+    };
   }, [event, initialDate]);
+
+  const [title, setTitle] = useState(initialValues.title);
+  const [start, setStart] = useState(initialValues.start);
+  const [end, setEnd] = useState(initialValues.end);
+  const [showTime, setShowTime] = useState(initialValues.showTime);
+  const [allDay, setAllDay] = useState(initialValues.allDay);
+
+  const [guests, setGuests] = useState<string[]>(initialValues.guests);
+  const [guestInput, setGuestInput] = useState(initialValues.guestInput);
+  const [guestError, setGuestError] = useState<string | null>(initialValues.guestError);
+
+  const [location, setLocation] = useState(initialValues.location); // display name
+  const [locationPlace, setLocationPlace] = useState<PlaceSuggestion | null>(
+    initialValues.locationPlace,
+  ); // optional full place
+
+  const [tab, setTab] = useState('detail');
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>(
+    initialValues.notifications,
+  );
+
+  const [description, setDescription] = useState(initialValues.description);
+  const [busy, setBusy] = useState<'busy' | 'free'>(initialValues.busy);
+  const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>(
+    initialValues.visibility,
+  );
+  const [recurrence, setRecurrence] = useState<RecurrenceValue>(initialValues.recurrence);
+  const [color, setColor] = useState(initialValues.color);
+
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function isValidEmail(email: string) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -212,23 +244,9 @@ export function EventFullscreenForm({
   const submit = () => {
     if (!validateBeforeSubmit()) return;
 
-    let startDate: Date;
-    let endDate: Date;
-    if (allDay) {
-      const rawStart = new Date(start);
-      const dayStart = startOfDay(rawStart);
-      startDate = dayStart;
-      endDate = addDays(dayStart, 1); // exclusive end at next midnight
-    } else {
-      startDate = new Date(start);
-      endDate = new Date(end);
-    }
-
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
       title,
-      start: startDate.toISOString(),
-      end: endDate.toISOString(),
       allDay,
       guests: guests.length ? guests : undefined,
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
@@ -238,7 +256,32 @@ export function EventFullscreenForm({
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
       color: color || '#0B57D0',
+      start: '',
+      end: '',
+      recurringEventId: event?.recurringEventId,
+      originalStartAt: event?.originalStartAt,
+      isRecurringInstance: event?.isRecurringInstance ?? false,
     };
+
+    if (allDay) {
+      const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
+      const startDateObj = parseISO(`${startDateStr}T00:00:00`);
+      const endDateObj = addDays(startDateObj, 1);
+
+      const endDateStr = format(endDateObj, 'yyyy-MM-dd'); // exclusive endDate
+
+      payload.startDate = startDateStr;
+      payload.endDate = endDateStr;
+
+      // Keep ISO instants for backward compatibility (optional)
+      payload.start = startDateObj.toISOString();
+      payload.end = endDateObj.toISOString();
+    } else {
+      const startObj = new Date(start);
+      const endObj = new Date(end);
+      payload.start = startObj.toISOString();
+      payload.end = endObj.toISOString();
+    }
 
     if (event) onSave?.({ ...payload, id: event.id });
     else onCreate?.(payload);
@@ -253,331 +296,430 @@ export function EventFullscreenForm({
   })();
 
   return (
-    <div className="space-y-3 px-4 py-4">
-      <button onClick={onClose}>
-        <XIcon size={16} />
-      </button>
+    // ─── STEP 1: Root layout — flex column, full screen ───────────────────────
+    <div className="flex min-h-screen flex-col">
+      {/* ── TOP BAR: X + Title input + Save button ──────────────────────────── */}
+      {/* STEP 1 + 5: Save moved to top-right, X on far left */}
+      <div className="flex w-2/3 items-center gap-4 px-6 py-3 dark:border-gray-700">
+        {/* X close button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+          aria-label="Close"
+        >
+          <XIcon size={20} />
+        </button>
 
-      <div>
+        {/* Title input — grows to fill space, underline only on focus */}
+        {/* STEP 1: title is now in the header, not inside the form body */}
         <input
-          className="w-full rounded border px-3 py-2 text-sm"
+          className="flex-1 border-b bg-transparent text-xl text-gray-900 placeholder-gray-400 focus:border-[#0B57D0] focus:outline-none dark:text-gray-100"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Add title"
           autoFocus
         />
+
+        {/* Save button — top right */}
+        {/* STEP 5: moved from bottom to header */}
+        <button
+          type="button"
+          onClick={submit}
+          className="rounded-full bg-[#0B57D0] px-5 py-2 text-sm font-semibold text-white hover:bg-[#044dc2] disabled:opacity-50"
+        >
+          Save
+        </button>
+
+        {event && (
+          <button
+            type="button"
+            onClick={() => onDelete?.(event.id)}
+            className="rounded-full bg-red-500 px-5 py-2 text-sm font-semibold text-white hover:bg-red-600 dark:hover:bg-red-900/20"
+          >
+            Delete event
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">Start</label>
-          <input
-            type={allDay ? 'date' : 'datetime-local'}
-            className="w-full rounded border px-3 py-2 text-sm"
-            value={allDay ? start.slice(0, 10) : start}
-            onChange={(e) => {
-              const v = e.target.value;
-              setStart(allDay ? `${v}T00:00` : v);
-            }}
-          />
-        </div>
+      {/* ── BODY: Left column (form) + Right column (guests) ──────────────────── */}
+      {/* STEP 1: two clear columns, not mixed grid */}
+      <div className="flex flex-1 overflow-auto px-6">
+        {/* ── LEFT COLUMN ──────────────────────────────────────────────────────── */}
+        <div className="flex-1 space-y-1">
+          {/* ── STEP 2: Date/Time — inline row like Google Calendar ────────────── */}
+          {/* Layout: [start date] [start time] to [end time] [end date]          */}
+          <div className="flex flex-wrap items-center gap-1 py-2">
+            {/* Start date */}
+            <div className="relative">
+              <input
+                type="date"
+                className="bg-#E9EEF6 cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                value={start.slice(0, 10)}
+                onChange={(e) =>
+                  setStart(
+                    allDay ? `${e.target.value}T00:00` : `${e.target.value}T${start.slice(11, 16)}`,
+                  )
+                }
+              />
+            </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">End</label>
-          <input
-            type={allDay ? 'date' : 'datetime-local'}
-            className="w-full rounded border px-3 py-2 text-sm"
-            value={allDay ? end.slice(0, 10) : end}
-            onChange={(e) => {
-              const v = e.target.value;
-              setEnd(allDay ? `${v}T00:00` : v);
-            }}
-          />
-        </div>
+            {/* Start time — only when not all-day */}
+            {!allDay && (
+              <input
+                type="time"
+                className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                value={start.slice(11, 16)}
+                onChange={(e) => setStart(`${start.slice(0, 10)}T${e.target.value}`)}
+              />
+            )}
 
-        <div className="col-span-2 flex gap-2">
-          {!showTime ? (
-            <button
-              type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
-              onClick={onClickAddTime}
-            >
-              Add time
-            </button>
-          ) : (
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <span className="px-1 text-sm">to</span>
+
+            {/* End time — only when not all-day */}
+            {!allDay && (
+              <input
+                type="time"
+                className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                value={end.slice(11, 16)}
+                onChange={(e) => setEnd(`${end.slice(0, 10)}T${e.target.value}`)}
+              />
+            )}
+
+            {/* End date */}
+            <input
+              type="date"
+              className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+              value={allDay ? end.slice(0, 10) : end.slice(0, 10)}
+              onChange={(e) =>
+                setEnd(
+                  allDay ? `${e.target.value}T00:00` : `${e.target.value}T${end.slice(11, 16)}`,
+                )
+              }
+            />
+          </div>
+
+          {/* ── STEP 3: All day + Recurrence — standalone row, always visible ───── */}
+          {/* Before: hidden inside conditional. Now: always shown as its own row  */}
+          <div className="flex items-center gap-6 py-1">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input
                 type="checkbox"
                 checked={allDay}
                 onChange={(e) => onToggleAllDayWhenShown(e.target.checked)}
+                className="h-4 w-4 rounded accent-[#0B57D0]"
               />
               All day
             </label>
-          )}
 
-          <div>
             <RecurrencePicker
               value={recurrence}
               onChange={setRecurrence}
               startDate={recurrencePickerStartDate}
             />
           </div>
-        </div>
-      </div>
 
-      <div className="rounded-xl bg-white p-3 shadow">
-        <div className="border-b">
-          {eventFormOption.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={[
-                'px-3 py-1 text-sm font-medium',
-                tab === option.value
-                  ? 'border-b-2 border-b-[#0B57D0] text-[#0B57D0]'
-                  : 'text-gray-600',
-              ].join(' ')}
-              onClick={() => setTab(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'detail' && (
-          <>
-            {/* Location, Notifications, Color, Status, Description, Guests */}
-            <div className="flex items-center gap-2 pt-3">
-              <MapPinIcon size={16} />
-              <div className="flex-1">
-                <LocationAutocomplete
-                  value={location}
-                  onChange={(v) => {
-                    setLocation(v);
-                    setLocationPlace(null);
-                  }}
-                  onSelect={(place) => {
-                    setLocation(place.display_name);
-                    setLocationPlace(place);
-                  }}
-                  placeholder="Add location"
-                />
-                {locationPlace && (
-                  <div className="mt-1 text-xs text-gray-500">
-                    Selected: {locationPlace.display_name}
-                    {locationPlace.lat && locationPlace.lon && (
-                      <span className="ml-2">
-                        ({locationPlace.lat.slice(0, 7)}, {locationPlace.lon.slice(0, 7)})
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+          <div className="my-6 rounded-lg bg-white p-2 shadow dark:bg-gray-900">
+            {/* ── Tabs: Event details / Find a time ────────────────────────────────── */}
+            <div className="border-b border-gray-200 pt-4 dark:border-gray-700">
+              {eventFormOption.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={[
+                    'px-4 py-2 text-sm font-medium transition-colors',
+                    tab === option.value
+                      ? 'border-b-2 border-[#0B57D0] text-[#0B57D0]'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400',
+                  ].join(' ')}
+                  onClick={() => setTab(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
 
-            <div className="mt-3 flex items-start gap-2">
-              <BellIcon size={16} />
-              <div className="flex-1">
-                {notifications.map((n) => (
-                  <div key={n.id} className="mb-2 flex items-center gap-2">
-                    <select
-                      className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                      onChange={(e) => updateNotification(n.id, { method: e.target.value })}
-                      value={n.method}
-                    >
-                      {notificationOption.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+            {tab === 'detail' && (
+              <div className="space-y-1 pt-2">
+                {/* ── STEP 6: Every detail row uses the same icon + content pattern ── */}
+                {/* Pattern: [icon 20px, text-gray-500] [flex-1 content]              */}
 
-                    <input
-                      type="number"
-                      min={1}
-                      value={n.amount}
-                      max={60}
-                      className="w-16 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                      onChange={(e) => updateNotification(n.id, { amount: Number(e.target.value) })}
+                {/* Location */}
+                <div className="flex items-start gap-4 rounded-lg px-2 py-2">
+                  <div className="mt-2 shrink-0">
+                    <MapPinIcon size={20} className="text-gray-500" />
+                  </div>
+                  <div className="flex-1">
+                    <LocationAutocomplete
+                      value={location}
+                      onChange={(v) => {
+                        setLocation(v);
+                        setLocationPlace(null);
+                      }}
+                      onSelect={(place) => {
+                        setLocation(place.display_name);
+                        setLocationPlace(place);
+                      }}
+                      placeholder="Add location"
                     />
-
-                    <select
-                      value={n.unit}
-                      onChange={(e) =>
-                        updateNotification(n.id, {
-                          unit: e.target.value as NotificationItem['unit'],
-                        })
-                      }
-                      className="rounded bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                    >
-                      {unitOfTimeOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button onClick={() => removeNotification(n.id)}>
-                      <XIcon
-                        size={25}
-                        className="rounded-full p-1 text-gray-600 hover:bg-gray-200"
-                      />
-                    </button>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            <button
-              className="my-1 ml-6 rounded-full p-2 text-sm text-[#0B57D0] hover:bg-blue-100"
-              onClick={addNotification}
-            >
-              Add notification
-            </button>
+                {/* Notifications */}
+                <div className="flex items-start gap-4 px-2 py-2">
+                  <div className="mt-2 shrink-0">
+                    <BellIcon size={20} className="text-gray-500" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    {notifications.map((n) => (
+                      <div key={n.id} className="flex items-center gap-2">
+                        <select
+                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                          value={n.method}
+                          onChange={(e) => updateNotification(n.id, { method: e.target.value })}
+                        >
+                          {notificationOption.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
 
-            <div className="flex items-center gap-2">
-              <div className="w-5" />
-              <div className="flex-1">
-                <ColorPicker value={color} onChange={setColor} />
-              </div>
-            </div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={40320}
+                          value={n.amount}
+                          className="w-16 rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700"
+                          onChange={(e) =>
+                            updateNotification(n.id, { amount: Number(e.target.value) })
+                          }
+                        />
 
-            <div className="flex items-center gap-2 pt-3">
-              <BriefcaseBusinessIcon size={16} />
-              <div className="flex-1">
-                <select
-                  className="rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                  onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
-                  value={busy}
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                        <select
+                          value={n.unit}
+                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                          onChange={(e) =>
+                            updateNotification(n.id, {
+                              unit: e.target.value as NotificationItem['unit'],
+                            })
+                          }
+                        >
+                          {unitOfTimeOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
 
-                <select
-                  className="ml-3 rounded-md bg-gray-100 p-3 text-sm hover:bg-gray-200"
-                  onChange={(e) =>
-                    setVisibility(e.target.value as 'default' | 'public' | 'private')
-                  }
-                  value={visibility}
-                >
-                  {eventVisibilityOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                        <button
+                          type="button"
+                          onClick={() => removeNotification(n.id)}
+                          className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          aria-label="Remove notification"
+                        >
+                          <XIcon size={16} />
+                        </button>
+                      </div>
+                    ))}
 
-            <div className="flex items-center gap-2 pt-3">
-              <NotebookPenIcon size={16} />
-              <div className="flex-1">
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Add description"
-                  className="min-h-[120px] w-full rounded border p-3 text-sm"
-                />
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Guests */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-4">
-          {/* Guests */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <UsersIcon size={16} />
-              <input
-                className="flex-1 rounded border px-3 py-2 text-sm"
-                value={guestInput}
-                onChange={(e) => {
-                  setGuestInput(e.target.value);
-                  if (guestError) setGuestError(null);
-                }}
-                onKeyDown={onGuestInputKey}
-                placeholder="Add guest and press Enter"
-              />
-              <button
-                type="button"
-                className="rounded px-3 py-1 text-sm hover:bg-gray-100"
-                onClick={addGuest}
-              >
-                Add
-              </button>
-            </div>
-
-            {guestError && <div className="text-sm text-red-600">{guestError}</div>}
-
-            {(guests ?? []).length > 0 && (
-              <div className="space-y-1">
-                {(guests ?? []).map((g, i) => (
-                  <div
-                    key={`${g}-${i}`}
-                    className="flex items-center justify-between gap-2 px-1 py-1 hover:bg-gray-100"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-700">{g}</span>
-                    </div>
                     <button
                       type="button"
-                      className="rounded-full px-2 py-1 text-sm hover:bg-gray-200"
-                      onClick={() =>
-                        setGuests((prev) => (prev ?? []).filter((_, idx) => idx !== i))
-                      }
+                      onClick={addNotification}
+                      className="text-sm font-medium text-[#0B57D0] hover:underline"
                     >
-                      Remove
+                      Add notification
                     </button>
                   </div>
-                ))}
+                </div>
+
+                {/* ── STEP 4: Calendar dropdown + Color circle ──────────────────────── */}
+                {/* Before: CalendarIcon + ColorPicker floating alone                   */}
+                {/* After:  "📅 [Calendar name ▼]  [🔵 color circle]"                 */}
+                <div className="flex items-center gap-4 px-2 py-2">
+                  <div className="shrink-0">
+                    <BriefcaseBusinessIcon size={20} className="text-gray-500" />
+                  </div>
+                  <div className="flex flex-1 flex-wrap items-center gap-3">
+                    {/* Status: Busy / Free */}
+                    <select
+                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      value={busy}
+                      onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
+                    >
+                      {statusOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Visibility */}
+                    <select
+                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      value={visibility}
+                      onChange={(e) =>
+                        setVisibility(e.target.value as 'default' | 'public' | 'private')
+                      }
+                    >
+                      {eventVisibilityOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Color picker row */}
+                <div className="flex items-center gap-4 px-2 py-1">
+                  <div className="w-5 shrink-0">
+                    <CalendarIcon size={20} className="text-gray-500" />
+                  </div>
+                  <ColorPicker value={color} onChange={setColor} />
+                </div>
+
+                {/* ── STEP 7: Description with toolbar hint ─────────────────────────── */}
+                <div className="flex items-start gap-4 px-2 py-2">
+                  <div className="mt-2 shrink-0">
+                    <NotebookPenIcon size={20} className="text-gray-500" />
+                  </div>
+                  <div className="flex-1 overflow-hidden rounded-lg border border-transparent focus-within:border-gray-300 hover:border-gray-200 dark:hover:border-gray-600">
+                    {/* Simple formatting toolbar (visual only for now) */}
+                    <div className="flex items-center gap-0.5 border-b border-gray-100 px-2 py-1 dark:border-gray-700">
+                      <button
+                        type="button"
+                        className="rounded p-1 text-xs font-bold text-gray-500 hover:bg-gray-100"
+                        title="Bold"
+                      >
+                        B
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-xs text-gray-500 italic hover:bg-gray-100"
+                        title="Italic"
+                      >
+                        I
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-xs text-gray-500 underline hover:bg-gray-100"
+                        title="Underline"
+                      >
+                        U
+                      </button>
+                      <div className="mx-1 h-4 w-px bg-gray-200" />
+                      <button
+                        type="button"
+                        className="rounded p-1 text-xs text-gray-500 hover:bg-gray-100"
+                        title="Ordered list"
+                      >
+                        1.
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-xs text-gray-500 hover:bg-gray-100"
+                        title="Bullet list"
+                      >
+                        •
+                      </button>
+                    </div>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Add description"
+                      rows={4}
+                      className="w-full resize-none p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none dark:bg-gray-900 dark:text-gray-200"
+                    />
+                  </div>
+                </div>
               </div>
             )}
+
+            {tab === 'time' && (
+              <div className="py-6 text-sm text-gray-400">Find a time — coming soon</div>
+            )}
+          </div>
+
+          {/* Validation error */}
+          {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+        </div>
+
+        {/* ── RIGHT COLUMN: Guests ──────────────────────────────────────────────── */}
+        {/* STEP 1: Guests always in its own right column, not nested inside left  */}
+        <div className="w-2/5 shrink-0 px-8 py-32">
+          <h3 className="mb-3 w-fit border-b-2 border-[#0B57D0] text-sm font-semibold text-[#0B57D0] dark:text-gray-300">
+            Guests
+          </h3>
+
+          {/* Add guest input */}
+          <div className="flex items-center gap-2 rounded-md bg-gray-200 px-3 py-1.5 focus-within:border-[#0B57D0] hover:bg-gray-300 dark:bg-gray-600">
+            <UsersIcon size={16} className="shrink-0 text-gray-400" />
+            <input
+              className="flex-1 text-sm text-gray-700 placeholder-gray-400 focus:outline-none dark:bg-transparent dark:text-gray-200"
+              value={guestInput}
+              onChange={(e) => {
+                setGuestInput(e.target.value);
+                if (guestError) setGuestError(null);
+              }}
+              onKeyDown={onGuestInputKey}
+              placeholder="Add guests"
+            />
+          </div>
+
+          {guestError && <p className="mt-1 text-xs text-red-600">{guestError}</p>}
+
+          {/* Guest list */}
+          {guests.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {guests.map((g, i) => (
+                <li
+                  key={`${g}-${i}`}
+                  className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  {/* Avatar circle */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0B57D0] text-xs font-semibold text-white">
+                      {g[0]?.toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{g}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGuests((prev) => prev.filter((_, idx) => idx !== i))}
+                    className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    aria-label={`Remove ${g}`}
+                  >
+                    <XIcon size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Guest permissions */}
+          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700">
+            <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+              Guest permissions
+            </p>
+            <div className="space-y-2">
+              {[
+                { label: 'Modify event', defaultChecked: false },
+                { label: 'Invite others', defaultChecked: true },
+                { label: 'See guest list', defaultChecked: true },
+              ].map(({ label, defaultChecked }) => (
+                <label key={label} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    defaultChecked={defaultChecked}
+                    className="h-4 w-4 rounded accent-[#0B57D0]"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
-        {/* right column: guest permissions, simple preview */}
-        <div>
-          <div className="mb-2 text-sm font-semibold">Guest permissions</div>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" />
-            <span className="text-sm">Modify event</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" defaultChecked />
-            <span className="text-sm">Invite others</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" defaultChecked />
-            <span className="text-sm">See guest list</span>
-          </label>
-        </div>
-      </div>
-
-      {submitError && <div className="text-sm text-red-600">{submitError}</div>}
-
-      <div className="flex items-center justify-end gap-2 px-4 py-3">
-        <button
-          type="button"
-          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
-          onClick={submit}
-        >
-          Save
-        </button>
-        {event && (
-          <button
-            type="button"
-            className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
-            onClick={() => onDelete?.(event.id)}
-          >
-            Delete
-          </button>
-        )}
       </div>
     </div>
   );

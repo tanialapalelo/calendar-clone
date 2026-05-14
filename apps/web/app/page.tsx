@@ -23,7 +23,7 @@ function parseIsoDateOnly(value: string | undefined): Date {
 }
 
 function parseView(value: string | undefined): CalendarView {
-  if (value === 'year' || value === 'month' || value === 'day') return value;
+  if (value === 'year' || value === 'month' || value === 'week' || value === 'day') return value;
   return 'month';
 }
 

@@ -5,6 +5,7 @@ export const shortDaysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export const viewOptions = [
   { value: 'year', label: 'Year' },
   { value: 'month', label: 'Month' },
+  { value: 'week', label: 'Week' },
   { value: 'day', label: 'Day' },
 ];
 

@@ -1,8 +1,135 @@
+'use client';
+
 import { format } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
-import { exportEventsToICS } from '@/lib/events/ical';
-import { useRef } from 'react';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MenuIcon,
+  SearchIcon,
+  XIcon,
+  ChevronDownIcon,
+} from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { UserMenu } from '@/components/auth/UserMenu';
+import { SettingsMenu } from '@/components/ui/SettingsMenu';
+import { apiFetch } from '@/lib/api/client';
+import { apiEventToCalendarEvent, type ApiEvent } from '@/lib/api/events';
+import { DatePickerPopover } from '@/components/calendar/DatePickerPopover';
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) {
+  const { onOpenEvent } = props;
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CalendarEvent[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const debouncedQuery = useDebounce(query, 300);
+
+  useEffect(() => {
+    if (!debouncedQuery.trim()) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    const qs = new URLSearchParams({ q: debouncedQuery });
+    apiFetch<ApiEvent[]>(`/v1/events/search?${qs.toString()}`)
+      .then((data) => {
+        setResults(data.map(apiEventToCalendarEvent));
+        setOpen(true);
+      })
+      .catch(() => setResults([]))
+      .finally(() => setLoading(false));
+  }, [debouncedQuery]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative hidden sm:block">
+      <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 dark:bg-gray-800">
+        <SearchIcon size={15} className="shrink-0 text-gray-500" />
+        <input
+          type="search"
+          aria-label="Search events"
+          placeholder="Search events"
+          value={query}
+          className="w-48 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none dark:text-gray-200"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!e.target.value.trim()) setOpen(false);
+          }}
+          onFocus={() => results.length > 0 && setOpen(true)}
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setQuery('');
+              setResults([]);
+              setOpen(false);
+            }}
+          >
+            <XIcon size={13} className="text-gray-400 hover:text-gray-600" />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute top-10 left-0 z-50 w-80 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+          {loading && <p className="px-4 py-3 text-sm text-gray-400">Searching…</p>}
+          {!loading && results.length === 0 && (
+            <p className="px-4 py-3 text-sm text-gray-400">No results found</p>
+          )}
+          {!loading &&
+            results.map((ev) => (
+              <button
+                key={ev.id}
+                type="button"
+                className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={(e) => {
+                  onOpenEvent(ev.id, e.currentTarget.getBoundingClientRect());
+                  setOpen(false);
+                  setQuery('');
+                }}
+              >
+                <span
+                  className="mt-0.5 h-3 w-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: ev.color }}
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                    {ev.title}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {format(new Date(ev.start), 'MMM d, yyyy · HH:mm')}
+                  </p>
+                </div>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function CalendarHeader(props: {
   view: CalendarView;
@@ -11,13 +138,26 @@ export function CalendarHeader(props: {
   onPrev: () => void;
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
+  onChangeDate?: (d: Date) => void;
   onCreate: () => void;
   onExportCalendar?: () => void;
   onImportCalendar?: (file: File) => void;
+  onToggleSidebar?: () => void;
+  onOpenEvent?: (id: string, rect: DOMRect) => void;
 }) {
-  const { view, date, onToday, onPrev, onNext, onChangeView, onCreate, onExportCalendar, onImportCalendar } = props;
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    view,
+    date,
+    onToday,
+    onPrev,
+    onNext,
+    onChangeView,
+    onChangeDate,
+    onExportCalendar,
+    onImportCalendar,
+    onToggleSidebar,
+    onOpenEvent,
+  } = props;
 
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
@@ -25,75 +165,122 @@ export function CalendarHeader(props: {
     return format(date, 'MMMM d, yyyy');
   })();
 
-  return (
-    <header className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="rounded-full border border-black px-3 py-1.5 text-sm hover:bg-gray-100"
-          onClick={onToday}
-        >
-          Today
-        </button>
+  // --- date picker popover state ---
+  const titleBtnRef = useRef<HTMLButtonElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerRect, setPickerRect] = useState<DOMRect | null>(null);
 
-        <div className="flex items-center gap-1">
+  const openPicker = () => {
+    if (titleBtnRef.current) {
+      setPickerRect(titleBtnRef.current.getBoundingClientRect());
+      setPickerOpen(true);
+    }
+  };
+
+  // Keep the popover anchored when the window resizes
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onResize = () => {
+      if (titleBtnRef.current) setPickerRect(titleBtnRef.current.getBoundingClientRect());
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [pickerOpen]);
+
+  return (
+    <>
+      <header className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3">
+        {/* Left: Hamburger + logo + Today + prev/next + title */}
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           <button
             type="button"
-            className="rounded-full border-none p-1 text-sm hover:bg-gray-50"
-            onClick={onPrev}
-            aria-label="Previous"
+            className="rounded-full p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={onToggleSidebar}
+            aria-label="Toggle sidebar"
           >
-            <ChevronLeftIcon />
+            <MenuIcon size={20} />
           </button>
+
+          <div className="mr-1 hidden h-8 w-8 items-center justify-center rounded-xl bg-[#0B57D0] sm:flex">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className="h-5 w-5 text-white"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </div>
+
+          <h1>Calendar</h1>
+
           <button
             type="button"
-            className="rounded-full border-none p-1 text-sm hover:bg-gray-50"
-            onClick={onNext}
-            aria-label="Next"
+            className="shrink-0 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-100 sm:px-3 sm:py-1.5 sm:text-sm dark:border-gray-600 dark:hover:bg-gray-700"
+            onClick={onToday}
           >
-            <ChevronRightIcon />
+            Today
+          </button>
+
+          <div className="flex items-center">
+            <button
+              type="button"
+              className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={onPrev}
+              aria-label="Previous"
+            >
+              <ChevronLeftIcon size={18} />
+            </button>
+            <button
+              type="button"
+              className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={onNext}
+              aria-label="Next"
+            >
+              <ChevronRightIcon size={18} />
+            </button>
+          </div>
+
+          <button
+            ref={titleBtnRef}
+            type="button"
+            onClick={openPicker}
+            aria-haspopup="dialog"
+            aria-expanded={pickerOpen}
+            className="group flex items-center gap-1 rounded-full px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <span className="truncate text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
+              {title}
+            </span>
+            <ChevronDownIcon
+              size={16}
+              className="text-gray-500 transition-transform group-aria-expanded:rotate-180"
+            />
           </button>
         </div>
 
-        <h1 className="ml-2 text-base font-semibold text-gray-900">{title}</h1>
-      </div>
+        {/* Right: Search + ViewSwitcher + Settings + UserMenu */}
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          {onOpenEvent && <SearchBar onOpenEvent={onOpenEvent} />}
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="flex items-center justify-center rounded-xl border bg-white px-3 py-1.5 text-sm font-semibold hover:bg-gray-100"
-          onClick={() => onCreate()}
-        >
-          <PlusIcon size={16} />
-          <span>Create</span>
-        </button>
-        <ViewSwitcher view={view} onChange={onChangeView} />
-        <button
-          type="button"
-          className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
-          onClick={() => onExportCalendar?.()}
-        >
-          Export
-        </button>
-        <button
-          type="button"
-          className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Import
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".ics,text/calendar"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file && onImportCalendar) onImportCalendar(file);
-            e.target.value = '';
-          }}
-        />
-      </div>
-    </header>
+          <ViewSwitcher view={view} onChange={onChangeView} />
+
+          <SettingsMenu onExportCalendar={onExportCalendar} onImportCalendar={onImportCalendar} />
+
+          <div className="h-5 w-px bg-gray-200 dark:bg-gray-600" />
+          <UserMenu />
+        </div>
+      </header>
+
+      <DatePickerPopover
+        open={pickerOpen}
+        anchorRect={pickerRect}
+        selected={date}
+        onSelect={(d) => onChangeDate?.(d)}
+        onClose={() => setPickerOpen(false)}
+      />
+    </>
   );
 }

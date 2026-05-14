@@ -7,8 +7,7 @@ export type PlaceSuggestion = {
   display_name: string;
   lat: string;
   lon: string;
-  [k: string]: any;
-};
+} & Record<string, unknown>;
 
 export default function LocationAutocomplete(props: {
   value?: string;
@@ -67,14 +66,18 @@ export default function LocationAutocomplete(props: {
         headers: { 'Accept-Language': navigator.language || 'en' },
       })
         .then((res) => res.json())
-        .then((data: any[]) => {
-          const list = (data ?? []).map((d) => ({
-            place_id: String(d.place_id ?? d.osm_id ?? Math.random()),
-            display_name: d.display_name,
-            lat: d.lat,
-            lon: d.lon,
-            ...d,
-          }));
+        .then((data: unknown) => {
+          const items = Array.isArray(data) ? data : [];
+          const list = items.map((d) => {
+            const item = d as Record<string, unknown>;
+            return {
+              place_id: String(item.place_id ?? item.osm_id ?? Math.random()),
+              display_name: String(item.display_name ?? ''),
+              lat: String(item.lat ?? ''),
+              lon: String(item.lon ?? ''),
+              ...item,
+            } as PlaceSuggestion;
+          });
           setSuggestions(list);
           setHighlight(0);
         })
@@ -154,15 +157,21 @@ export default function LocationAutocomplete(props: {
         }}
         onKeyDown={onKeyDown}
         className="w-full rounded border px-3 py-2 text-sm"
+        role="combobox"
         aria-autocomplete="list"
         aria-expanded={open}
+        aria-controls="location-suggestions"
         aria-activedescendant={
           open && suggestions[highlight] ? `loc-${suggestions[highlight].place_id}` : undefined
         }
       />
 
       {open && (suggestions.length > 0 || loading) && (
-        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-white shadow-sm">
+        <div
+          id="location-suggestions"
+          role="listbox"
+          className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-white shadow-sm"
+        >
           {loading && suggestions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-500">Searching…</div>
           ) : null}

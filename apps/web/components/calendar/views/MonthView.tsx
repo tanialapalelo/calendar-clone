@@ -1,13 +1,14 @@
 'use client';
 
-import { generateMonthGrid } from '@/lib/month-grid';
-import { format, parseISO, startOfDay, addDays } from 'date-fns';
-import { eventsForDay } from '@/lib/events/day';
-import { daysOfWeek } from '@/constants';
-import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
-import { isBarEventInMonth } from '@/lib/events/month-classify';
+import { addDays, format, parseISO, startOfDay } from 'date-fns';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
-import { expandRecurringEvents, getSeriesOpenId } from '@/lib/events/recurrence';
+
+import { daysOfWeek } from '@/constants';
+import { eventsForDay } from '@/lib/events/day';
+import { getEventLayoutRange } from '@/lib/events/layout-range';
+import { isBarEventInMonth } from '@/lib/events/month-classify';
+import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
+import { generateMonthGrid } from '@/lib/month-grid';
 
 export function MonthView(props: {
   date: Date;
@@ -18,40 +19,45 @@ export function MonthView(props: {
   onOpenDayPopover?: (d: Date, rect: DOMRect) => void;
 }) {
   const { date, events, onSelectDate, onCreate, onOpenEvent, onOpenDayPopover } = props;
+
   const cells = generateMonthGrid(date);
   const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) =>
     cells.slice(w * 7, w * 7 + 7),
   );
+
   const ROW_HEIGHT = 18;
   const ROW_GAP = 4;
-  const BAR_ROWS = 2; // fixed number of bar lanes to reserve per week
-  const TOTAL_ROWS = 4; // total vertical rows per day (bars + timed)
+  const BAR_ROWS = 2;
+  const TOTAL_ROWS = 4;
   const OVERLAY_TOP = 44;
 
   return (
-    <div className="rounded-3xl bg-white p-4">
-      {/* Days of week header */}
-      <div className="grid w-full grid-cols-7 text-center">
+    <div className="overflow-hidden rounded-2xl bg-white">
+      {/* Day of week headers */}
+      <div className="grid w-full grid-cols-7 border-b border-[var(--gcal-border,#dadce0)] text-center">
         {daysOfWeek.map((day) => (
-          <div key={day}>
-            <span className="px-3 py-2 text-sm font-semibold text-gray-600">{day}</span>
+          <div
+            key={day}
+            className="py-2 text-[11px] font-medium tracking-wider text-[var(--gcal-text-muted,#70757a)] uppercase"
+          >
+            <span className="sm:hidden">{day.slice(0, 1)}</span>
+            <span className="hidden sm:inline">{day.slice(0, 3)}</span>
           </div>
         ))}
       </div>
 
-      {/* Weeks */}
       <div className="grid grid-cols-1">
         {weeks.map((weekCells, weekIdx) => {
           const weekDates = weekCells.map((c) => c.date);
 
-          // compute week window [weekStart, weekEnd) for expansion
           const weekStart = startOfDay(weekDates[0]);
           const weekEnd = addDays(startOfDay(weekDates[6]), 1); // exclusive
 
-          // expand recurring events into concrete instances within this week window
-          const eventsForWeek = expandRecurringEvents(events, weekStart, weekEnd);
+          const eventsForWeek = events.filter((ev) => {
+            const { startMs, endMsExclusive } = getEventLayoutRange(ev);
+            return endMsExclusive > weekStart.getTime() && startMs < weekEnd.getTime();
+          });
 
-          // layout using the expanded list
           const { segments, laneCount } = buildWeekBarLayout(weekDates, eventsForWeek);
 
           const lanesShown = Math.min(laneCount, BAR_ROWS);
@@ -60,7 +66,6 @@ export function MonthView(props: {
 
           return (
             <div key={weekIdx} className="relative">
-              {/* Day cells */}
               <div className="grid grid-cols-7">
                 {weekCells.map((cell, colIdx) => {
                   const label = format(cell.date, 'd');
@@ -70,7 +75,6 @@ export function MonthView(props: {
 
                   const dayAll = eventsForDay(eventsForWeek, cell.date);
 
-                  // timed single-day events only (exclude bars)
                   const timed = dayAll
                     .filter((ev) => !isBarEventInMonth(ev))
                     .sort((a, b) => parseISO(a.start).getTime() - parseISO(b.start).getTime());
@@ -89,7 +93,7 @@ export function MonthView(props: {
                     <div
                       key={cell.date.toISOString()}
                       role="button"
-                      className="flex min-h-[120px] cursor-pointer flex-col border-r border-b border-[#E1E3E1] p-2 text-sm hover:bg-gray-50"
+                      className="flex min-h-[60px] cursor-pointer flex-col border-r border-b border-[#E1E3E1] p-1 text-sm hover:bg-gray-50 sm:min-h-[120px] sm:p-2"
                       onClick={() => onCreate(cell.date)}
                     >
                       <div className="flex items-center justify-center">
@@ -104,10 +108,8 @@ export function MonthView(props: {
                         </button>
                       </div>
 
-                      {/* reserved overlay space */}
                       <div style={{ height: reservedOverlayHeight }} />
 
-                      {/* Timed single-day list */}
                       <div className="relative mt-1 space-y-1 text-left">
                         {visibleTimed.map((ev) => {
                           const isNotEvent = ev.isTask ? (
@@ -116,13 +118,12 @@ export function MonthView(props: {
                             <Grid2X2Icon size={8} />
                           ) : null;
 
-                          // gunakan parent id bila ini occurrence recurring, supaya edit series bisa menemukan event di storage
-                          const openId = getSeriesOpenId(ev);
+                          const openId = ev.id;
 
                           return (
                             <div
                               key={ev.id}
-                              className="flex cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200"
+                              className="hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200 sm:flex"
                               title={ev.title}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -134,7 +135,7 @@ export function MonthView(props: {
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                                 style={{ background: ev.color ?? '#039BE5' }}
                               />
-                              <span className="shrink-0 text-gray-600">
+                              <span className="hidden shrink-0 text-gray-600 sm:inline">
                                 {format(parseISO(ev.start), 'h:mma').toLowerCase()}
                               </span>
                               <div className="flex items-center gap-1">
@@ -152,14 +153,13 @@ export function MonthView(props: {
                             onClick={(clickEvt) => {
                               clickEvt.stopPropagation();
                               if (onOpenDayPopover) {
-                                const rect = (
-                                  clickEvt.currentTarget as HTMLButtonElement
-                                ).getBoundingClientRect();
+                                const rect = clickEvt.currentTarget.getBoundingClientRect();
                                 onOpenDayPopover(cell.date, rect);
                               }
                             }}
                           >
-                            {hiddenTotal} more
+                            <span className="hidden sm:inline">{hiddenTotal} more</span>
+                            <span className="sm:hidden">+{hiddenTotal}</span>
                           </button>
                         )}
                       </div>
@@ -168,7 +168,6 @@ export function MonthView(props: {
                 })}
               </div>
 
-              {/* Bars overlay (week-level) */}
               <div className="absolute inset-x-0 px-1" style={{ top: OVERLAY_TOP }}>
                 <div
                   className="grid grid-cols-7"
@@ -183,12 +182,8 @@ export function MonthView(props: {
                       const leftCapClass = roundedLeft ? 'rounded-l-full' : 'rounded-l-none';
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
-                      const ev = s.event as CalendarEvent & {
-                        originalEventId?: string;
-                        isOccurrence?: boolean;
-                        color?: string;
-                      };
-                      const openId = getSeriesOpenId(ev);
+                      const ev = s.event as CalendarEvent & { color?: string };
+                      const openId = ev.id;
 
                       return (
                         <div
@@ -202,9 +197,7 @@ export function MonthView(props: {
                           title={s.event.title}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const rect = (
-                              e.currentTarget as HTMLDivElement
-                            ).getBoundingClientRect();
+                            const rect = e.currentTarget.getBoundingClientRect();
                             onOpenEvent(openId, rect);
                           }}
                         >

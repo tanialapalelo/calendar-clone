@@ -1,11 +1,14 @@
-type CalendarView = 'year' | 'month' | 'day';
+type CalendarView = 'year' | 'month' | 'week' | 'day';
 
 type CalendarEvent = {
   id: string;
+  calendarId?: string;
   title: string;
   start: string;
   end: string;
   allDay: boolean;
+  startDate?: string;
+  endDate?: string;
   isTask?: boolean;
   isAppointment?: boolean;
   guests?: string[];
@@ -15,9 +18,10 @@ type CalendarEvent = {
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
   recurrence?: string | null;
+  recurringEventId?: string | null;
+  originalStartAt?: string | null;
+  isRecurringInstance?: boolean;
   color: string;
-  visibility?: 'public' | 'private' | 'default';
-  busyStatus?: 'free' | 'busy';
 };
 
 type PositionedEvent = {

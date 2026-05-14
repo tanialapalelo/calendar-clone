@@ -1,7 +1,7 @@
 'use client';
 
 import { addDays, addMinutes } from 'date-fns';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 
 function startOfDayLocal(d: Date) {
@@ -19,22 +19,14 @@ type Props = {
 export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
+  const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
+  const defaultEnd = useMemo(() => addDays(startOfDayLocal(initialEnd), 1), [initialEnd]);
 
   const [title, setTitle] = useState('');
-  const [start, setStart] = useState(toLocalDateTimeInputValue(initialStart));
-  const [end, setEnd] = useState(toLocalDateTimeInputValue(initialEnd));
+  const [start, setStart] = useState(toLocalDateTimeInputValue(defaultStart));
+  const [end, setEnd] = useState(toLocalDateTimeInputValue(defaultEnd));
   const [allDay, setAllDay] = useState(true);
   const [showTime, setShowTime] = useState(false);
-
-  useEffect(() => {
-    const s = startOfDayLocal(initialStart);
-    const e = addDays(startOfDayLocal(initialEnd), 1);
-    setStart(toLocalDateTimeInputValue(s));
-    setEnd(toLocalDateTimeInputValue(e));
-    setAllDay(true);
-    setShowTime(false);
-    setTitle('');
-  }, [initialStart, initialEnd]);
 
   function submit() {
     let startDate: Date;

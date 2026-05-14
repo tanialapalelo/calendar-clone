@@ -10,8 +10,8 @@ export default function NotificationsEditor(props: {
 
   const addDefault = useCallback(() => {
     const id =
-      typeof crypto !== 'undefined' && (crypto as any).randomUUID
-        ? (crypto as any).randomUUID()
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
         : String(Date.now());
     onChange([
       ...value,

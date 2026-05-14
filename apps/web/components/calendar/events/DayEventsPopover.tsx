@@ -3,8 +3,8 @@
 import { addDays, format, isSameDay, parseISO, startOfDay } from 'date-fns';
 import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
-import { expandRecurringEvents, getSeriesOpenId } from '@/lib/events/recurrence';
 import { compareEventsInDayBucket, isCrossDayTimedEventOnCalendar } from '@/lib/events/day';
+import { getEventRangeMs } from '@/lib/events/range';
 
 type Props = {
   open: boolean;
@@ -20,9 +20,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-// NOTE: cross-day timed predicate is now centralized in lib/events/day as
-// isCrossDayTimedEventOnCalendar.
-
 export function DayEventsPopover({
   open,
   anchorRect,
@@ -34,7 +31,6 @@ export function DayEventsPopover({
 }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  // Close on Escape
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -44,7 +40,6 @@ export function DayEventsPopover({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  // Click outside to close
   useEffect(() => {
     if (!open) return;
     if (disableOutsideClose) return;
@@ -77,24 +72,24 @@ export function DayEventsPopover({
     return { left: Math.max(8, left), top };
   }, [anchorRect]);
 
-  // Hitung window hari ini dan expand recurring sebelum guard return,
-  // supaya urutan hooks (useMemo) tetap konsisten di semua render.
   const dayStart = date ? startOfDay(date) : null;
   const dayEnd = dayStart ? addDays(dayStart, 1) : null;
 
-  const expandedEventsForDay = useMemo(
-    () =>
-      dayStart && dayEnd
-        ? expandRecurringEvents(events, dayStart, dayEnd)
-        : ([] as CalendarEvent[]),
-    [events, dayStart, dayEnd],
-  );
+  const eventsForDayWindow = useMemo(() => {
+    if (!dayStart || !dayEnd) return [] as CalendarEvent[];
+
+    const startMs = dayStart.getTime();
+    const endMs = dayEnd.getTime(); // exclusive
+
+    return events.filter((ev) => {
+      const r = getEventRangeMs(ev);
+      return r.endMsExclusive > startMs && r.startMs < endMs;
+    });
+  }, [events, dayStart, dayEnd]);
 
   if (!open || !anchorRect || !date || !position || !dayStart || !dayEnd) return null;
 
-  // Use shared comparator so ordering is consistent across views.
-  const sorted = [...expandedEventsForDay].sort(compareEventsInDayBucket);
-
+  const sorted = [...eventsForDayWindow].sort(compareEventsInDayBucket);
   const today = new Date();
 
   return (
@@ -131,11 +126,10 @@ export function DayEventsPopover({
           ) : (
             <ul className="space-y-1">
               {sorted.map((ev) => {
-                const evStart = parseISO(ev.start);
-                const evEnd = parseISO(ev.end);
+                const { startMs, endMsExclusive } = getEventRangeMs(ev);
 
-                const continuesFromPrev = evStart.getTime() < dayStart.getTime();
-                const continuesToNext = evEnd.getTime() > dayEnd.getTime();
+                const continuesFromPrev = startMs < dayStart.getTime();
+                const continuesToNext = endMsExclusive > dayEnd.getTime();
 
                 const isBar = ev.allDay || isCrossDayTimedEventOnCalendar(ev);
 
@@ -147,7 +141,10 @@ export function DayEventsPopover({
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
                   : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
 
-                const openId = getSeriesOpenId(ev as CalendarEvent);
+                const openId = ev.id;
+
+                // Only show time for non-bar (timed single-day) events
+                const evStart = parseISO(ev.start);
 
                 return (
                   <li key={ev.id}>
@@ -158,9 +155,7 @@ export function DayEventsPopover({
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
                         onPickEvent(openId, rect);
                       }}
-                      style={{
-                        background: !isBar ? '' : eventColor,
-                      }}
+                      style={{ background: !isBar ? '' : eventColor }}
                     >
                       <div className="flex items-center gap-2 truncate text-xs font-medium">
                         {!isBar && (
