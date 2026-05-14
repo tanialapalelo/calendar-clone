@@ -83,6 +83,7 @@ export function CalendarShell(props: {
         onImportCalendar={onImportCalendar}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onOpenEvent={onOpenEvent}
+        sidebarOpen={sidebarOpen}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -114,7 +115,6 @@ export function CalendarShell(props: {
               onDeleteCalendar={onDeleteCalendar}
               onPickDate={(d) => {
                 onNavigate({ date: d, view: 'day' });
-                setSidebarOpen(false);
               }}
               onCreate={() => onCreateEvent(date)}
             />

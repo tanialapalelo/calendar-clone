@@ -1,108 +1,10 @@
 'use client';
 
-import { format, addMonths, isSameMonth, isSameDay, startOfMonth } from 'date-fns';
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CheckIcon,
-  PlusIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
-  Trash2Icon,
-} from 'lucide-react';
+import { CheckIcon, PlusIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { generateMonthGrid } from '@/lib/month-grid';
-import { shortDaysOfWeek } from '@/constants';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 import { CALENDAR_COLORS, getCalendarColor } from '@/lib/calendars/useCalendarsApi';
-
-/** Compact mini-calendar that lets you pick a date */
-function MiniCalendar(props: {
-  currentDate: Date;
-  selectedDate: Date;
-  onPickDate: (d: Date) => void;
-}) {
-  const { currentDate, selectedDate, onPickDate } = props;
-  const [monthDate, setMonthDate] = useState(() => startOfMonth(currentDate));
-
-  useEffect(() => {
-    if (!isSameMonth(monthDate, currentDate)) {
-      setMonthDate(startOfMonth(currentDate));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate]);
-
-  const cells = generateMonthGrid(monthDate);
-
-  return (
-    <div className="px-2 py-2">
-      <div className="flex items-center justify-between px-1 pb-1">
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-          {format(monthDate, 'MMM yyyy')}
-        </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            className="rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={() => setMonthDate((d) => addMonths(d, -1))}
-            aria-label="Previous month"
-          >
-            <ChevronLeftIcon size={14} />
-          </button>
-          <button
-            type="button"
-            className="rounded-full p-0.5 hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={() => setMonthDate((d) => addMonths(d, 1))}
-            aria-label="Next month"
-          >
-            <ChevronRightIcon size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-7 text-center">
-        {shortDaysOfWeek.map((d, i) => (
-          <div key={`${d}-${i}`} className="py-0.5 text-[10px] font-semibold text-gray-400">
-            {d}
-          </div>
-        ))}
-        {cells.map((cell) => {
-          const isCurrentMonth = isSameMonth(cell.date, monthDate);
-          const isToday = cell.isToday && isCurrentMonth;
-          const isSelected = isSameDay(cell.date, selectedDate) && isCurrentMonth;
-
-          let cls =
-            'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-[11px] transition-colors';
-
-          if (isToday) {
-            cls += ' bg-[#0B57D0] font-bold text-white';
-          } else if (isSelected) {
-            cls += ' bg-[#C2E7FF] font-semibold text-gray-900';
-          } else if (!isCurrentMonth) {
-            cls += ' text-gray-300 hover:bg-gray-50';
-          } else {
-            cls += ' text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700';
-          }
-
-          return (
-            <div key={cell.date.toISOString()} className="flex justify-center py-0.5">
-              <div
-                className={cls}
-                role="button"
-                tabIndex={0}
-                onClick={() => onPickDate(cell.date)}
-                onKeyDown={(e) => e.key === 'Enter' && onPickDate(cell.date)}
-                aria-label={format(cell.date, 'MMMM d, yyyy')}
-              >
-                {format(cell.date, 'd')}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+import { DatePickerCore } from '@/components/calendar/DatePickerCore';
 
 // ---------------------------------------------------------------------------
 // CalendarContextMenu — "…" menu per calendar
@@ -350,11 +252,9 @@ export function Sidebar(props: {
         </div>
 
         {/* Mini calendar */}
-        <MiniCalendar
-          currentDate={currentDate}
-          selectedDate={selectedDate}
-          onPickDate={onPickDate}
-        />
+        <div className="px-2 py-2">
+          <DatePickerCore selected={selectedDate} onSelect={onPickDate} density="sidebar" />
+        </div>
 
         {/* My Calendars */}
         <div className="px-3">
