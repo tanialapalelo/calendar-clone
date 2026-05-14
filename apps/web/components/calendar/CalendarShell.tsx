@@ -77,6 +77,7 @@ export function CalendarShell(props: {
         onPrev={onPrev}
         onNext={onNext}
         onChangeView={onChangeView}
+        onChangeDate={onChangeDate}
         onCreate={() => onCreateEvent(date)}
         onExportCalendar={onExportCalendar}
         onImportCalendar={onImportCalendar}
