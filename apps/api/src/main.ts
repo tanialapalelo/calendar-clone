@@ -26,10 +26,15 @@ async function bootstrap() {
   );
 
   app.setGlobalPrefix('v1');
-  app.use(cookieParser());
 
-  const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
-  app.enableCors({ origin: webOrigin, credentials: true });
+  app.use(cookieParser());
+  const origins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000').split(
+    ',',
+  );
+  app.enableCors({
+    origin: (origin, cb) => cb(null, !origin || origins.includes(origin)),
+    credentials: true,
+  });
 
   // Swagger docs — only in non-production
   if (process.env.NODE_ENV !== 'production') {
