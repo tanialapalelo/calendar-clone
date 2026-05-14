@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCalendarDto } from './dto/create-calendar.dto';
 import { UpdateCalendarDto } from './dto/update-calendar.dto';
@@ -20,7 +16,7 @@ const CALENDAR_SELECT = {
 export class CalendarsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ── Read ──────────────────────────────────────────────────────────────────
+  // ── Read ─────────────────────────────────────────────────────────────
 
   listForUser(userId: string) {
     return this.prisma.calendar.findMany({
@@ -31,18 +27,16 @@ export class CalendarsService {
   }
 
   async getForUser(userId: string, id: string) {
-    const cal = await this.prisma.calendar.findUnique({
-      where: { id },
-      select: { ...CALENDAR_SELECT, ownerId: true },
+    // findFirst with the ownership filter in the WHERE clause: one query, no leak.
+    const cal = await this.prisma.calendar.findFirst({
+      where: { id, ownerId: userId },
+      select: CALENDAR_SELECT,
     });
     if (!cal) throw new NotFoundException('Calendar not found');
-    if (cal.ownerId !== userId) throw new ForbiddenException();
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ownerId: _, ...rest } = cal;
-    return rest;
+    return cal;
   }
 
-  // ── Create ────────────────────────────────────────────────────────────────
+  // ── Create ───────────────────────────────────────────────────────────
 
   createForUser(userId: string, dto: CreateCalendarDto) {
     return this.prisma.calendar.create({
@@ -55,28 +49,36 @@ export class CalendarsService {
     });
   }
 
-  // ── Update ────────────────────────────────────────────────────────────────
+  // ── Update ───────────────────────────────────────────────────────────
 
   async updateForUser(userId: string, id: string, dto: UpdateCalendarDto) {
-    await this.getForUser(userId, id); // throws 404 / 403 if not owned
-    return this.prisma.calendar.update({
-      where: { id },
+    // Atomic ownership-conditioned update: count===0 ⇒ not found OR not owned.
+    const res = await this.prisma.calendar.updateMany({
+      where: { id, ownerId: userId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.color !== undefined && { color: dto.color }),
       },
+    });
+    if (res.count === 0) throw new NotFoundException('Calendar not found');
+
+    // Re-read for a shaped response (still cheap: indexed PK lookup).
+    return this.prisma.calendar.findUniqueOrThrow({
+      where: { id },
       select: CALENDAR_SELECT,
     });
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // ── Delete ───────────────────────────────────────────────────────────
 
   async deleteForUser(userId: string, id: string) {
-    await this.getForUser(userId, id); // throws 404 / 403 if not owned
-    await this.prisma.calendar.delete({ where: { id } });
+    const res = await this.prisma.calendar.deleteMany({
+      where: { id, ownerId: userId },
+    });
+    if (res.count === 0) throw new NotFoundException('Calendar not found');
   }
 
-  // ── Utility ───────────────────────────────────────────────────────────────
+  // ── Utility ──────────────────────────────────────────────────────────
 
   async ensureDefaultCalendar(userId: string) {
     const existing = await this.prisma.calendar.findFirst({
