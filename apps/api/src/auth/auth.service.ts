@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
+import { PrismaService } from '../prisma/prisma.service';
 
 type GoogleProfile = {
   sub: string;
   email?: string;
+  email_verified?: boolean;
   name?: string;
 };
 
@@ -19,23 +20,23 @@ export class AuthService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  getGoogleAuthUrl() {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
-    if (!clientId || !redirectUri) {
+  /** Build the consent URL with a server-issued `state` for CSRF protection. */
+  getGoogleAuthUrl(state: string): string {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REDIRECT_URI) {
       throw new Error('Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI');
     }
-
     return this.oauth.generateAuthUrl({
       access_type: 'offline',
       scope: ['openid', 'email', 'profile'],
       prompt: 'consent',
+      state, // ← the controller passes the random state here
     });
   }
 
   async handleGoogleCallback(code: string) {
     const { tokens } = await this.oauth.getToken(code);
-    if (!tokens.id_token) throw new Error('Missing id_token from Google');
+    if (!tokens.id_token)
+      throw new UnauthorizedException('Missing id_token from Google');
 
     const ticket = await this.oauth.verifyIdToken({
       idToken: tokens.id_token,
@@ -43,22 +44,27 @@ export class AuthService {
     });
 
     const payload = ticket.getPayload() as GoogleProfile | undefined;
-    if (!payload?.sub) throw new Error('Invalid Google token payload');
+    if (!payload?.sub)
+      throw new UnauthorizedException('Invalid Google token payload');
 
     const googleSub = payload.sub;
-    const email = payload.email ?? null;
     const name = payload.name ?? null;
+
+    // Only trust the email if Google says it's verified.
+    // Otherwise we keep the user but never expose a real email we can't trust.
+    const verifiedEmail =
+      payload.email && payload.email_verified === true ? payload.email : null;
 
     const user = await this.prisma.user.upsert({
       where: { googleSub },
       create: {
         googleSub,
-        email: email ?? `google-${googleSub}@no-email.local`,
+        email: verifiedEmail ?? `google-${googleSub}@no-email.local`,
         name,
       },
       update: {
-        email: email ?? undefined,
-        name: name ?? undefined,
+        ...(verifiedEmail ? { email: verifiedEmail } : {}),
+        ...(name ? { name } : {}),
       },
     });
 

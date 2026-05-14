@@ -1,16 +1,22 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
   Query,
-  Res,
   Req,
+  Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
+import { randomBytes } from 'crypto';
 import type { Request, Response } from 'express';
+import { AuthService } from './auth.service';
 import { JwtCookieGuard } from './jwt-cookie.guard';
 import type { AuthUser } from './auth.types';
+
+const STATE_COOKIE = 'oauth_state';
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 @Controller('auth')
 export class AuthController {
@@ -18,18 +24,44 @@ export class AuthController {
 
   @Get('google/start')
   googleStart(@Res() res: Response) {
-    const url = this.auth.getGoogleAuthUrl();
+    // Cryptographically random, URL-safe state
+    const state = randomBytes(32).toString('base64url');
+
+    // Persist it in an httpOnly cookie scoped tightly to the callback path
+    res.cookie(STATE_COOKIE, state, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/v1/auth/google/callback',
+      maxAge: STATE_TTL_MS,
+    });
+
+    const url = this.auth.getGoogleAuthUrl(state);
     return res.redirect(url);
   }
 
   @Get('google/callback')
-  async googleCallback(@Query('code') code: string, @Res() res: Response) {
-    if (!code) return res.status(400).send('Missing code');
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Req() req: Request & { cookies?: Record<string, string> },
+    @Res() res: Response,
+  ) {
+    if (!code) throw new BadRequestException('Missing code');
+    if (!state) throw new UnauthorizedException('Missing state');
+
+    const expected = req.cookies?.[STATE_COOKIE];
+    // Constant-time-ish compare: both are base64url strings of equal expected length
+    if (!expected || expected.length !== state.length || expected !== state) {
+      throw new UnauthorizedException('Invalid state');
+    }
+
+    // One-shot: clear the state cookie so it can't be replayed
+    res.clearCookie(STATE_COOKIE, { path: '/v1/auth/google/callback' });
 
     const { jwt } = await this.auth.handleGoogleCallback(code);
 
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-
     res.cookie(cookieName, jwt, {
       httpOnly: true,
       sameSite: 'lax',
