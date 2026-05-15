@@ -11,12 +11,20 @@ import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 type Props = {
   open: boolean;
   initialDate: Date;
+  initialKind?: 'event' | 'task' | 'appointment';
   calendars?: ApiCalendar[];
   onClose: () => void;
   onCreate: (event: CalendarEvent) => void;
 };
 
-export function CreateEventModal({ open, initialDate, calendars, onClose, onCreate }: Props) {
+export function CreateEventModal({
+  open,
+  initialDate,
+  initialKind,
+  calendars,
+  onClose,
+  onCreate,
+}: Props) {
   const [mode, setMode] = useState('event');
 
   if (!open) return null;
@@ -55,7 +63,7 @@ export function CreateEventModal({ open, initialDate, calendars, onClose, onCrea
         </div>
 
         {/* Body */}
-        {mode === 'event' ? (
+        {initialKind === 'event' ? (
           <EventForm
             key={`event-${initialDate.toISOString()}`}
             initialDate={initialDate}
@@ -63,7 +71,7 @@ export function CreateEventModal({ open, initialDate, calendars, onClose, onCrea
             onClose={onClose}
             onCreate={onCreate}
           />
-        ) : mode === 'task' ? (
+        ) : initialKind === 'task' ? (
           <TaskForm
             key={`task-${initialDate.toISOString()}`}
             initialDate={initialDate}

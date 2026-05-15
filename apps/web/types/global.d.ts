@@ -43,3 +43,5 @@ type NotificationItem = {
 type RecurrenceValue = {
   rrule?: string | null;
 };
+
+type CreateKind = 'event' | 'task' | 'appointment';

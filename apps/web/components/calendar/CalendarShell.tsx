@@ -9,6 +9,7 @@ import { WeekView } from './views/WeekView';
 import { YearView } from './views/YearView';
 import { Sidebar } from './Sidebar';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
+import { CreateMenu } from '@/components/calendar/CreateMenu';
 
 export function CalendarShell(props: {
   view: CalendarView;
@@ -24,7 +25,7 @@ export function CalendarShell(props: {
   onChangeView: (v: CalendarView) => void;
   onChangeDate: (d: Date) => void;
   onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
-  onCreateEvent: (d: Date) => void;
+  onCreateEvent: (d: Date, kind?: CreateKind) => void;
   onOpenEvent: (id: string, rect: DOMRect) => void;
   onOpenDayPopover: (d: Date, rect: DOMRect) => void;
   onExportCalendar?: () => void;

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 import { CALENDAR_COLORS, getCalendarColor } from '@/lib/calendars/useCalendarsApi';
 import { DatePickerCore } from '@/components/calendar/DatePickerCore';
+import { CreateMenu } from '@/components/calendar/CreateMenu';
 
 // ---------------------------------------------------------------------------
 // CalendarContextMenu — "…" menu per calendar
@@ -212,7 +213,7 @@ export function Sidebar(props: {
   onUpdateCalendar: (id: string, updates: { name?: string; color?: string }) => Promise<void>;
   onDeleteCalendar: (id: string) => Promise<void>;
   onPickDate: (d: Date) => void;
-  onCreate?: () => void;
+  onCreate?: (kind: CreateKind) => void;
 }) {
   const {
     currentDate,
@@ -241,14 +242,7 @@ export function Sidebar(props: {
       <aside className="flex h-full w-56 shrink-0 flex-col gap-4 overflow-y-auto bg-[#F8FAFD] py-2 pt-14 sm:pt-2 dark:bg-gray-900">
         {/* Create button */}
         <div className="px-3">
-          <button
-            type="button"
-            onClick={onCreate}
-            className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-md transition-shadow hover:shadow-lg dark:bg-gray-800 dark:text-gray-200"
-          >
-            <PlusIcon size={20} className="text-gray-600 dark:text-gray-400" />
-            <span>Create</span>
-          </button>
+          <CreateMenu onSelect={(kind) => onCreate?.(kind)} />
         </div>
 
         {/* Mini calendar */}
