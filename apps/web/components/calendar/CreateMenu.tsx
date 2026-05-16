@@ -75,7 +75,6 @@ export function CreateMenu({ onSelect, collapsed = false }: Props) {
           className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-md transition-shadow hover:shadow-lg dark:bg-gray-800"
         >
           <PlusIcon size={22} />
-          hihi
         </button>
       ) : (
         <button

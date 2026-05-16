@@ -9,6 +9,7 @@ import { WeekView } from './views/WeekView';
 import { YearView } from './views/YearView';
 import { Sidebar } from './Sidebar';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
+import { useIsMobile } from '@/lib/hooks/useIsMobile';
 import { CreateMenu } from '@/components/calendar/CreateMenu';
 
 export function CalendarShell(props: {
@@ -52,6 +53,7 @@ export function CalendarShell(props: {
     onImportCalendar,
   } = props;
 
+  const isMobile = useIsMobile();
   const onToday = () => onChangeDate(new Date());
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -79,7 +81,7 @@ export function CalendarShell(props: {
         onNext={onNext}
         onChangeView={onChangeView}
         onChangeDate={onChangeDate}
-        onCreate={() => onCreateEvent(date)}
+        onCreate={(kind) => onCreateEvent(date, kind)}
         onExportCalendar={onExportCalendar}
         onImportCalendar={onImportCalendar}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
@@ -115,32 +117,17 @@ export function CalendarShell(props: {
               onUpdateCalendar={onUpdateCalendar}
               onDeleteCalendar={onDeleteCalendar}
               onPickDate={(d) => {
-                onNavigate({ date: d, view: 'day' });
+                onNavigate({ date: d });
+                if (isMobile) setSidebarOpen(false);
               }}
-              onCreate={() => onCreateEvent(date)}
+              onCreate={(kind) => onCreateEvent(date, kind)}
             />
           </div>
 
           {/* Collapsed strip on desktop */}
           {!sidebarOpen && (
-            <div className="hidden h-full w-12 flex-col items-center border-r border-gray-100 bg-[#F8FAFD] pt-3 sm:flex">
-              <button
-                type="button"
-                onClick={() => onCreateEvent(date)}
-                title="Create event"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md transition-shadow hover:shadow-lg"
-                aria-label="Create event"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5 text-gray-600"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                </svg>
-              </button>
+            <div className="hidden h-full w-12 flex-col items-center border-r border-[var(--gcal-border,#dadce0)] bg-[#F8FAFD] pt-3 sm:flex dark:border-gray-700 dark:bg-gray-900">
+              <CreateMenu collapsed onSelect={(kind) => onCreateEvent(date, kind)} />
             </div>
           )}
         </div>

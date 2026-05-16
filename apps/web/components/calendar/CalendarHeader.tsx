@@ -139,7 +139,7 @@ export function CalendarHeader(props: {
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
   onChangeDate?: (d: Date) => void;
-  onCreate: () => void;
+  onCreate: (kind?: CreateKind) => void;
   onExportCalendar?: () => void;
   onImportCalendar?: (file: File) => void;
   onToggleSidebar?: () => void;
