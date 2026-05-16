@@ -39,10 +39,12 @@ export function DatePickerCore({ selected, onSelect, density = 'popover' }: Prop
   const cells = useMemo(() => generateMonthGrid(cursor), [cursor]);
 
   const isSidebar = density === 'sidebar';
-  const cellSize = isSidebar ? 'h-6 w-6 text-[11px]' : 'h-8 w-8 text-[13px]';
+  const cellSize = isSidebar
+    ? 'h-5 w-5 text-[10px] sm:h-6 sm:w-6 sm:text-[11px]'
+    : 'h-8 w-8 text-[13px]';
   const headerLabel = isSidebar ? 'text-xs font-semibold' : 'text-sm font-medium';
   const labelFmt = isSidebar ? 'MMM yyyy' : 'MMMM yyyy';
-  const navSize = isSidebar ? 14 : 16;
+  const navSize = isSidebar ? 12 : 16;
 
   return (
     <div className="select-none">

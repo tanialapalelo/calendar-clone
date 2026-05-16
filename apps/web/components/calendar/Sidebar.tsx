@@ -239,21 +239,21 @@ export function Sidebar(props: {
 
   return (
     <>
-      <aside className="flex h-full w-56 shrink-0 flex-col gap-4 overflow-y-auto bg-[#F8FAFD] py-2 pt-14 sm:pt-2 dark:bg-gray-900">
+      <aside className="flex h-full w-full flex-col gap-3 overflow-y-auto bg-[#F8FAFD] py-2 sm:gap-4 dark:bg-gray-900">
         {/* Create button */}
-        <div className="px-3">
+        <div className="px-2 sm:px-3">
           <CreateMenu onSelect={(kind) => onCreate?.(kind)} />
         </div>
 
         {/* Mini calendar */}
-        <div className="px-2 py-2">
+        <div className="px-1 py-1 sm:px-2 sm:py-2">
           <DatePickerCore selected={selectedDate} onSelect={onPickDate} density="sidebar" />
         </div>
 
         {/* My Calendars */}
-        <div className="px-3">
+        <div className="px-2 sm:px-3">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+            <p className="text-xs font-semibold tracking-wide text-[var(--gcal-text-muted,#70757a)] uppercase dark:text-gray-400">
               My Calendars
             </p>
             <button
@@ -267,7 +267,9 @@ export function Sidebar(props: {
           </div>
 
           {calendars.length === 0 && (
-            <p className="text-xs text-gray-400 dark:text-gray-500">No calendars yet</p>
+            <p className="text-xs text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400">
+              No calendars yet
+            </p>
           )}
 
           <ul className="space-y-0.5">

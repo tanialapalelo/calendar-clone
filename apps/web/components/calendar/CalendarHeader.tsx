@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import { addDays, format, startOfWeek } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import {
   ChevronLeftIcon,
@@ -164,7 +164,15 @@ export function CalendarHeader(props: {
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
     if (view === 'month') return format(date, 'MMMM yyyy');
-    return format(date, 'MMMM d, yyyy');
+    if (view === 'day') return format(date, 'MMMM d, yyyy');
+
+    // Week view — show "May 2026" if all days are in the same month;
+    // otherwise "Apr 27 – May 3, 2026" (Google parity for spanning weeks).
+    const weekStart = startOfWeek(date, { weekStartsOn: 0 });
+    const weekEnd = addDays(weekStart, 6);
+    const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+    if (sameMonth) return format(date, 'MMMM yyyy');
+    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
   })();
 
   // --- date picker popover state ---
@@ -203,17 +211,9 @@ export function CalendarHeader(props: {
             <MenuIcon size={20} />
           </button>
 
-          <div className="mr-1 hidden h-8 w-8 items-center justify-center rounded-xl bg-[#0B57D0] sm:flex">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-5 w-5 text-white"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M16 2v4M8 2v4M3 10h18" />
-            </svg>
+          {/* App logo — small and unobtrusive (NOT a clone of Google's). */}
+          <div className="mr-1 hidden h-7 w-7 items-center justify-center rounded-md bg-[#1a73e8] sm:flex">
+            <span className="text-[11px] font-bold text-white">{format(new Date(), 'd')}</span>
           </div>
 
           <span className="hidden text-lg font-medium text-gray-700 sm:inline dark:text-gray-300">

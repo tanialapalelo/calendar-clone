@@ -44,9 +44,10 @@ export const unitOfTimeOptions = [
 ];
 
 export const DAY_VIEW_PX_PER_HOUR = 48;
-export const DAY_VIEW_GUTTER_PX = 64;
+export const DAY_VIEW_GUTTER_PX = 56;
 export const DAY_VIEW_COLUMN_GAP_PX = 6;
 export const DAY_VIEW_PX_PER_MIN = DAY_VIEW_PX_PER_HOUR / 60;
+export const DAY_VIEW_GUTTER_PX_MOBILE = 36;
 
 export const PALETTE = [
   '#039BE5', // blue
