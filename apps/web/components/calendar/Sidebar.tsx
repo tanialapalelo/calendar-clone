@@ -33,7 +33,7 @@ function CalendarContextMenu(props: {
       <button
         type="button"
         aria-label={`Options for ${calendar.name}`}
-        className="rounded-full p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-600"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--gcal-bg-hover,#f1f3f4)] focus-visible:opacity-100 dark:hover:bg-gray-700"
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => !v);
@@ -259,7 +259,7 @@ export function Sidebar(props: {
             <button
               type="button"
               aria-label="Add calendar"
-              className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--gcal-text-muted,#70757a)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-400 dark:hover:bg-gray-700"
               onClick={() => setNewCalOpen(true)}
             >
               <PlusIcon size={14} />

@@ -29,7 +29,7 @@ export function UserMenu() {
     return (
       <a
         href={`${API_URL}/v1/auth/google/start`}
-        className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-sm font-medium text-[#0B57D0] hover:bg-blue-50"
+        className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
       >
         Sign in
       </a>
@@ -50,7 +50,7 @@ export function UserMenu() {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0B57D0] text-sm font-semibold text-white hover:opacity-90 focus:outline-none"
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#0B57D0] text-xs font-semibold text-white hover:opacity-90 focus:outline-none sm:h-8 sm:w-8 sm:text-sm"
         onClick={() => setOpen((v) => !v)}
         aria-label="Account menu"
         title={user.name ?? user.email}

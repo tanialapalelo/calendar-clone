@@ -1,11 +1,13 @@
 'use client';
 
 import { XIcon, MenuIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
 import { EventForm } from '@/components/calendar/events/forms/EventForm';
 import { TaskForm } from '@/components/calendar/events/forms/TaskForm';
 import { AppointmentForm } from '@/components/calendar/events/forms/AppointmentForm';
 import { modeOptions } from '@/constants';
+import { useModalA11y } from '@/lib/hooks/useModalA11y';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 
 type Kind = 'event' | 'task' | 'appointment';
@@ -27,13 +29,16 @@ export function CreateEventModal({
   onClose,
   onCreate,
 }: Props) {
-  // Single source of truth — synced from `initialKind` whenever the modal opens.
-  // After that, the user can switch tabs inside the modal freely.
   const [mode, setMode] = useState<Kind>(initialKind);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Reset tab when reopened
   useEffect(() => {
     if (open) setMode(initialKind);
   }, [open, initialKind]);
+
+  // Focus trap + scroll lock + Esc to close + return focus
+  useModalA11y({ open, onClose, containerRef });
 
   if (!open) return null;
 
@@ -42,13 +47,28 @@ export function CreateEventModal({
       className="fixed inset-0 z-50 flex w-full items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Create"
+      aria-labelledby="create-event-modal-title"
+      onClick={(e) => {
+        // Click backdrop closes; clicks inside the panel must not bubble here
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="w-full max-w-md rounded-lg bg-[var(--gcal-bg-app,#F0F4F9)] shadow-lg dark:bg-gray-800">
+      <div
+        ref={containerRef}
+        className="w-full max-w-md rounded-lg bg-[var(--gcal-bg-app,#F0F4F9)] shadow-lg dark:bg-gray-800"
+      >
+        <h2 id="create-event-modal-title" className="sr-only">
+          Create {mode}
+        </h2>
+
         {/* Header — tab switcher */}
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <MenuIcon size={16} className="text-gray-500 dark:text-gray-400" />
+            <MenuIcon
+              size={16}
+              className="text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400"
+              aria-hidden="true"
+            />
             <div
               role="tablist"
               aria-label="Create kind"
@@ -63,10 +83,10 @@ export function CreateEventModal({
                     aria-selected={active}
                     type="button"
                     className={[
-                      'rounded-md px-3 py-1 text-sm font-medium transition-colors',
+                      'min-h-[36px] rounded-md px-3 py-1 text-sm font-medium transition-colors',
                       active
                         ? 'bg-white text-[var(--gcal-text,#3c4043)] shadow-sm dark:bg-gray-800 dark:text-gray-100'
-                        : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100',
+                        : 'text-[var(--gcal-text-muted,#70757a)] hover:text-[var(--gcal-text,#3c4043)] dark:text-gray-300 dark:hover:text-gray-100',
                     ].join(' ')}
                     onClick={() => setMode(option.value as Kind)}
                   >
@@ -80,10 +100,10 @@ export function CreateEventModal({
           <button
             type="button"
             aria-label="Close"
-            className="rounded p-1 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--gcal-text-muted,#70757a)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300 dark:hover:bg-gray-700"
             onClick={onClose}
           >
-            <XIcon size={16} />
+            <XIcon size={16} aria-hidden="true" />
           </button>
         </div>
 

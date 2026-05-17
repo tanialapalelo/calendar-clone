@@ -52,7 +52,7 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
   }
 
   return (
-    <div className="space-y-3 bg-[#F0F4F9] px-4 py-4">
+    <div className="space-y-3 px-4 py-4 dark:text-[var(--gcal-text),e8eaed]">
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -65,7 +65,6 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
 
       <div className="grid grid-cols-2 items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">Due</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -78,7 +77,6 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">Due (end)</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -94,7 +92,7 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
           {!showTime ? (
             <button
               type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               onClick={() => {
                 setShowTime(true);
                 setAllDay(false);
@@ -124,17 +122,17 @@ export function TaskForm({ initialDate, onClose, onCreate }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 px-4 py-3">
+      <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">
         <button
           type="button"
-          className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100"
+          className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 dark:hover:bg-[var(--color-gray-700)]"
           onClick={onClose}
         >
           Cancel
         </button>
         <button
           type="button"
-          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
+          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm text-white hover:bg-[#044dc2]"
           onClick={submit}
         >
           Add

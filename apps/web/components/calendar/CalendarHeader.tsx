@@ -87,9 +87,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
               setResults([]);
               setOpen(false);
             }}
-          >
-            <XIcon size={13} className="text-gray-400 hover:text-gray-600" />
-          </button>
+          />
         )}
       </div>
 
@@ -104,7 +102,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
               <button
                 key={ev.id}
                 type="button"
-                className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="flex w-full items-start gap-3 px-4 py-2.5 text-left text-[var(--gcal-text-muted,#70757a)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300 dark:hover:bg-gray-700"
                 onClick={(e) => {
                   onOpenEvent(ev.id, e.currentTarget.getBoundingClientRect());
                   setOpen(false);
@@ -116,7 +114,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
                   style={{ backgroundColor: ev.color }}
                 />
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">
+                  <p className="truncate text-sm font-medium text-[var(--gcal-text-muted,#70757a)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300 dark:hover:bg-gray-700">
                     {ev.title}
                   </p>
                   <p className="text-xs text-gray-400">
@@ -167,12 +165,12 @@ export function CalendarHeader(props: {
     if (view === 'day') return format(date, 'MMMM d, yyyy');
 
     // Week view — show "May 2026" if all days are in the same month;
-    // otherwise "Apr 27 – May 3, 2026" (Google parity for spanning weeks).
+    // otherwise "Apr – May 2026" (Google parity for spanning weeks).
     const weekStart = startOfWeek(date, { weekStartsOn: 0 });
     const weekEnd = addDays(weekStart, 6);
     const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
     if (sameMonth) return format(date, 'MMMM yyyy');
-    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
+    return `${format(weekStart, 'MMM')} – ${format(weekEnd, 'MMM yyyy')}`;
   })();
 
   // --- date picker popover state ---
@@ -199,12 +197,12 @@ export function CalendarHeader(props: {
 
   return (
     <>
-      <header className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-3">
+      <header className="flex items-center justify-between gap-2 px-3 py-2 text-xs sm:px-4 sm:py-3 md:text-base">
         {/* Left: Hamburger + logo + Today + prev/next + title */}
         <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           <button
             type="button"
-            className="rounded-full p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-gray-100 sm:h-10 sm:w-10 dark:hover:bg-gray-700"
             onClick={onToggleSidebar}
             aria-label="Toggle sidebar"
           >
@@ -213,16 +211,16 @@ export function CalendarHeader(props: {
 
           {/* App logo — small and unobtrusive (NOT a clone of Google's). */}
           <div className="mr-1 hidden h-7 w-7 items-center justify-center rounded-md bg-[#1a73e8] sm:flex">
-            <span className="text-[11px] font-bold text-white">{format(new Date(), 'd')}</span>
+            <span className="font-bold text-white">{format(new Date(), 'd')}</span>
           </div>
 
-          <span className="hidden text-lg font-medium text-gray-700 sm:inline dark:text-gray-300">
+          <span className="hidden font-medium text-gray-700 sm:inline dark:text-gray-300">
             Calendar
           </span>
 
           <button
             type="button"
-            className="shrink-0 rounded-full border border-gray-300 px-2 py-1 text-xs font-medium hover:bg-gray-100 sm:px-3 sm:py-1.5 sm:text-sm dark:border-gray-600 dark:hover:bg-gray-700"
+            className="shrink-0 rounded-full border border-gray-300 px-2 py-1 font-medium hover:bg-gray-100 sm:px-3 sm:py-1.5 dark:border-gray-600 dark:hover:bg-gray-700"
             onClick={onToday}
           >
             Today
@@ -231,7 +229,7 @@ export function CalendarHeader(props: {
           <div className="flex items-center">
             <button
               type="button"
-              className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="rounded-full p-0 hover:bg-gray-100 sm:p-1 dark:hover:bg-gray-700"
               onClick={onPrev}
               aria-label="Previous"
             >
@@ -239,7 +237,7 @@ export function CalendarHeader(props: {
             </button>
             <button
               type="button"
-              className="rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="rounded-full p-0 hover:bg-gray-100 sm:p-1 dark:hover:bg-gray-700"
               onClick={onNext}
               aria-label="Next"
             >
@@ -254,9 +252,9 @@ export function CalendarHeader(props: {
               onClick={openPicker}
               aria-haspopup="dialog"
               aria-expanded={pickerOpen}
-              className="group flex items-center gap-1 rounded-full px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="group flex items-center gap-1 rounded-full px-0 py-1 hover:bg-gray-100 sm:px-2 dark:hover:bg-gray-700"
             >
-              <span className="truncate text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
+              <span className="truncate font-semibold text-gray-900 dark:text-gray-100">
                 {title}
               </span>
               <ChevronDownIcon
@@ -265,7 +263,7 @@ export function CalendarHeader(props: {
               />
             </button>
           ) : (
-            <span className="truncate px-2 py-1 text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
+            <span className="truncate px-2 py-1 font-semibold text-gray-900 dark:text-gray-100">
               {title}
             </span>
           )}

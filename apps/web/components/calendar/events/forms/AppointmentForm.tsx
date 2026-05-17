@@ -53,7 +53,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
   }
 
   return (
-    <div className="space-y-3 bg-[#F0F4F9] px-4 py-4">
+    <div className="space-y-3 px-4 py-4 dark:text-[var(--gcal-text),e8eaed]">
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -66,7 +66,6 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
 
       <div className="grid grid-cols-2 items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">Start</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -79,7 +78,6 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">End</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -95,7 +93,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
           {!showTime ? (
             <button
               type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               onClick={() => {
                 setShowTime(true);
                 setAllDay(false);
@@ -108,7 +106,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
           ) : (
             <button
               type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               onClick={() => {
                 // revert to all-day
                 const s = startOfDayLocal(new Date(start));
@@ -125,7 +123,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-md border bg-white p-2 text-sm">
+      <div className="flex flex-col gap-4 rounded-md border bg-white p-2 text-sm dark:bg-[var(--color-gray-700)]">
         <p className="p-2">
           Create a booking page you can share with others so they can book time with you themselves
         </p>
@@ -136,7 +134,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
           Learn More
         </a>
       </div>
-      <div className="flex items-center justify-end gap-2 px-4 py-3">
+      <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">
         <button
           type="button"
           className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100"
@@ -146,7 +144,7 @@ export function AppointmentForm({ initialDate, onClose, onCreate }: Props) {
         </button>
         <button
           type="button"
-          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
+          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm text-white hover:bg-[#044dc2]"
           onClick={submit}
         >
           Add
