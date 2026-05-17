@@ -65,7 +65,7 @@ export function ViewSwitcher({ view, onChange }: Props) {
         aria-expanded={open}
         aria-label={`View: ${activeLabel}`}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 rounded-full border border-[var(--gcal-border,#dadce0)] px-3 py-1.5 text-sm font-medium text-[var(--gcal-text,#3c4043)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="flex items-center gap-1 rounded-full border border-[var(--gcal-border,#dadce0)] px-2 py-1 text-xs font-medium text-[var(--gcal-text,#3c4043)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] sm:text-sm dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
       >
         <span>{activeLabel}</span>
         <ChevronDownIcon size={16} className="text-gray-500" />
