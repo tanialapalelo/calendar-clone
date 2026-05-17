@@ -72,9 +72,11 @@ export default function CalendarPageClient() {
   // ── Create modal ───────────────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
   const [createDate, setCreateDate] = useState<Date | null>(null);
+  const [createKind, setCreateKind] = useState<CreateKind>('event');
 
-  const openCreateForDate = (d: Date) => {
+  const openCreateForDate = (d: Date, kind: CreateKind = 'event') => {
     setCreateDate(d);
+    setCreateKind(kind);
     setCreateOpen(true);
   };
 
@@ -94,7 +96,7 @@ export default function CalendarPageClient() {
       else navigate({ date: addDays(date, 1) });
     },
     onChangeView: (v) => navigate({ view: v }),
-    onNewEvent: () => openCreateForDate(date),
+    onNewEvent: () => openCreateForDate(date, 'event'),
   });
 
   // ── Auth redirect ──────────────────────────────────────────────────────────
@@ -186,6 +188,7 @@ export default function CalendarPageClient() {
       <CreateEventModal
         open={createOpen}
         initialDate={createDate ?? date}
+        initialKind={createKind}
         calendars={calendars}
         onClose={() => setCreateOpen(false)}
         onCreate={(ev) => {

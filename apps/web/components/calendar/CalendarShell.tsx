@@ -2,13 +2,17 @@
 
 import { addDays, addMonths, addWeeks, addYears } from 'date-fns';
 import { useState } from 'react';
+
 import { CalendarHeader } from './CalendarHeader';
+import { CreateMenu } from './CreateMenu';
+import { Sidebar } from './Sidebar';
 import { DayView } from './views/DayView';
 import { MonthView } from './views/MonthView';
 import { WeekView } from './views/WeekView';
 import { YearView } from './views/YearView';
-import { Sidebar } from './Sidebar';
+
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
+import { useIsMobile } from '@/lib/hooks/useIsMobile';
 
 export function CalendarShell(props: {
   view: CalendarView;
@@ -24,7 +28,7 @@ export function CalendarShell(props: {
   onChangeView: (v: CalendarView) => void;
   onChangeDate: (d: Date) => void;
   onNavigate: (next: { view?: CalendarView; date?: Date }) => void;
-  onCreateEvent: (d: Date) => void;
+  onCreateEvent: (d: Date, kind?: CreateKind) => void;
   onOpenEvent: (id: string, rect: DOMRect) => void;
   onOpenDayPopover: (d: Date, rect: DOMRect) => void;
   onExportCalendar?: () => void;
@@ -51,8 +55,10 @@ export function CalendarShell(props: {
     onImportCalendar,
   } = props;
 
-  const onToday = () => onChangeDate(new Date());
+  const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const onToday = () => onChangeDate(new Date());
 
   const onPrev = () => {
     if (view === 'year') return onChangeDate(addYears(date, -1));
@@ -68,6 +74,24 @@ export function CalendarShell(props: {
     return onChangeDate(addDays(date, 1));
   };
 
+  const sidebarNode = (
+    <Sidebar
+      currentDate={date}
+      selectedDate={date}
+      calendars={calendars}
+      visibleCalendarIds={visibleCalendarIds}
+      onToggleCalendar={onToggleCalendar}
+      onCreateCalendar={onCreateCalendar}
+      onUpdateCalendar={onUpdateCalendar}
+      onDeleteCalendar={onDeleteCalendar}
+      onPickDate={(d) => {
+        onNavigate({ date: d });
+        if (isMobile) setSidebarOpen(false);
+      }}
+      onCreate={(kind) => onCreateEvent(date, kind)}
+    />
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
       <CalendarHeader
@@ -78,79 +102,80 @@ export function CalendarShell(props: {
         onNext={onNext}
         onChangeView={onChangeView}
         onChangeDate={onChangeDate}
-        onCreate={() => onCreateEvent(date)}
+        onCreate={(kind) => onCreateEvent(date, kind)}
         onExportCalendar={onExportCalendar}
         onImportCalendar={onImportCalendar}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onOpenEvent={onOpenEvent}
+        sidebarOpen={sidebarOpen}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Mobile overlay backdrop */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/*
+          DESKTOP SIDEBAR — inline (flex push, NO z-index)
+          Width animates between w-56 (open) and w-0 (closed).
+          On close, the inner Sidebar stays mounted but is clipped + invisible.
+          That keeps state alive (mini-calendar cursor, etc) across toggles.
+        */}
+        <aside
+          aria-hidden={!sidebarOpen}
+          className={[
+            'shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out',
+            sidebarOpen ? 'w-44 sm:w-56' : 'w-0',
+          ].join(' ')}
+        >
+          <div
+            className={[
+              'h-full w-44 transition-opacity duration-150 sm:w-56',
+              sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
+            ].join(' ')}
+          >
+            {sidebarNode}
+          </div>
+        </aside>
+
+        {/*
+          DESKTOP COLLAPSED FAB — only thing with z-index.
+          Floats above the main calendar at the top-left, matching Google.
+        */}
+        {!sidebarOpen && (
+          <div className="absolute top-3 left-3 z-30">
+            <CreateMenu collapsed onSelect={(kind) => onCreateEvent(date, kind)} />
+          </div>
+        )}
+
+        {/*
+          MOBILE DRAWER — fixed overlay, separate render path from desktop.
+          Closed = slid off-screen via translate-x, no DOM unmount (so the
+          opening animation runs on every toggle).
+        */}
+        <aside
+          aria-hidden={!sidebarOpen}
+          className={[
+            'fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] transform overflow-y-auto bg-[#F8FAFD] shadow-xl transition-transform duration-200 ease-in-out sm:hidden dark:bg-gray-900',
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          ].join(' ')}
+        >
+          {sidebarNode}
+        </aside>
+
+        {/* MOBILE BACKDROP — sits BELOW the drawer (z-40), above main */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-20 bg-black/30 sm:hidden"
+            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
             onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
           />
         )}
 
-        <div
-          className={[
-            'z-30 shrink-0 transition-all duration-200 ease-in-out',
-            'fixed inset-y-0 left-0 sm:relative sm:inset-auto',
-            sidebarOpen ? 'w-56 translate-x-0' : '-translate-x-full sm:w-12 sm:translate-x-0',
-          ].join(' ')}
-        >
-          {/* Full sidebar */}
-          <div className={sidebarOpen ? 'block' : 'hidden'}>
-            <Sidebar
-              currentDate={date}
-              selectedDate={date}
-              calendars={calendars}
-              visibleCalendarIds={visibleCalendarIds}
-              onToggleCalendar={onToggleCalendar}
-              onCreateCalendar={onCreateCalendar}
-              onUpdateCalendar={onUpdateCalendar}
-              onDeleteCalendar={onDeleteCalendar}
-              onPickDate={(d) => {
-                onNavigate({ date: d, view: 'day' });
-                setSidebarOpen(false);
-              }}
-              onCreate={() => onCreateEvent(date)}
-            />
-          </div>
-
-          {/* Collapsed strip on desktop */}
-          {!sidebarOpen && (
-            <div className="hidden h-full w-12 flex-col items-center border-r border-gray-100 bg-[#F8FAFD] pt-3 sm:flex">
-              <button
-                type="button"
-                onClick={() => onCreateEvent(date)}
-                title="Create event"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md transition-shadow hover:shadow-lg"
-                aria-label="Create event"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5 text-gray-600"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-          )}
-        </div>
-
         <main className="relative flex-1 overflow-auto p-2 sm:p-4">
-          {/* Loading spinner */}
           {loading && (
-            <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/60 pt-16">
+            <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/60 pt-16 dark:bg-gray-900/60">
               <div className="flex flex-col items-center gap-3">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0B57D0] border-t-transparent" />
-                <span className="text-sm text-gray-500">Loading events…</span>
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#1a73e8] border-t-transparent" />
+                <span className="text-sm text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400">
+                  Loading events…
+                </span>
               </div>
             </div>
           )}

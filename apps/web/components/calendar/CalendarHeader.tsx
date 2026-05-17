@@ -1,6 +1,6 @@
 'use client';
 
-import { format } from 'date-fns';
+import { addDays, format, startOfWeek } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import {
   ChevronLeftIcon,
@@ -139,11 +139,12 @@ export function CalendarHeader(props: {
   onNext: () => void;
   onChangeView: (v: CalendarView) => void;
   onChangeDate?: (d: Date) => void;
-  onCreate: () => void;
+  onCreate: (kind?: CreateKind) => void;
   onExportCalendar?: () => void;
   onImportCalendar?: (file: File) => void;
   onToggleSidebar?: () => void;
   onOpenEvent?: (id: string, rect: DOMRect) => void;
+  sidebarOpen?: boolean;
 }) {
   const {
     view,
@@ -157,12 +158,21 @@ export function CalendarHeader(props: {
     onImportCalendar,
     onToggleSidebar,
     onOpenEvent,
+    sidebarOpen = true,
   } = props;
-
+  const titleIsPicker = !sidebarOpen;
   const title = (() => {
     if (view === 'year') return format(date, 'yyyy');
     if (view === 'month') return format(date, 'MMMM yyyy');
-    return format(date, 'MMMM d, yyyy');
+    if (view === 'day') return format(date, 'MMMM d, yyyy');
+
+    // Week view — show "May 2026" if all days are in the same month;
+    // otherwise "Apr 27 – May 3, 2026" (Google parity for spanning weeks).
+    const weekStart = startOfWeek(date, { weekStartsOn: 0 });
+    const weekEnd = addDays(weekStart, 6);
+    const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+    if (sameMonth) return format(date, 'MMMM yyyy');
+    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}`;
   })();
 
   // --- date picker popover state ---
@@ -201,20 +211,14 @@ export function CalendarHeader(props: {
             <MenuIcon size={20} />
           </button>
 
-          <div className="mr-1 hidden h-8 w-8 items-center justify-center rounded-xl bg-[#0B57D0] sm:flex">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-5 w-5 text-white"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" />
-              <path d="M16 2v4M8 2v4M3 10h18" />
-            </svg>
+          {/* App logo — small and unobtrusive (NOT a clone of Google's). */}
+          <div className="mr-1 hidden h-7 w-7 items-center justify-center rounded-md bg-[#1a73e8] sm:flex">
+            <span className="text-[11px] font-bold text-white">{format(new Date(), 'd')}</span>
           </div>
 
-          <h1>Calendar</h1>
+          <span className="hidden text-lg font-medium text-gray-700 sm:inline dark:text-gray-300">
+            Calendar
+          </span>
 
           <button
             type="button"
@@ -243,22 +247,28 @@ export function CalendarHeader(props: {
             </button>
           </div>
 
-          <button
-            ref={titleBtnRef}
-            type="button"
-            onClick={openPicker}
-            aria-haspopup="dialog"
-            aria-expanded={pickerOpen}
-            className="group flex items-center gap-1 rounded-full px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            <span className="truncate text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
+          {titleIsPicker ? (
+            <button
+              ref={titleBtnRef}
+              type="button"
+              onClick={openPicker}
+              aria-haspopup="dialog"
+              aria-expanded={pickerOpen}
+              className="group flex items-center gap-1 rounded-full px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <span className="truncate text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
+                {title}
+              </span>
+              <ChevronDownIcon
+                size={16}
+                className="text-gray-500 transition-transform group-aria-expanded:rotate-180"
+              />
+            </button>
+          ) : (
+            <span className="truncate px-2 py-1 text-sm font-semibold text-gray-900 sm:text-base dark:text-gray-100">
               {title}
             </span>
-            <ChevronDownIcon
-              size={16}
-              className="text-gray-500 transition-transform group-aria-expanded:rotate-180"
-            />
-          </button>
+          )}
         </div>
 
         {/* Right: Search + ViewSwitcher + Settings + UserMenu */}
@@ -274,13 +284,15 @@ export function CalendarHeader(props: {
         </div>
       </header>
 
-      <DatePickerPopover
-        open={pickerOpen}
-        anchorRect={pickerRect}
-        selected={date}
-        onSelect={(d) => onChangeDate?.(d)}
-        onClose={() => setPickerOpen(false)}
-      />
+      {titleIsPicker && (
+        <DatePickerPopover
+          open={pickerOpen}
+          anchorRect={pickerRect}
+          selected={date}
+          onSelect={(d) => onChangeDate?.(d)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </>
   );
 }
