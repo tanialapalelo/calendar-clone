@@ -13,6 +13,7 @@ import { YearView } from './views/YearView';
 
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
+import { DaySkeleton, MonthSkeleton, WeekSkeleton } from '@/components/calendar/Skeletons';
 
 export function CalendarShell(props: {
   view: CalendarView;
@@ -169,44 +170,49 @@ export function CalendarShell(props: {
         )}
 
         <main className="relative flex-1 overflow-auto p-2 sm:p-4">
-          {loading && (
-            <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/60 pt-16 dark:bg-gray-900/60">
-              <div className="flex flex-col items-center gap-3">
+          {view === 'year' &&
+            (loading ? (
+              <div className="flex items-center justify-center py-20">
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#1a73e8] border-t-transparent" />
-                <span className="text-sm text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400">
-                  Loading events…
-                </span>
               </div>
-            </div>
-          )}
-
-          {view === 'year' && (
-            <YearView
-              date={date}
-              events={events}
-              onPickMonth={(d) => onNavigate({ date: d, view: 'month' })}
-              onOpenDayPopover={onOpenDayPopover}
-            />
-          )}
-          {view === 'month' && (
-            <MonthView
-              date={date}
-              events={events}
-              onSelectDate={(d) => onNavigate({ date: d, view: 'day' })}
-              onCreate={(d) => onCreateEvent(d)}
-              onOpenEvent={onOpenEvent}
-              onOpenDayPopover={onOpenDayPopover}
-            />
-          )}
-          {view === 'week' && (
-            <WeekView
-              date={date}
-              events={events}
-              onOpenEvent={onOpenEvent}
-              onCreateEvent={onCreateEvent}
-            />
-          )}
-          {view === 'day' && <DayView date={date} events={events} onOpenEvent={onOpenEvent} />}
+            ) : (
+              <YearView
+                date={date}
+                events={events}
+                onPickMonth={(d) => onNavigate({ date: d, view: 'month' })}
+                onOpenDayPopover={onOpenDayPopover}
+              />
+            ))}
+          {view === 'month' &&
+            (loading ? (
+              <MonthSkeleton />
+            ) : (
+              <MonthView
+                date={date}
+                events={events}
+                onSelectDate={(d) => onNavigate({ date: d, view: 'day' })}
+                onCreate={(d) => onCreateEvent(d)}
+                onOpenEvent={onOpenEvent}
+                onOpenDayPopover={onOpenDayPopover}
+              />
+            ))}
+          {view === 'week' &&
+            (loading ? (
+              <WeekSkeleton />
+            ) : (
+              <WeekView
+                date={date}
+                events={events}
+                onOpenEvent={onOpenEvent}
+                onCreateEvent={onCreateEvent}
+              />
+            ))}
+          {view === 'day' &&
+            (loading ? (
+              <DaySkeleton />
+            ) : (
+              <DayView date={date} events={events} onOpenEvent={onOpenEvent} />
+            ))}
         </main>
       </div>
     </div>

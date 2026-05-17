@@ -9,6 +9,7 @@ import { getEventLayoutRange } from '@/lib/events/layout-range';
 import { isBarEventInMonth } from '@/lib/events/month-classify';
 import { buildWeekBarLayout } from '@/lib/events/month-week-segments';
 import { generateMonthGrid } from '@/lib/month-grid';
+import { useMemo } from 'react';
 
 export function MonthView(props: {
   date: Date;
@@ -20,9 +21,11 @@ export function MonthView(props: {
 }) {
   const { date, events, onSelectDate, onCreate, onOpenEvent, onOpenDayPopover } = props;
 
-  const cells = generateMonthGrid(date);
-  const weeks = Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) =>
-    cells.slice(w * 7, w * 7 + 7),
+  const cells = useMemo(() => generateMonthGrid(date), [date]);
+  const weeks = useMemo(
+    () =>
+      Array.from({ length: Math.ceil(cells.length / 7) }, (_, w) => cells.slice(w * 7, w * 7 + 7)),
+    [cells],
   );
 
   const ROW_HEIGHT = 18;
@@ -32,7 +35,7 @@ export function MonthView(props: {
   const OVERLAY_TOP = 44;
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-white">
+    <div className="overflow-hidden rounded-2xl border border-[var(--gcal-border,#dadce0)] bg-white dark:border-gray-700 dark:bg-gray-900">
       {/* Day of week headers */}
       <div className="grid w-full grid-cols-7 border-b border-[var(--gcal-border,#dadce0)] text-center">
         {daysOfWeek.map((day) => (
@@ -93,7 +96,7 @@ export function MonthView(props: {
                     <div
                       key={cell.date.toISOString()}
                       role="button"
-                      className="flex min-h-[60px] cursor-pointer flex-col border-r border-b border-[#E1E3E1] p-1 text-sm hover:bg-gray-50 sm:min-h-[120px] sm:p-2"
+                      className="flex min-h-[60px] cursor-pointer flex-col border-r border-b border-[var(--gcal-border,#dadce0)] p-1 text-sm hover:bg-[var(--gcal-bg-hover,#f1f3f4)] sm:min-h-[120px] sm:p-2"
                       onClick={() => onCreate(cell.date)}
                     >
                       <div className="flex items-center justify-center">
@@ -123,7 +126,7 @@ export function MonthView(props: {
                           return (
                             <div
                               key={ev.id}
-                              className="hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200 sm:flex"
+                              className="hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200 sm:flex dark:text-gray-300 dark:hover:bg-gray-700"
                               title={ev.title}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -135,7 +138,7 @@ export function MonthView(props: {
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                                 style={{ background: ev.color ?? '#039BE5' }}
                               />
-                              <span className="hidden shrink-0 text-gray-600 sm:inline">
+                              <span className="hidden shrink-0 text-gray-600 sm:inline dark:text-gray-200">
                                 {format(parseISO(ev.start), 'h:mma').toLowerCase()}
                               </span>
                               <div className="flex items-center gap-1">
@@ -149,7 +152,7 @@ export function MonthView(props: {
                         {hiddenTotal > 0 && (
                           <button
                             type="button"
-                            className="relative mt-1 w-full rounded px-1 py-0.5 text-left text-xs font-semibold text-gray-900 hover:bg-gray-200"
+                            className="relative mt-1 w-full rounded px-1 py-0.5 text-left text-xs font-semibold text-gray-900 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700"
                             onClick={(clickEvt) => {
                               clickEvt.stopPropagation();
                               if (onOpenDayPopover) {

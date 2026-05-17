@@ -121,7 +121,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
   };
 
   return (
-    <div className="space-y-3 bg-[#F0F4F9] px-4 py-4">
+    <div className="space-y-3 px-4 py-4 dark:text-[var(--gcal-text),e8eaed]">
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -134,7 +134,6 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
       <div className="grid grid-cols-2 items-end gap-3">
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">Start</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -147,7 +146,6 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-semibold text-gray-600">End</label>
           <input
             type={allDay ? 'date' : 'datetime-local'}
             className="w-full rounded border px-3 py-2 text-sm"
@@ -163,13 +161,13 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
           {!showTime ? (
             <button
               type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100"
+              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               onClick={onClickAddTime}
             >
               Add time
             </button>
           ) : (
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={allDay}
@@ -192,13 +190,6 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
             onKeyDown={onGuestInputKey}
             placeholder="Add guest and press Enter"
           />
-          <button
-            type="button"
-            className="rounded px-3 py-1 text-sm text-gray-700 hover:bg-gray-100"
-            onClick={addGuest}
-          >
-            Add
-          </button>
         </div>
 
         {guests.length > 0 && (
@@ -236,7 +227,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       {/* Calendar selector */}
       {calendars && calendars.length > 1 && (
         <div className="flex items-center gap-2 border-t pt-3">
-          <span className="text-xs font-semibold text-gray-500">Calendar</span>
+          <span className="text-xs">Calendar</span>
           <select
             className="flex-1 rounded border px-2 py-1.5 text-sm"
             value={calendarId}
@@ -252,17 +243,17 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 px-4 py-3">
+      <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">
         <button
           type="button"
-          className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100"
+          className="rounded-3xl px-3 py-2 text-sm text-blue-700 hover:bg-blue-100 dark:hover:bg-[var(--color-gray-700)]"
           onClick={onMoreOptions}
         >
           More Options
         </button>
         <button
           type="button"
-          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2]"
+          className="rounded-3xl bg-[#0B57D0] px-4 py-2 text-sm text-white hover:bg-[#044dc2]"
           onClick={submit}
         >
           Save

@@ -15,8 +15,10 @@ export function YearMiniView(props: {
 
   return (
     <button type="button" className="w-full p-3 text-left">
-      <div className="mb-2 text-sm font-semibold text-gray-900">{format(monthDate, 'MMMM')}</div>
-      <div className="mx-auto grid grid-cols-7 gap-y-1 text-center text-[10px] text-gray-600">
+      <div className="mb-2 text-sm font-semibold text-gray-900 dark:text-[var(--gcal-text-muted,#70757a)]">
+        {format(monthDate, 'MMMM')}
+      </div>
+      <div className="mx-auto grid grid-cols-7 gap-y-1 text-center text-[10px] text-gray-600 dark:text-gray-400">
         {shortDaysOfWeek.map((d, i) => (
           <div key={`${d}-${i}`} className="text-center font-semibold">
             {d}
@@ -31,11 +33,12 @@ export function YearMiniView(props: {
           const isToday = cell.isToday && belongsToMonth;
 
           const base =
-            'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-center';
+            'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-center text-[var(--gcal-text,#3c4043)]';
           const todayClass = isToday ? 'bg-[#0B57D0] font-bold text-white' : '';
-          const selectedClass = isSelected && !isToday ? 'bg-[#C2E7FF] font-semibold' : '';
-          const outsideClass = !belongsToMonth ? 'text-gray-300' : '';
-          const hoverClass = !isToday && !isSelected ? 'hover:bg-gray-100' : '';
+          const selectedClass = isSelected && !isToday ? 'bg-[#1c6a9c] font-semibold' : '';
+          const outsideClass = !belongsToMonth ? 'text-gray-300 dark:text-gray-500' : '';
+          const hoverClass =
+            !isToday && !isSelected ? 'hover:bg-[var(--gcal-bg-hover,#f1f3f4)]' : '';
 
           const className = [base, todayClass, selectedClass, outsideClass, hoverClass]
             .filter(Boolean)

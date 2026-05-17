@@ -96,14 +96,14 @@ export function DayEventsPopover({
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[250px] rounded-3xl bg-white shadow-xl"
+        className="fixed w-[250px] rounded-3xl bg-white shadow-xl dark:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300"
         style={{ left: position.left, top: position.top }}
         role="dialog"
         aria-modal="true"
       >
         <div className="max-h-fit overflow-auto px-2 py-2">
           <div className="flex w-full items-center justify-between px-3 pb-2">
-            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700">
+            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-gray-400">
               <span className="uppercase">{format(date, 'EEE')}</span>
               <span
                 className={[
@@ -139,7 +139,7 @@ export function DayEventsPopover({
                 const eventColor = ev.color || '#0090d6';
                 const containerClass = isBar
                   ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
-                  : 'rounded-md bg-gray-50 hover:bg-gray-100 text-gray-900';
+                  : 'rounded-md hover:bg-gray-100 text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700';
 
                 const openId = ev.id;
 

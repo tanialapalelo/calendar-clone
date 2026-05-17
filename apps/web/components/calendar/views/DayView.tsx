@@ -1,24 +1,37 @@
 'use client';
 
 import { format, isSameDay, parseISO } from 'date-fns';
-import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
-import { eventsForDay } from '@/lib/events/day';
+import { CircleIcon, Grid2X2Icon } from 'lucide-react';
+import { useEffect, useMemo, useRef } from 'react';
+
 import {
   DAY_VIEW_COLUMN_GAP_PX,
   DAY_VIEW_GUTTER_PX,
+  DAY_VIEW_GUTTER_PX_MOBILE,
   DAY_VIEW_PX_PER_HOUR,
   DAY_VIEW_PX_PER_MIN,
 } from '@/constants';
 import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
-import { CircleIcon, Grid2X2Icon } from 'lucide-react';
+import { eventsForDay } from '@/lib/events/day';
+import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
+import { useIsMobile } from '@/lib/hooks/useIsMobile';
 
 function getGmtOffsetLabel(d: Date) {
   const parts = new Intl.DateTimeFormat(undefined, {
     timeZoneName: 'shortOffset',
   }).formatToParts(d);
+  return parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+}
 
-  const tz = parts.find((p) => p.type === 'timeZoneName')?.value;
-  return tz ?? '';
+/**
+ * Google-style hour label: 1 → "1 AM", 13 → "1 PM", 0 → null (would clip at y=0)
+ */
+function hourLabel(h: number): string | null {
+  if (h === 0) return null;
+  if (h === 12) return '12 PM';
+  const am = h < 12;
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${hh} ${am ? 'AM' : 'PM'}`;
 }
 
 export function DayView(props: {
@@ -26,82 +39,121 @@ export function DayView(props: {
   events: CalendarEvent[];
   onOpenEvent: (id: string, rect: DOMRect) => void;
 }) {
-  const { date, events } = props;
+  const { date, events, onOpenEvent } = props;
+
+  const isMobile = useIsMobile();
+  const gutterPx = isMobile ? DAY_VIEW_GUTTER_PX_MOBILE : DAY_VIEW_GUTTER_PX;
+  const gridTemplate = `${gutterPx}px minmax(0, 1fr)`;
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
+  const today = new Date();
+  const tzLabel = getGmtOffsetLabel(today);
+  const showNowIndicator = isSameDay(date, today);
 
-  // Expand recurring events for the visible day window so occurrences are included.
-  const dayEvents = eventsForDay(events, date);
+  // Memo: only recompute when date or events change
+  const positioned = useMemo(() => {
+    const dayEvents = eventsForDay(events, date);
+    return layoutOverlappingEvents(dayEvents, date);
+  }, [events, date]);
 
-  // Compute overlapping layout (positions in minutes columns/cols etc.)
-  const positioned = layoutOverlappingEvents(dayEvents, date);
+  // Now indicator position — no spacer offset
+  const nowMinutes = today.getHours() * 60 + today.getMinutes();
+  const nowTop = nowMinutes * DAY_VIEW_PX_PER_MIN;
+  const gridHeight = 24 * DAY_VIEW_PX_PER_HOUR;
 
-  // Now indicator
-  const showNowIndicator = isSameDay(date, new Date());
-  const now = new Date();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  // Add the top offset that corresponds to the first hour row in the timeline
-  const nowTop = DAY_VIEW_PX_PER_HOUR + nowMinutes * DAY_VIEW_PX_PER_MIN;
-
-  const tzLabel = getGmtOffsetLabel(new Date());
+  // Auto-scroll to ~7 AM on mount (Google parity)
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = 7 * DAY_VIEW_PX_PER_HOUR;
+  }, [date]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      {/* Header */}
-      <div className="border-b border-gray-200">
+    <div className="overflow-hidden rounded-2xl border border-[var(--gcal-border,#dadce0)] bg-white dark:border-gray-700 dark:bg-gray-900">
+      {/*
+        Single scroll container — same pattern as WeekView so the day header
+        stays visible while the timed grid scrolls, and so column widths can
+        never desync.
+      */}
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 180px)', scrollbarGutter: 'stable' }}
+      >
+        {/* Sticky day header */}
         <div
-          className="flex items-center justify-between py-3 pr-4"
-          style={{ paddingLeft: DAY_VIEW_GUTTER_PX }}
+          className="sticky top-0 z-20 grid border-b border-[var(--gcal-border,#dadce0)] bg-white dark:border-gray-700 dark:bg-gray-900"
+          style={{ gridTemplateColumns: gridTemplate }}
         >
-          <div className="flex items-center gap-3">
-            <div className={showNowIndicator ? 'text-[#0B57D0]' : 'text-gray-700'}>
-              <div className="text-xs font-semibold tracking-wide uppercase">
-                {format(date, 'EEE')}
-              </div>
-              <div
-                className={
-                  showNowIndicator
-                    ? 'mt-1 inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#0B57D0] text-xl font-semibold text-white'
-                    : 'mt-1 text-2xl font-semibold text-gray-900'
-                }
-              >
-                {format(date, 'd')}
-              </div>
+          <div className="py-2 pr-1 text-right text-[10px] text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400">
+            {tzLabel}
+          </div>
+          <div className="flex flex-col items-center justify-center py-2">
+            <div
+              className={`text-[10px] font-semibold tracking-wide uppercase sm:text-[11px] ${
+                showNowIndicator
+                  ? 'text-[#1a73e8]'
+                  : 'text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400'
+              }`}
+            >
+              {format(date, 'EEE')}
+            </div>
+            <div
+              className={
+                showNowIndicator
+                  ? 'mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-[#1a73e8] text-sm font-bold text-white sm:h-8 sm:w-8'
+                  : 'mt-0.5 flex h-7 w-7 items-center justify-center text-sm font-medium text-[var(--gcal-text,#3c4043)] sm:h-8 sm:w-8 dark:text-gray-100'
+              }
+            >
+              {format(date, 'd')}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Timeline — single scrollable container */}
-      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-        {/* This relative wrapper makes absolute children (events, now indicator) scroll with the grid */}
-        <div className="relative" style={{ minWidth: 280 }}>
-          {/* Hour rows */}
-          <div className="divide-y divide-gray-200">
-            {/* Top spacer row with TZ label */}
-            <div className="grid" style={{ gridTemplateColumns: `${DAY_VIEW_GUTTER_PX}px 1fr` }}>
-              <div className="border-r border-gray-200 pt-2 pr-2 text-right text-[11px] text-gray-500">
-                <div className="text-xs text-gray-500">{tzLabel}</div>
-              </div>
-              <div style={{ height: DAY_VIEW_PX_PER_HOUR }} />
-            </div>
-
-            {hours.map((h) => (
+        {/* Timed grid */}
+        <div className="relative" style={{ height: gridHeight }}>
+          {/* Grid background: 24 rows × (gutter + 1 day) columns */}
+          <div
+            className="absolute inset-0 grid"
+            style={{
+              gridTemplateColumns: gridTemplate,
+              gridTemplateRows: `repeat(24, ${DAY_VIEW_PX_PER_HOUR}px)`,
+            }}
+          >
+            {hours.map((h) => [
               <div
-                key={h}
-                className="grid"
-                style={{ gridTemplateColumns: `${DAY_VIEW_GUTTER_PX}px 1fr` }}
-              >
-                <div className="border-r border-gray-200 pt-2 pr-2 text-right text-[11px] text-gray-500">
-                  {h === 0 ? '' : `${String(h).padStart(2, '0')}:00`}
-                </div>
-                <div style={{ height: DAY_VIEW_PX_PER_HOUR }} />
-              </div>
-            ))}
+                key={`gutter-${h}`}
+                className="border-r border-[var(--gcal-border,#dadce0)] dark:border-gray-700"
+              />,
+              <button
+                key={`cell-${h}`}
+                type="button"
+                aria-label={`Create event at ${hourLabel(h) ?? '12 AM'}`}
+                className="cursor-pointer border-b border-[var(--gcal-border,#dadce0)] text-left hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:border-gray-700 dark:hover:bg-gray-800"
+              />,
+            ])}
           </div>
 
-          {/* Events overlay — absolute, positioned within the relative wrapper above */}
-          <div className="absolute inset-0" style={{ left: DAY_VIEW_GUTTER_PX }}>
+          {/* Hour labels — absolute, centered ON grid lines (translateY -50%) */}
+          {hours.map((h) => {
+            const label = hourLabel(h);
+            if (!label) return null;
+            return (
+              <div
+                key={`label-${h}`}
+                className="pointer-events-none absolute -translate-y-1/2 pr-1 text-right text-[10px] text-[var(--gcal-text-muted,#70757a)] dark:text-gray-400"
+                style={{ top: h * DAY_VIEW_PX_PER_HOUR, left: 0, width: gutterPx }}
+              >
+                {label}
+              </div>
+            );
+          })}
+
+          {/* Events overlay */}
+          <div
+            className="pointer-events-none absolute inset-y-0"
+            style={{ left: gutterPx, right: 0 }}
+          >
             <div className="relative h-full">
               {positioned.map((p) => {
                 const allDay = !!p.event.allDay;
@@ -109,82 +161,82 @@ export function DayView(props: {
 
                 const dayStartMs = startOfDayDefaultHour(date).getTime();
                 const dayEndMs = endOfDayExclusive(date).getTime();
-
                 const evStart = parseISO(p.event.start).getTime();
                 const evEnd = parseISO(p.event.end).getTime();
 
                 const continuesFromPrev = evStart < dayStartMs;
                 const continuesToNext = evEnd > dayEndMs;
 
-                const startMin = p.startMin;
-                const endMin = p.endMin;
-
-                const top =
-                  allDay || crossDay ? 0 : DAY_VIEW_PX_PER_HOUR + startMin * DAY_VIEW_PX_PER_MIN;
+                // No spacer offset — top is just minutes from midnight
+                const top = allDay || crossDay ? 0 : p.startMin * DAY_VIEW_PX_PER_MIN;
                 const height =
                   allDay || crossDay
                     ? DAY_VIEW_PX_PER_HOUR / 2
-                    : Math.max(18, (endMin - startMin) * DAY_VIEW_PX_PER_MIN);
+                    : Math.max(18, (p.endMin - p.startMin) * DAY_VIEW_PX_PER_MIN);
 
                 const leftPct = (p.col / p.colCount) * 100;
                 const widthPct = (1 / p.colCount) * 100;
+                const background = p.event.color ?? '#039BE5';
 
-                const openId = p.event.id;
-
-                const isNotEvent = p.event.isTask ? (
-                  <CircleIcon size={8} />
-                ) : p.event.isAppointment ? (
-                  <Grid2X2Icon size={8} />
-                ) : null;
+                const KindIcon = p.event.isTask
+                  ? CircleIcon
+                  : p.event.isAppointment
+                    ? Grid2X2Icon
+                    : null;
 
                 return (
-                  <div
+                  <button
                     key={p.event.id}
-                    className="absolute cursor-pointer"
+                    type="button"
+                    title={`${p.event.title} (${format(parseISO(p.event.start), 'MMM d HH:mm')}–${format(parseISO(p.event.end), 'MMM d HH:mm')})`}
+                    className="pointer-events-auto absolute cursor-pointer transition-opacity hover:opacity-90"
                     style={{
                       top,
                       height,
                       left: `calc(${leftPct}% + ${DAY_VIEW_COLUMN_GAP_PX / 2}px)`,
                       width: `calc(${widthPct}% - ${DAY_VIEW_COLUMN_GAP_PX}px)`,
                     }}
-                    title={`${p.event.title} (${format(parseISO(p.event.start), 'MMM d HH:mm')}–${format(parseISO(p.event.end), 'MMM d HH:mm')})`}
                     onClick={(e) => {
-                      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                      props.onOpenEvent(openId, rect);
+                      e.stopPropagation();
+                      onOpenEvent(p.event.id, e.currentTarget.getBoundingClientRect());
                     }}
                   >
                     <div
                       className={[
-                        'relative h-full overflow-hidden px-2 py-1 text-xs text-white',
+                        'relative h-full overflow-hidden px-2 py-1 text-left text-xs text-white',
                         continuesFromPrev ? 'rounded-t-none' : 'rounded-t-md',
                         continuesToNext ? 'rounded-b-none' : 'rounded-b-md',
                       ].join(' ')}
-                      style={{ background: p.event.color ?? '#039BE5' }}
+                      style={{ background }}
                     >
                       <div className="truncate font-semibold">{p.event.title}</div>
                       {!allDay && !crossDay && (
-                        <div className="truncate text-[11px]">
-                          {format(parseISO(p.event.start), 'HH:mm')} –{' '}
-                          {format(parseISO(p.event.end), 'HH:mm')}
+                        <div className="truncate text-[11px] opacity-90">
+                          {format(parseISO(p.event.start), 'h:mma').toLowerCase()} –{' '}
+                          {format(parseISO(p.event.end), 'h:mma').toLowerCase()}
                         </div>
                       )}
-                      <div className="absolute top-1 right-1">{isNotEvent}</div>
+                      {KindIcon && (
+                        <div className="absolute top-1 right-1" aria-hidden="true">
+                          <KindIcon size={8} />
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Now indicator — also inside the relative wrapper so it scrolls with the grid */}
+          {/* Now indicator */}
           {showNowIndicator && (
             <div
-              className="pointer-events-none absolute right-0"
-              style={{ left: DAY_VIEW_GUTTER_PX, top: nowTop }}
+              className="pointer-events-none absolute right-0 z-10"
+              style={{ left: gutterPx, top: nowTop }}
             >
               <div className="relative">
                 <div className="absolute top-1/2 -left-[5px] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500" />
-                <div className="border-t border-red-500" />
+                <div className="border-t-2 border-red-500" />
               </div>
             </div>
           )}
