@@ -32,7 +32,10 @@ async function bootstrap() {
     ',',
   );
   app.enableCors({
-    origin: (origin, cb) => cb(null, !origin || origins.includes(origin)),
+    origin: (
+      origin: string | undefined,
+      cb: (err: Error | null, allow?: boolean) => void,
+    ) => cb(null, !origin || origins.includes(origin)),
     credentials: true,
   });
 
@@ -53,7 +56,7 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3001);
 }
 
-bootstrap().catch((err) => {
+bootstrap().catch((err: unknown) => {
   console.error(err);
   process.exit(1);
 });
