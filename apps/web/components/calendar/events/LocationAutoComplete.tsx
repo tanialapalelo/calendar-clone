@@ -27,6 +27,7 @@ export default function LocationAutocomplete(props: {
   } = props;
 
   const [input, setInput] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -35,15 +36,16 @@ export default function LocationAutocomplete(props: {
   const controllerRef = useRef<AbortController | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  // Keep input synced when parent programmatically changes value
-  useEffect(() => setInput(value), [value]);
+  // Sync input when parent programmatically changes value (no effect needed)
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setInput(value);
+  }
 
   // Debounced search
   useEffect(() => {
     if ((input ?? '').trim().length < minLength) {
-      setSuggestions([]);
-      setOpen(false);
-      setLoading(false);
+      // No fetch needed; UI just shows nothing.
       if (controllerRef.current) {
         controllerRef.current.abort();
         controllerRef.current = null;
@@ -151,6 +153,11 @@ export default function LocationAutocomplete(props: {
           const v = e.target.value;
           setInput(v);
           onChange(v);
+          if (v.trim().length < minLength) {
+            setSuggestions([]);
+            setOpen(false);
+            setLoading(false);
+          }
         }}
         onFocus={() => {
           if (suggestions.length > 0) setOpen(true);

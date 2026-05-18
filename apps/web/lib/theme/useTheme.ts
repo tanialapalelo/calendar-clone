@@ -44,8 +44,8 @@ export function useTheme() {
   // After first paint: read the real stored value and apply it
   useEffect(() => {
     const stored = readStoredTheme();
-    setThemeState(stored);
     applyTheme(stored);
+    if (stored !== 'system') setThemeState(stored);
   }, []);
 
   // Re-apply when OS preference changes (only relevant when mode is 'system')

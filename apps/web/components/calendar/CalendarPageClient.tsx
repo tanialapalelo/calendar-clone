@@ -122,7 +122,6 @@ export default function CalendarPageClient() {
     let failed = 0;
     for (const ev of imported) {
       try {
-        // eslint-disable-next-line no-await-in-loop
         await addEvent(ev);
       } catch {
         failed++;

@@ -35,15 +35,6 @@ export function compareEventsInDayBucket(a: CalendarEvent, b: CalendarEvent): nu
   return aStart - bStart;
 }
 
-function dayStartMs(day: Date) {
-  return startOfDay(day).getTime();
-}
-
-function dateOnlyStartMs(yyyyMmDd: string) {
-  // Interpret as local date midnight for calendar grid math
-  return parseISO(`${yyyyMmDd}T00:00:00`).getTime();
-}
-
 export function eventsForDay(events: CalendarEvent[], day: Date) {
   const dayStart = startOfDay(day).getTime();
   const dayEnd = addDays(startOfDay(day), 1).getTime(); // exclusive

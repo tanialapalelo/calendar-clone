@@ -2,7 +2,7 @@
 
 import { format, isSameDay, parseISO } from 'date-fns';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 import {
   DAY_VIEW_COLUMN_GAP_PX,
@@ -50,11 +50,8 @@ export function DayView(props: {
   const tzLabel = getGmtOffsetLabel(today);
   const showNowIndicator = isSameDay(date, today);
 
-  // Memo: only recompute when date or events change
-  const positioned = useMemo(() => {
-    const dayEvents = eventsForDay(events, date);
-    return layoutOverlappingEvents(dayEvents, date);
-  }, [events, date]);
+  const dayEvents = eventsForDay(events, date);
+  const positioned = layoutOverlappingEvents(dayEvents, date);
 
   // Now indicator position — no spacer offset
   const nowMinutes = today.getHours() * 60 + today.getMinutes();

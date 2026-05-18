@@ -21,11 +21,6 @@ export function useEventsStorage() {
     return safeParse(localStorage.getItem(STORAGE_KEY));
   });
 
-  //   load once on mount
-  useEffect(() => {
-    setEvents(safeParse(localStorage.getItem(STORAGE_KEY)));
-  }, []);
-
   //   save on events change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(events));

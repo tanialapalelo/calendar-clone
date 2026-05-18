@@ -7,7 +7,6 @@ import {
   ChevronRightIcon,
   MenuIcon,
   SearchIcon,
-  XIcon,
   ChevronDownIcon,
 } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
@@ -36,10 +35,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
   const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setResults([]);
-      return;
-    }
+  if (!debouncedQuery.trim()) return;
     setLoading(true);
     const qs = new URLSearchParams({ q: debouncedQuery });
     apiFetch<ApiEvent[]>(`/v1/events/search?${qs.toString()}`)
@@ -73,8 +69,12 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
           value={query}
           className="w-48 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none dark:text-gray-200"
           onChange={(e) => {
-            setQuery(e.target.value);
-            if (!e.target.value.trim()) setOpen(false);
+            const v = e.target.value;
+            setQuery(v);
+            if (!v.trim()) {
+              setResults([]);
+              setOpen(false);
+            }
           }}
           onFocus={() => results.length > 0 && setOpen(true)}
         />

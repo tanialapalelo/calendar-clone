@@ -4,6 +4,7 @@ import { useCurrentUser } from '@/lib/auth/useCurrentUser';
 import { API_URL } from '@/lib/api/client';
 import { LogOutIcon, UserIcon } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 
 export function UserMenu() {
   const state = useCurrentUser();
@@ -56,9 +57,11 @@ export function UserMenu() {
         title={user.name ?? user.email}
       >
         {user.picture ? (
-          <img
+          <Image
             src={user.picture}
             alt={user.name ?? user.email}
+            width={32}
+            height={32}
             className="h-8 w-8 rounded-full object-cover"
             referrerPolicy="no-referrer"
           />
@@ -73,10 +76,11 @@ export function UserMenu() {
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0B57D0] text-sm font-semibold text-white">
               {user.picture ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={user.picture}
                   alt={user.name ?? user.email}
+                  width={40}
+                  height={40}
                   className="h-10 w-10 rounded-full object-cover"
                   referrerPolicy="no-referrer"
                 />
