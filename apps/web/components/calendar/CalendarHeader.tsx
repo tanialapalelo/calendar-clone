@@ -36,6 +36,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
 
   useEffect(() => {
   if (!debouncedQuery.trim()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching is a legitimate external-system sync; loading flag must reflect the in-flight request
     setLoading(true);
     const qs = new URLSearchParams({ q: debouncedQuery });
     apiFetch<ApiEvent[]>(`/v1/events/search?${qs.toString()}`)

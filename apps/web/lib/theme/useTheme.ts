@@ -45,6 +45,7 @@ export function useTheme() {
   useEffect(() => {
     const stored = readStoredTheme();
     applyTheme(stored);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing external store (localStorage) into React on mount
     if (stored !== 'system') setThemeState(stored);
   }, []);
 

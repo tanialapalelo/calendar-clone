@@ -1,4 +1,4 @@
-import { addDays, parseISO, startOfDay } from 'date-fns';
+import { addDays, startOfDay } from 'date-fns';
 import { getEventRangeMs } from '@/lib/events/range';
 
 /**

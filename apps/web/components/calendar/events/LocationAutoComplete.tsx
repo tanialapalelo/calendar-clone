@@ -53,6 +53,7 @@ export default function LocationAutocomplete(props: {
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching is a legitimate external-system sync; loading/open flags must reflect the in-flight request
     setLoading(true);
     setOpen(true);
 
