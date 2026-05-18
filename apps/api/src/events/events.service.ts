@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -579,7 +578,7 @@ export class EventsService {
     });
   }
 
-  private async updateAll(
+  private updateAll(
     existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>,
     inst: { masterId: string; originalStartAt: Date } | null,
     dto: UpdateEventDto,

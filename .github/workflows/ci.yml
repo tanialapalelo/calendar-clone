@@ -75,6 +75,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
+      - name: Prisma generate
+        run: pnpm -C apps/api exec prisma generate
+
       - name: Lint
         run: pnpm lint
 
@@ -86,9 +89,6 @@ jobs:
 
       - name: Unit tests (web)
         run: pnpm -C apps/web test
-
-      - name: Prisma generate
-        run: pnpm -C apps/api exec prisma generate
 
       - name: Prisma migrate (test DB)
         run: pnpm -C apps/api exec prisma migrate deploy
