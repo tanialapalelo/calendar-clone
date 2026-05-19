@@ -64,8 +64,8 @@ export type EventInstance = {
   endDate: Date | null;
   timeZone: string | null;
   color: string | null;
-  guests: unknown | null;
-  notifications: unknown | null;
+  guests: unknown;
+  notifications: unknown;
   visibility: string | null;
   busyStatus: string | null;
   createdAt: Date;

@@ -44,13 +44,17 @@ export class AuthController {
   async googleCallback(
     @Query('code') code: string,
     @Query('state') state: string,
-    @Req() req: Request & { cookies?: Record<string, string> },
+    @Req() req: Request & { cookies: Record<string, string> },
     @Res() res: Response,
   ) {
     if (!code) throw new BadRequestException('Missing code');
     if (!state) throw new UnauthorizedException('Missing state');
 
-    const expected = req.cookies?.[STATE_COOKIE];
+    const expected =
+      typeof req.cookies?.[STATE_COOKIE] === 'string'
+        ? req.cookies[STATE_COOKIE]
+        : undefined;
+
     // Constant-time-ish compare: both are base64url strings of equal expected length
     if (!expected || expected.length !== state.length || expected !== state) {
       throw new UnauthorizedException('Invalid state');

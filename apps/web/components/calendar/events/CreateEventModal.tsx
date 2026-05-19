@@ -1,7 +1,7 @@
 'use client';
 
 import { XIcon, MenuIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { EventForm } from '@/components/calendar/events/forms/EventForm';
 import { TaskForm } from '@/components/calendar/events/forms/TaskForm';
@@ -30,12 +30,16 @@ export function CreateEventModal({
   onCreate,
 }: Props) {
   const [mode, setMode] = useState<Kind>(initialKind);
+  const [prevOpen, setPrevOpen] = useState(open);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Reset tab when reopened
-  useEffect(() => {
-    if (open) setMode(initialKind);
-  }, [open, initialKind]);
+  // Reset tab when reopened (compute during render — no effect needed)
+  if (open && !prevOpen) {
+    setPrevOpen(true);
+    setMode(initialKind);
+  } else if (!open && prevOpen) {
+    setPrevOpen(false);
+  }
 
   // Focus trap + scroll lock + Esc to close + return focus
   useModalA11y({ open, onClose, containerRef });

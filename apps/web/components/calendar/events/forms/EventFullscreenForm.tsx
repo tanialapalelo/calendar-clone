@@ -140,7 +140,6 @@ export function EventFullscreenForm({
   const [title, setTitle] = useState(initialValues.title);
   const [start, setStart] = useState(initialValues.start);
   const [end, setEnd] = useState(initialValues.end);
-  const [showTime, setShowTime] = useState(initialValues.showTime);
   const [allDay, setAllDay] = useState(initialValues.allDay);
 
   const [guests, setGuests] = useState<string[]>(initialValues.guests);
@@ -192,13 +191,6 @@ export function EventFullscreenForm({
     }
   };
 
-  const onClickAddTime = () => {
-    setShowTime(true);
-    setAllDay(false);
-    setStart((prev) => ensureDateTimeInputValueFrom(prev, 9));
-    setEnd((prev) => ensureDateTimeInputValueFrom(prev, 10));
-  };
-
   const onToggleAllDayWhenShown = (checked: boolean) => {
     setAllDay(checked);
     if (checked) {
@@ -206,9 +198,7 @@ export function EventFullscreenForm({
       const e = startOfDayDefaultHour(parseISO(start));
       setStart(toLocalDateTimeInputValue(s));
       setEnd(toLocalDateTimeInputValue(e));
-      setShowTime(false);
     } else {
-      setShowTime(true);
       setStart((prev) => ensureDateTimeInputValueFrom(prev, 9));
       setEnd((prev) => ensureDateTimeInputValueFrom(prev, 10));
     }

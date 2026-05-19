@@ -35,7 +35,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pausedRef = useRef(false);
   const remainingRef = useRef(TOAST_DURATION_MS);
-  const startedAtRef = useRef(Date.now());
+  const startedAtRef = useRef<number>(0);
 
   // Pause-on-hover: don't dismiss while user is reading the toast.
   // This is the standard pattern (Sonner, react-hot-toast).
@@ -64,7 +64,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [startTimer]);
 
   const icons = {
     success: <CheckCircleIcon size={18} className="shrink-0 text-green-500" aria-hidden="true" />,

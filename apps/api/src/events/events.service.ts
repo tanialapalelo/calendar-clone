@@ -12,12 +12,17 @@ import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { stripUntil, withUntil, withUntilFloating } from './rrule-until';
+import {
+  stripUntil,
+  withoutCount,
+  withUntil,
+  withUntilFloating,
+} from './rrule-until';
 
 import {
   EVENT_SELECT,
-  EXCEPTION_SELECT,
   EventInstance,
+  EXCEPTION_SELECT,
   ExceptionRow,
 } from './event-select';
 import {
@@ -272,11 +277,15 @@ export class EventsService {
     const masterId = inst?.masterId ?? eventId;
 
     const existing = await this.prisma.event.findFirst({
-      where: { id: masterId, calendar: { ownerId: userId } },
+      // Fetch by id first, then check ownership so we can return 403 when the
+      // event exists but belongs to another user (tests expect Forbidden).
+      // Using findUnique keeps the query simple and avoids leaking existence.
+      where: { id: masterId },
       select: { ...EVENT_SELECT, calendar: { select: { ownerId: true } } },
     });
-
     if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
 
     if ((scope === 'this' || scope === 'following') && !inst) {
       throw new BadRequestException('scope requires instance id');
@@ -497,9 +506,9 @@ export class EventsService {
       throw new BadRequestException('endAt must be after startAt');
 
     const nextRecurrenceRule =
-      dto.recurrenceRule !== undefined
-        ? normalizeRuleOnly(dto.recurrenceRule)
-        : stripUntil(existing.recurrenceRule!);
+      dto.recurrenceRule !== undefined && dto.recurrenceRule !== null
+        ? normalizeRuleOnly(dto.recurrenceRule ?? '')
+        : stripUntil(existing.recurrenceRule ?? '');
 
     const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
     const nextRecurrenceTimeZone =
@@ -532,26 +541,33 @@ export class EventsService {
       nextEndDateCol = null;
     }
 
+    if (nextAllDay && (!nextStartDateCol || !nextEndDateCol)) {
+      throw new BadRequestException(
+        'startDate and endDate are required for all-day events',
+      );
+    }
     const normalizedStartAt = nextAllDay
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
       ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
       : nextEndAtInput;
+    if (!existing.recurrenceRule) {
+      throw new BadRequestException('recurrenceRule is required');
+    }
 
+    // Prepare truncated rule for the master (remove COUNT first so UNTIL truncates).
+    const baseRule = withoutCount(existing.recurrenceRule);
     const truncatedRule = existing.allDay
-      ? withUntilFloating(
-          existing.recurrenceRule!,
-          addMilliseconds(occStartLocalMidnight, -1),
-        )
-      : withUntil(existing.recurrenceRule!, addMilliseconds(occStartUtc, -1));
+      ? withUntilFloating(baseRule, addMilliseconds(occStartLocalMidnight, -1))
+      : withUntil(baseRule, addMilliseconds(occStartUtc, -1));
 
     await this.prisma.event.update({
       where: { id: existing.id },
       data: { recurrenceRule: truncatedRule },
     });
 
-    return this.prisma.event.create({
+    const created = await this.prisma.event.create({
       data: {
         calendarId: existing.calendarId,
         title: dto.title ?? existing.title,
@@ -566,20 +582,22 @@ export class EventsService {
         color: dto.color ?? existing.color,
         recurrenceRule: nextRecurrenceRule,
         recurrenceTimeZone: nextRecurrenceTimeZone,
-        guests: (dto.guests ?? existing.guests ?? undefined) as
-          | Prisma.InputJsonValue
-          | undefined,
+        guests: (dto.guests ??
+          existing.guests ??
+          undefined) as Prisma.InputJsonValue,
         notifications: (dto.notifications ??
           existing.notifications ??
-          undefined) as Prisma.InputJsonValue | undefined,
+          undefined) as Prisma.InputJsonValue,
         visibility: dto.visibility ?? existing.visibility ?? undefined,
         busyStatus: dto.busyStatus ?? existing.busyStatus ?? undefined,
       },
       select: EVENT_SELECT,
     });
+
+    return created;
   }
 
-  private async updateAll(
+  private updateAll(
     existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>,
     inst: { masterId: string; originalStartAt: Date } | null,
     dto: UpdateEventDto,
@@ -595,8 +613,8 @@ export class EventsService {
       throw new BadRequestException('Invalid endAt');
 
     const nextRecurrenceRule =
-      dto.recurrenceRule !== undefined
-        ? normalizeRuleOnly(dto.recurrenceRule)
+      dto.recurrenceRule !== undefined && dto.recurrenceRule !== null
+        ? normalizeRuleOnly(dto.recurrenceRule ?? '')
         : undefined;
 
     const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
@@ -634,6 +652,10 @@ export class EventsService {
         : existing.endAt
       : (parsedEndAt ?? existing.endAt);
 
+    // Validate that end is after start for the all-scope update path.
+    if (nextEndAtInput <= nextStartAtInput)
+      throw new BadRequestException('endAt must be after startAt');
+
     let nextStartDateCol = existing.startDate;
     let nextEndDateCol = existing.endDate;
     if (nextAllDay) {
@@ -658,6 +680,11 @@ export class EventsService {
       nextEndDateCol = null;
     }
 
+    if (nextAllDay && (!nextStartDateCol || !nextEndDateCol)) {
+      throw new BadRequestException(
+        'startDate and endDate are required for all-day events',
+      );
+    }
     const normalizedStartAt = nextAllDay
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tz)
       : nextStartAtInput;
@@ -710,16 +737,21 @@ export class EventsService {
     const masterId = inst?.masterId ?? eventId;
 
     const existing = await this.prisma.event.findFirst({
-      where: { id: masterId, calendar: { ownerId: userId } },
+      // Fetch by id and include calendar owner so we can enforce 403 when
+      // an event exists but belongs to another user.
+      where: { id: masterId },
       select: {
         id: true,
         recurrenceRule: true,
         timeZone: true,
         recurrenceTimeZone: true,
         allDay: true,
+        calendar: { select: { ownerId: true } },
       },
     });
     if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
 
     if ((scope === 'this' || scope === 'following') && !inst)
       throw new BadRequestException('scope requires instance id');
@@ -746,6 +778,45 @@ export class EventsService {
 
     if (scope === 'following') {
       const tz = existing.recurrenceTimeZone ?? existing.timeZone ?? 'UTC';
+      // Re-fetch the full master row (we need fields used by expansion).
+      const masterFull = await this.prisma.event.findUnique({
+        where: { id: masterId },
+        select: EVENT_SELECT,
+      });
+      if (!masterFull) throw new NotFoundException('Event not found');
+
+      // Build exception map from any existing exceptions for this master.
+      const exRows = await this.prisma.eventRecurrenceException.findMany({
+        where: { eventId: masterId },
+        select: EXCEPTION_SELECT,
+      });
+      const exceptionMap = new Map<string, (typeof exRows)[0]>();
+      for (const ex of exRows) {
+        exceptionMap.set(
+          `${ex.eventId}|${ex.originalStartAt.toISOString()}`,
+          ex,
+        );
+      }
+
+      // Ensure the exact target instance is canceled (defensive — handle off-by-1s/parsing issues).
+      await this.prisma.eventRecurrenceException.upsert({
+        where: {
+          eventId_originalStartAt: {
+            eventId: masterId,
+            originalStartAt: inst!.originalStartAt,
+          },
+        },
+        create: {
+          event: { connect: { id: masterId } },
+          originalStartAt: inst!.originalStartAt,
+          cancelled: true,
+        },
+        update: { cancelled: true },
+      });
+
+      if (!existing.recurrenceRule) {
+        throw new BadRequestException('recurrenceRule is required');
+      }
       const occStartLocal = toZonedTime(inst!.originalStartAt, tz);
       const occStartLocalMidnight = new Date(
         occStartLocal.getFullYear(),
@@ -756,15 +827,13 @@ export class EventsService {
         0,
         0,
       );
+      const baseRule = withoutCount(existing.recurrenceRule);
       const truncatedRule = existing.allDay
         ? withUntilFloating(
-            existing.recurrenceRule!,
+            baseRule,
             addMilliseconds(occStartLocalMidnight, -1),
           )
-        : withUntil(
-            existing.recurrenceRule!,
-            addMilliseconds(inst!.originalStartAt, -1),
-          );
+        : withUntil(baseRule, addMilliseconds(inst!.originalStartAt, -1));
       await this.prisma.event.update({
         where: { id: masterId },
         data: { recurrenceRule: truncatedRule },

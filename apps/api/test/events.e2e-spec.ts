@@ -1,3 +1,4 @@
+// apps/api/test/events.e2e-spec.ts
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
@@ -620,6 +621,17 @@ describe('Events (e2e)', () => {
     const occurrences = (listRes.body as any[]).filter(
       (e) => e.isRecurringInstance && e.recurringEventId === masterId,
     );
+
+    // Debug: if occurrences are fewer than expected, print body so CI log shows what's returned
+    if (occurrences.length < 5) {
+      if (process.env.DEBUG_RECURRENCE === '1') {
+        console.error('All-day occurrences fewer than expected', {
+          occurrencesLength: occurrences.length,
+          listBody: listRes.body,
+        });
+      }
+    }
+
     expect(occurrences.length).toBeGreaterThanOrEqual(5);
 
     const target = occurrences[2];
