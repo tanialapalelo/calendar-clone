@@ -1,6 +1,6 @@
 function formatUntilUtc(d: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
-  
+
   return [
     d.getUTCFullYear(),
     pad(d.getUTCMonth() + 1),
@@ -9,10 +9,9 @@ function formatUntilUtc(d: Date): string {
     pad(d.getUTCHours()),
     pad(d.getUTCMinutes()),
     pad(d.getUTCSeconds()),
-    'Z'
+    'Z',
   ].join('');
 }
-
 
 function formatUntilFloating(d: Date) {
   const y = d.getFullYear();

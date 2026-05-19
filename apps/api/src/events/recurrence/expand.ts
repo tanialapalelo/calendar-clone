@@ -143,7 +143,7 @@ export function expandRecurringMaster(
             toNaive,
             max: MAX_OCCURRENCES,
           }).map((d) => d.toISOString());
-          // eslint-disable-next-line no-console
+
           console.error('expandRecurringMaster DEBUG', {
             eventId: ev.id,
             ruleOnly,
@@ -153,7 +153,7 @@ export function expandRecurringMaster(
             toNaive: toNaive.toISOString(),
             occNaivePreview,
           });
-        } catch (e) {
+        } catch {
           // ignore logging errors
         }
       }

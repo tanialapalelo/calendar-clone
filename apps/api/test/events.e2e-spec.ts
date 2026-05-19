@@ -92,7 +92,7 @@ describe('Events (e2e)', () => {
       .expect(201)
       .catch((err) => {
         // Debug: surface response body from server when create fails in CI
-        // eslint-disable-next-line no-console
+
         console.error(
           'Create event failed response body:',
           err.response?.body ?? err.response?.text,
@@ -620,7 +620,7 @@ describe('Events (e2e)', () => {
       .expect(201)
       .catch((err) => {
         // Debug: surface response body from server when this create fails in CI
-        // eslint-disable-next-line no-console
+
         console.error(
           'Create all-day event failed response body:',
           err.response?.body ?? err.response?.text,
@@ -642,7 +642,6 @@ describe('Events (e2e)', () => {
 
     // Debug: if occurrences are fewer than expected, print body so CI log shows what's returned
     if (occurrences.length < 5) {
-      // eslint-disable-next-line no-console
       console.error('All-day occurrences fewer than expected', {
         occurrencesLength: occurrences.length,
         listBody: listRes.body,
