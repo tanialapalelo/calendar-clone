@@ -786,13 +786,7 @@ export class EventsService {
       const toWindow = new Date(
         fromWindow.getTime() + 5 * 365 * 24 * 60 * 60 * 1000,
       ); // 5 years
-      const allOccs = expandRecurringMaster(
-        masterFull,
-        fromWindow,
-        toWindow,
-        exceptionMap,
-      ).filter((o) => o.isRecurringInstance);
-
+      
       // Ensure the exact target instance is canceled (defensive — handle off-by-1s/parsing issues).
       await this.prisma.eventRecurrenceException.upsert({
         where: {
