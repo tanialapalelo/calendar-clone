@@ -506,9 +506,9 @@ export class EventsService {
       throw new BadRequestException('endAt must be after startAt');
 
     const nextRecurrenceRule =
-      dto.recurrenceRule !== undefined
-        ? normalizeRuleOnly(dto.recurrenceRule)
-        : stripUntil(existing.recurrenceRule);
+      dto.recurrenceRule !== undefined && dto.recurrenceRule !== null
+        ? normalizeRuleOnly(dto.recurrenceRule ?? '')
+        : stripUntil(existing.recurrenceRule ?? '');
 
     const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
     const nextRecurrenceTimeZone =
@@ -541,12 +541,18 @@ export class EventsService {
       nextEndDateCol = null;
     }
 
+    if (nextAllDay && (!nextStartDateCol || !nextEndDateCol)) {
+      throw new BadRequestException('startDate and endDate are required for all-day events');
+    }
     const normalizedStartAt = nextAllDay
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tzForNormalize)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
       : nextEndAtInput;
+    if (!existing.recurrenceRule) {
+      throw new BadRequestException('recurrenceRule is required');
+    }
 
     // Prepare truncated rule for the master (remove COUNT first so UNTIL truncates).
     const baseRule = withoutCount(existing.recurrenceRule);
@@ -574,8 +580,8 @@ export class EventsService {
         color: dto.color ?? existing.color,
         recurrenceRule: nextRecurrenceRule,
         recurrenceTimeZone: nextRecurrenceTimeZone,
-        guests: dto.guests ?? existing.guests ?? undefined,
-        notifications: dto.notifications ?? existing.notifications ?? undefined,
+        guests: (dto.guests ?? existing.guests ?? undefined) as Prisma.InputJsonValue,
+        notifications: (dto.notifications ?? existing.notifications ?? undefined) as Prisma.InputJsonValue,
         visibility: dto.visibility ?? existing.visibility ?? undefined,
         busyStatus: dto.busyStatus ?? existing.busyStatus ?? undefined,
       },
@@ -601,8 +607,8 @@ export class EventsService {
       throw new BadRequestException('Invalid endAt');
 
     const nextRecurrenceRule =
-      dto.recurrenceRule !== undefined
-        ? normalizeRuleOnly(dto.recurrenceRule)
+      dto.recurrenceRule !== undefined && dto.recurrenceRule !== null
+        ? normalizeRuleOnly(dto.recurrenceRule ?? '')
         : undefined;
 
     const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
@@ -668,11 +674,14 @@ export class EventsService {
       nextEndDateCol = null;
     }
 
+    if (nextAllDay && (!nextStartDateCol || !nextEndDateCol)) {
+      throw new BadRequestException('startDate and endDate are required for all-day events');
+    }
     const normalizedStartAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextStartDateCol), tz)
+      ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tz)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tz)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tz)
       : nextEndAtInput;
 
     return this.prisma.event.update({
@@ -797,6 +806,9 @@ export class EventsService {
         update: { cancelled: true },
       });
 
+      if (!existing.recurrenceRule) {
+        throw new BadRequestException('recurrenceRule is required');
+      }
       const occStartLocal = toZonedTime(inst!.originalStartAt, tz);
       const occStartLocalMidnight = new Date(
         occStartLocal.getFullYear(),
@@ -807,15 +819,10 @@ export class EventsService {
         0,
         0,
       );
+      const baseRule = withoutCount(existing.recurrenceRule);
       const truncatedRule = existing.allDay
-        ? withUntilFloating(
-            withoutCount(existing.recurrenceRule),
-            addMilliseconds(occStartLocalMidnight, -1),
-          )
-        : withUntil(
-            withoutCount(existing.recurrenceRule),
-            addMilliseconds(inst!.originalStartAt, -1),
-          );
+        ? withUntilFloating(baseRule, addMilliseconds(occStartLocalMidnight, -1))
+        : withUntil(baseRule, addMilliseconds(inst!.originalStartAt, -1));
       await this.prisma.event.update({
         where: { id: masterId },
         data: { recurrenceRule: truncatedRule },
