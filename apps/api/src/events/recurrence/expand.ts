@@ -122,7 +122,11 @@ export function expandRecurringMaster(
 
       const rule = buildFloatingRule(ruleOnly, masterStartNaive);
       const fromNaive = localMidnightNaiveFromUtcInstant(from, tz);
-      const toNaive = localMidnightNaiveFromUtcInstant(to, tz);
+      // For all-day expansions treat the query `to` bound as inclusive of the
+      // local calendar date at the `to` midnight. This ensures weekday-only
+      // rules with COUNT that fall on the `to` date are included in the window
+      // (matches previous behavior expected by tests/clients).
+      const toNaive = addDays(localMidnightNaiveFromUtcInstant(to, tz), 1);
 
       const occNaive = generateAfterExclusive({
         rule,
