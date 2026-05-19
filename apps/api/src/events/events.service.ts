@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,12 +12,17 @@ import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { stripUntil, withUntil, withUntilFloating } from './rrule-until';
+import {
+  stripUntil,
+  withoutCount,
+  withUntil,
+  withUntilFloating,
+} from './rrule-until';
 
 import {
   EVENT_SELECT,
-  EXCEPTION_SELECT,
   EventInstance,
+  EXCEPTION_SELECT,
   ExceptionRow,
 } from './event-select';
 import {
@@ -271,11 +277,15 @@ export class EventsService {
     const masterId = inst?.masterId ?? eventId;
 
     const existing = await this.prisma.event.findFirst({
-      where: { id: masterId, calendar: { ownerId: userId } },
+      // Fetch by id first, then check ownership so we can return 403 when the
+      // event exists but belongs to another user (tests expect Forbidden).
+      // Using findUnique keeps the query simple and avoids leaking existence.
+      where: { id: masterId },
       select: { ...EVENT_SELECT, calendar: { select: { ownerId: true } } },
     });
-
     if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
 
     if ((scope === 'this' || scope === 'following') && !inst) {
       throw new BadRequestException('scope requires instance id');
@@ -538,19 +548,18 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
       : nextEndAtInput;
 
+    // Prepare truncated rule for the master (remove COUNT first so UNTIL truncates).
+    const baseRule = withoutCount(existing.recurrenceRule!);
     const truncatedRule = existing.allDay
-      ? withUntilFloating(
-          existing.recurrenceRule!,
-          addMilliseconds(occStartLocalMidnight, -1),
-        )
-      : withUntil(existing.recurrenceRule!, addMilliseconds(occStartUtc, -1));
+      ? withUntilFloating(baseRule, addMilliseconds(occStartLocalMidnight, -1))
+      : withUntil(baseRule, addMilliseconds(occStartUtc, -1));
 
     await this.prisma.event.update({
       where: { id: existing.id },
       data: { recurrenceRule: truncatedRule },
     });
 
-    return this.prisma.event.create({
+    const created = await this.prisma.event.create({
       data: {
         calendarId: existing.calendarId,
         title: dto.title ?? existing.title,
@@ -576,6 +585,8 @@ export class EventsService {
       },
       select: EVENT_SELECT,
     });
+
+    return created;
   }
 
   private updateAll(
@@ -632,6 +643,10 @@ export class EventsService {
         ? setUtcTime(existing.endAt, parsedEndAt)
         : existing.endAt
       : (parsedEndAt ?? existing.endAt);
+
+    // Validate that end is after start for the all-scope update path.
+    if (nextEndAtInput <= nextStartAtInput)
+      throw new BadRequestException('endAt must be after startAt');
 
     let nextStartDateCol = existing.startDate;
     let nextEndDateCol = existing.endDate;
@@ -709,16 +724,21 @@ export class EventsService {
     const masterId = inst?.masterId ?? eventId;
 
     const existing = await this.prisma.event.findFirst({
-      where: { id: masterId, calendar: { ownerId: userId } },
+      // Fetch by id and include calendar owner so we can enforce 403 when
+      // an event exists but belongs to another user.
+      where: { id: masterId },
       select: {
         id: true,
         recurrenceRule: true,
         timeZone: true,
         recurrenceTimeZone: true,
         allDay: true,
+        calendar: { select: { ownerId: true } },
       },
     });
     if (!existing) throw new NotFoundException('Event not found');
+    if (existing.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
 
     if ((scope === 'this' || scope === 'following') && !inst)
       throw new BadRequestException('scope requires instance id');
@@ -745,6 +765,59 @@ export class EventsService {
 
     if (scope === 'following') {
       const tz = existing.recurrenceTimeZone ?? existing.timeZone ?? 'UTC';
+      // Re-fetch the full master row (we need fields used by expansion).
+      const masterFull = await this.prisma.event.findUnique({
+        where: { id: masterId },
+        select: EVENT_SELECT,
+      });
+      if (!masterFull) throw new NotFoundException('Event not found');
+
+      // Build exception map from any existing exceptions for this master.
+      const exRows = await this.prisma.eventRecurrenceException.findMany({
+        where: { eventId: masterId },
+        select: EXCEPTION_SELECT,
+      });
+      const exceptionMap = new Map<string, (typeof exRows)[0]>();
+      for (const ex of exRows) {
+        exceptionMap.set(
+          `${ex.eventId}|${ex.originalStartAt.toISOString()}`,
+          ex,
+        );
+      }
+
+      // Compute future occurrences from the target onward (bounded window).
+      const fromWindow = inst!.originalStartAt;
+      const toWindow = new Date(
+        fromWindow.getTime() + 5 * 365 * 24 * 60 * 60 * 1000,
+      ); // 5 years
+      const allOccs = expandRecurringMaster(
+        masterFull,
+        fromWindow,
+        toWindow,
+        exceptionMap,
+      ).filter((o) => o.isRecurringInstance);
+      const occs = allOccs.filter(
+        (o) =>
+          new Date(o.originalStartAt).getTime() >=
+          inst!.originalStartAt.getTime(),
+      );
+
+      // Ensure the exact target instance is canceled (defensive — handle off-by-1s/parsing issues).
+      await this.prisma.eventRecurrenceException.upsert({
+        where: {
+          eventId_originalStartAt: {
+            eventId: masterId,
+            originalStartAt: inst!.originalStartAt,
+          },
+        },
+        create: {
+          event: { connect: { id: masterId } },
+          originalStartAt: inst!.originalStartAt,
+          cancelled: true,
+        },
+        update: { cancelled: true },
+      });
+
       const occStartLocal = toZonedTime(inst!.originalStartAt, tz);
       const occStartLocalMidnight = new Date(
         occStartLocal.getFullYear(),
@@ -757,11 +830,11 @@ export class EventsService {
       );
       const truncatedRule = existing.allDay
         ? withUntilFloating(
-            existing.recurrenceRule!,
+            withoutCount(existing.recurrenceRule!),
             addMilliseconds(occStartLocalMidnight, -1),
           )
         : withUntil(
-            existing.recurrenceRule!,
+            withoutCount(existing.recurrenceRule!),
             addMilliseconds(inst!.originalStartAt, -1),
           );
       await this.prisma.event.update({

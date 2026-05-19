@@ -1,7 +1,8 @@
 function formatUntilUtc(d: Date) {
   const iso = d.toISOString(); // 2026-02-11T00:00:00.000Z
-  // -> 20260211T000000Z
-  return iso.replace(/[-:]/g, '').replace('.000Z', 'Z').replace('T', 'T');
+  // Strip fractional seconds then -> 20260211T000000Z
+  const withoutMs = iso.replace(/\.\d{3}Z$/, 'Z');
+  return withoutMs.replace(/[-:]/g, '').replace('T', 'T');
 }
 
 function formatUntilFloating(d: Date) {
@@ -32,4 +33,9 @@ export function withUntilFloating(ruleOnly: string, untilLocal: Date) {
 
 export function stripUntil(ruleOnly: string) {
   return ruleOnly.replace(/;UNTIL=\d{8}T\d{6}Z/i, '');
+}
+
+/** Return a rule string with COUNT removed (helps when truncating series). */
+export function withoutCount(ruleOnly: string) {
+  return ruleOnly.replace(/;?COUNT=\d+/i, '');
 }

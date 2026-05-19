@@ -1,6 +1,5 @@
 import { addMilliseconds } from 'date-fns';
-import { RRule, rrulestr } from 'rrule';
-import { formatFloatingDtstart } from './date-utils';
+import { RRule } from 'rrule';
 
 /** Normalize a user-provided RRULE into the bare rule body (no DTSTART, no leading RRULE:). */
 export function normalizeRuleOnly(
@@ -21,8 +20,22 @@ export function normalizeRuleOnly(
 
 /** Build an RRule anchored to a *floating* DTSTART (timezone applied separately). */
 export function buildFloatingRule(ruleOnly: string, dtstartNaive: Date): RRule {
-  const s = `${formatFloatingDtstart(dtstartNaive)}\nRRULE:${ruleOnly}`;
-  return rrulestr(s) as RRule;
+  // Avoid embedding DTSTART in the string and relying on rrulestr's parsing
+  // (which interprets floating DTSTART using the process locale). Instead,
+  // parse the RRULE into options and set dtstart explicitly using the naive
+  // date components so iteration is deterministic regardless of system TZ.
+  const opts = RRule.parseString(ruleOnly);
+  // Build a naive Date carrying the same Y/M/D/H/M/S fields.
+  opts.dtstart = new Date(
+    dtstartNaive.getFullYear(),
+    dtstartNaive.getMonth(),
+    dtstartNaive.getDate(),
+    dtstartNaive.getHours(),
+    dtstartNaive.getMinutes(),
+    dtstartNaive.getSeconds(),
+    dtstartNaive.getMilliseconds(),
+  );
+  return new RRule(opts);
 }
 
 /**

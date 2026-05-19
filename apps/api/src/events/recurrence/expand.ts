@@ -52,8 +52,54 @@ export function expandRecurringMaster(
 ): EventInstance[] {
   const tz = ev.recurrenceTimeZone ?? ev.timeZone ?? 'UTC';
   const ruleOnly = ev.recurrenceRule!;
+  // Parse UNTIL from the rule if present so we can defensively filter
+  // occurrences that are past the declared UNTIL (handles formatting oddities).
+  let untilUtc: Date | null = null;
+  const untilMatch = /UNTIL=(\d{8}T\d{6}Z?)/i.exec(ruleOnly);
+  if (untilMatch) {
+    const raw = untilMatch[1];
+    if (raw.endsWith('Z')) {
+      // UTC UNTIL like 20260312T095959Z -> 2026-03-12T09:59:59Z
+      const y = raw.slice(0, 4);
+      const m = raw.slice(4, 6);
+      const d = raw.slice(6, 8);
+      const hh = raw.slice(9, 11);
+      const mm = raw.slice(11, 13);
+      const ss = raw.slice(13, 15);
+      untilUtc = new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}Z`);
+    } else {
+      // Floating UNTIL (no Z) treat as local in the event tz and convert to UTC
+      const y = raw.slice(0, 4);
+      const m = raw.slice(4, 6);
+      const d = raw.slice(6, 8);
+      const hh = raw.slice(9, 11);
+      const mm = raw.slice(11, 13);
+      const ss = raw.slice(13, 15);
+      const naive = new Date(
+        Number(y),
+        Number(m) - 1,
+        Number(d),
+        Number(hh),
+        Number(mm),
+        Number(ss),
+        0,
+      );
+      // convert naive local-in-tz to UTC instant
+      untilUtc = fromZonedTime(naive, tz);
+    }
+  }
   const durationMs = ev.endAt.getTime() - ev.startAt.getTime();
   const out: EventInstance[] = [];
+
+  // Debug: ensure master has a title (should always be true) — helps diagnose
+  // unexpected undefined title observations in tests.
+  if (typeof ev.title === 'undefined') {
+    // eslint-disable-next-line no-console
+    console.error('expandRecurringMaster: master has undefined title', {
+      eventId: ev.id,
+      ev,
+    });
+  }
 
   try {
     if (ev.allDay) {
@@ -86,6 +132,9 @@ export function expandRecurringMaster(
         max: MAX_OCCURRENCES,
       });
 
+      // Debug: log how many naive occurrences were generated for this master
+      // (no-op)
+
       for (const occStartNaive of occNaive) {
         const occEndNaiveExclusive = addDays(occStartNaive, masterDurationDays);
         const occStartUtc = fromZonedTime(occStartNaive, tz);
@@ -98,6 +147,8 @@ export function expandRecurringMaster(
 
         const instance: EventInstance = {
           ...ev,
+          // Ensure title is always present on expanded instances (defensive).
+          title: ev.title,
           id: makeInstanceId(ev.id, originalStartAt),
           allDay: true,
           startAt: occStartUtc,
@@ -113,6 +164,11 @@ export function expandRecurringMaster(
         const applied = ex
           ? applyExceptionToInstance(instance, ex, tz)
           : instance;
+        // Defensive: if applied exists but title ended up undefined, fall back
+        // to the master's title so tests and consumers don't receive undefined.
+        if (applied && typeof applied.title === 'undefined')
+          applied.title = ev.title;
+        // Defensive: do not log here; callers should not see undefined titles.
         if (applied) out.push(applied);
       }
     } else {
@@ -129,6 +185,9 @@ export function expandRecurringMaster(
         max: MAX_OCCURRENCES,
       });
 
+      // Debug: log how many naive occurrences were generated for this master
+      // (no-op)
+
       for (const occStartNaive of occNaive) {
         const occStartUtc = fromZonedTime(occStartNaive, tz);
         const occEndUtc = new Date(occStartUtc.getTime() + durationMs);
@@ -138,6 +197,7 @@ export function expandRecurringMaster(
 
         const instance: EventInstance = {
           ...ev,
+          title: ev.title,
           id: makeInstanceId(ev.id, originalStartAt),
           allDay: false,
           startAt: occStartUtc,
@@ -153,12 +213,24 @@ export function expandRecurringMaster(
         const applied = ex
           ? applyExceptionToInstance(instance, ex, tz)
           : instance;
+        if (applied && typeof applied.title === 'undefined')
+          applied.title = ev.title;
+        // Defensive: do not log here; callers should not see undefined titles.
         if (applied) out.push(applied);
       }
     }
   } catch {
     // Fallback: return master unexpanded so the UI doesn't lose the event
     out.push(masterToInstance(ev));
+  }
+
+  // expansion complete
+
+  // If rule had an UNTIL we might defensively filter any occurrences that lie
+  // after that instant (some rrule parsing edge-cases can produce an extra
+  // occurrence; this ensures consistency with the explicit UNTIL value).
+  if (untilUtc) {
+    return out.filter((inst) => inst.startAt.getTime() <= untilUtc!.getTime());
   }
 
   return out;
