@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../../src/app.module';
@@ -23,5 +23,5 @@ export async function createE2eApp() {
   );
 
   await app.init();
-  return app as INestApplication;
+  return app;
 }

@@ -1,4 +1,4 @@
-import { addDays, parseISO, startOfDay } from 'date-fns';
+import { addDays, startOfDay } from 'date-fns';
 import { getEventRangeMs } from '@/lib/events/range';
 
 /**
@@ -33,15 +33,6 @@ export function compareEventsInDayBucket(a: CalendarEvent, b: CalendarEvent): nu
   const aStart = new Date(a.start).getTime();
   const bStart = new Date(b.start).getTime();
   return aStart - bStart;
-}
-
-function dayStartMs(day: Date) {
-  return startOfDay(day).getTime();
-}
-
-function dateOnlyStartMs(yyyyMmDd: string) {
-  // Interpret as local date midnight for calendar grid math
-  return parseISO(`${yyyyMmDd}T00:00:00`).getTime();
 }
 
 export function eventsForDay(events: CalendarEvent[], day: Date) {

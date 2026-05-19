@@ -7,7 +7,7 @@ import {
 import jwt from 'jsonwebtoken';
 import type { AuthUser, RequestWithUser } from './auth.types';
 
-type CookiesRequest = RequestWithUser & { cookies?: Record<string, string> };
+type CookiesRequest = RequestWithUser & { cookies: Record<string, string> };
 
 function isAuthUser(payload: unknown): payload is AuthUser {
   if (!payload || typeof payload !== 'object') return false;
@@ -29,7 +29,11 @@ export class JwtCookieGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<CookiesRequest>();
 
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    const token = req.cookies?.[cookieName];
+
+    const token =
+      typeof req.cookies?.[cookieName] === 'string'
+        ? req.cookies[cookieName]
+        : undefined;
     if (!token) throw new UnauthorizedException('Missing auth cookie');
 
     const secret = process.env.JWT_SECRET;

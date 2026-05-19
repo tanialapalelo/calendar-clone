@@ -28,10 +28,7 @@ export default function ColorPicker({
 
   // compute popup position when open
   useEffect(() => {
-    if (!open) {
-      setPopupStyle(undefined);
-      return;
-    }
+    if (!open) return;
     const el = btnRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();

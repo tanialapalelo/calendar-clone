@@ -19,7 +19,6 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     // TODO(M3.3): Sentry.captureException(error)
-    // eslint-disable-next-line no-console
     console.error('[GlobalError]', error);
   }, [error]);
 

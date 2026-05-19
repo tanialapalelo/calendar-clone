@@ -216,7 +216,6 @@ export function Sidebar(props: {
   onCreate?: (kind: CreateKind) => void;
 }) {
   const {
-    currentDate,
     selectedDate,
     calendars,
     visibleCalendarIds,

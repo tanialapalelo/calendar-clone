@@ -44,8 +44,9 @@ export function useTheme() {
   // After first paint: read the real stored value and apply it
   useEffect(() => {
     const stored = readStoredTheme();
-    setThemeState(stored);
     applyTheme(stored);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing external store (localStorage) into React on mount
+    if (stored !== 'system') setThemeState(stored);
   }, []);
 
   // Re-apply when OS preference changes (only relevant when mode is 'system')

@@ -1,16 +1,26 @@
 # Calendar Clone
 
+[![CI](https://github.com/tanialapalelo/calendar-clone/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tanialapalelo/calendar-clone/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/tanialapalelo/calendar-clone/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/tanialapalelo/calendar-clone/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+[![pnpm](https://img.shields.io/badge/pnpm-10.17-orange?logo=pnpm)](https://pnpm.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs)](https://nestjs.com/)
+
 A portfolio project: a Google Calendar–inspired app built as a TypeScript monorepo with a Next.js web app and a NestJS API.
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 15 (App Router) + TypeScript + Tailwind CSS v4 |
-| Backend | NestJS + Prisma ORM |
-| Database | PostgreSQL |
+| Frontend | Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 |
+| Backend | NestJS 11 + Prisma ORM |
+| Database | PostgreSQL 16 |
 | Auth | Google OAuth 2.0 + HttpOnly cookie (JWT) |
+| Tests | Vitest + React Testing Library (web) · Jest + Supertest (api) |
 | Monorepo | Turborepo + pnpm workspaces |
+| CI/CD | GitHub Actions + CodeQL + Dependabot |
 
 ---
 
@@ -21,64 +31,60 @@ calendar-clone/
 ├── apps/
 │   ├── web/                         # Next.js frontend
 │   │   ├── app/                     # App Router pages & layouts
+│   │   │   └── error.tsx            # Route-level error boundary
 │   │   ├── components/
 │   │   │   ├── calendar/            # Calendar-specific components + views
-│   │   │   └── ui/                  # Generic reusable UI (SettingsMenu…)
+│   │   │   │   ├── views/           # Year / Month / Week / Day
+│   │   │   │   ├── events/          # Event forms, popovers, dialogs
+│   │   │   │   └── Skeletons.tsx    # Loading skeletons per view
+│   │   │   └── ui/                  # Generic reusable UI (Toast, SettingsMenu)
 │   │   ├── lib/
 │   │   │   ├── api/                 # apiFetch wrapper + per-resource modules
-│   │   │   │   ├── client.ts        # Base fetch — throws ApiError on non-2xx
-│   │   │   │   └── events.ts        # listEvents / createEvent / updateEvent / deleteEvent
-│   │   │   ├── auth/
-│   │   │   │   └── useCurrentUser.ts
-│   │   │   ├── events/
-│   │   │   │   └── useEventsApi.ts  # Events data hook (fetch + optimistic CRUD)
-│   │   │   ├── hooks/
-│   │   │   │   ├── useCalendarNavigation.ts  # URL ↔ view/date/range state
-│   │   │   │   └── usePopoverState.ts        # Event + day popover state
+│   │   │   ├── auth/                # useCurrentUser
+│   │   │   ├── events/              # Pure event utils + useEventsApi
+│   │   │   ├── hooks/               # Reusable hooks
+│   │   │   │   ├── useCalendarNavigation.ts
+│   │   │   │   ├── useIsMobile.ts
+│   │   │   │   ├── useKeyboardShortcuts.ts
+│   │   │   │   ├── useModalA11y.ts          # Focus trap + scroll lock + Esc
+│   │   │   │   └── usePopoverState.ts
 │   │   │   └── theme/
-│   │   │       └── useTheme.ts      # Dark / light / system theme (SSR-safe)
 │   │   └── types/
-│   │       └── global.d.ts          # Shared CalendarEvent / CalendarView types
 │   └── api/                         # NestJS backend
 │       ├── src/
 │       │   ├── auth/                # Google OAuth + JWT guard
-│       │   ├── calendars/           # Calendars CRUD (GET/POST/PATCH/DELETE)
-│       │   │   └── dto/             # CreateCalendarDto, UpdateCalendarDto
-│       │   ├── events/              # Events CRUD + recurrence expansion
-│       │   │   └── dto/             # CreateEventDto, UpdateEventDto
+│       │   ├── calendars/           # Calendars CRUD
+│       │   ├── events/              # Events CRUD + recurrence
+│       │   │   ├── recurrence/      # RRULE helpers + exception logic
+│       │   │   └── rrule-until.ts
 │       │   └── prisma/              # PrismaService
-│       ├── prisma/
-│       │   ├── schema.prisma
-│       │   └── migrations/
+│       ├── prisma/                  # schema + migrations + seed
 │       └── test/                    # e2e tests (supertest + real DB)
+└── .github/
+    ├── workflows/
+    │   ├── ci.yml                   # lint + typecheck + test + build
+    │   └── codeql.yml               # weekly security scan
+    └── dependabot.yml               # weekly grouped dep updates
 ```
 
 ### Key architecture decisions
 
-**API-owned OAuth flow**  
-The backend owns the entire Google OAuth redirect flow. The frontend never sees tokens — it only receives an HttpOnly cookie containing a signed JWT. This eliminates XSS token-theft risk.
+**API-owned OAuth flow.** The backend owns the entire Google OAuth redirect flow. The frontend never sees tokens — it only receives an HttpOnly cookie containing a signed JWT. This eliminates XSS token-theft risk.
 
-**`apiFetch` throws, not returns `{ok}`**  
-The API client (`lib/api/client.ts`) throws an `ApiError` on non-2xx responses instead of returning a `{ ok: boolean }` union. This means callers write `await apiFetch(...)` and `catch(err)` once — no manual `.ok` check at every call site. `ApiError` carries `.status` so 401 detection still works.
+**OAuth state CSRF.** `GET /v1/auth/google/start` mints a cryptographically random `state` and stores it in a path-scoped HttpOnly cookie; `/v1/auth/google/callback` verifies the cookie matches the returned `state` (one-shot, cleared on success).
 
-**Custom hooks for all stateful logic**  
-`CalendarPageClient` is a pure orchestrator — it composes three hooks and renders. No logic lives in the component itself:
-- `useCalendarNavigation` — view/date state in URL search params (deep-linkable, back button works)
-- `useEventsApi` — events list + CRUD, 401 → redirect
+**`apiFetch` throws, not returns `{ok}`.** The API client throws an `ApiError` on non-2xx responses instead of returning a `{ ok: boolean }` union. Callers write `await apiFetch(...)` and `catch(err)` once. Centralised 401 handling redirects to `/login`.
+
+**Custom hooks for all stateful logic.** `CalendarPageClient` is a pure orchestrator — it composes hooks and renders. Logic lives in hooks:
+- `useCalendarNavigation` — view/date state in URL search params (deep-linkable)
+- `useEventsApi` — events list + CRUD with optimistic updates
 - `usePopoverState` — event popover + day overflow popover
+- `useModalA11y` — focus trap + scroll lock + Esc + return focus (WAI-ARIA Dialog pattern)
+- `useIsMobile` — SSR-safe `matchMedia` wrapper
 
-**SSR-safe theme**  
-`useTheme` initialises state to `'system'` (matching the inline `<script>` in `layout.tsx`) to avoid hydration mismatches. `useCallback` wraps `setTheme` for a stable reference.
+**SSR-safe theme.** `useTheme` initialises to `'system'` (matching the inline `<script>` in `layout.tsx`) to avoid hydration mismatches.
 
-**Thin controllers, fat services**  
-Every NestJS controller method is one line — it calls a service method and returns. All business logic (ownership checks, NotFoundException, etc.) lives in the service. `@UseGuards` is applied at the class level so it's never forgotten on a new route.
-
----
-
-## Repo structure
-
-- `apps/web` — Next.js frontend
-- `apps/api` — NestJS backend + Prisma schema/migrations
+**Thin controllers, fat services.** Every NestJS controller method is one line — it calls a service method and returns. Business logic (ownership checks, NotFoundException, recurrence expansion) lives in the service.
 
 ---
 
@@ -86,8 +92,8 @@ Every NestJS controller method is one line — it calls a service method and ret
 
 ### Prerequisites
 
-- Node.js LTS
-- pnpm (`npm i -g pnpm`)
+- Node.js ≥ 20 LTS
+- pnpm 10 (`npm i -g pnpm`)
 - Docker (recommended for PostgreSQL)
 
 ### 1. Install dependencies
@@ -95,6 +101,12 @@ Every NestJS controller method is one line — it calls a service method and ret
 ```bash
 pnpm install
 ```
+
+> **First time only:** pnpm 10 quarantines postinstall scripts. Approve the ones we need (Prisma + esbuild):
+> ```bash
+> pnpm approve-builds
+> ```
+> Space-bar to tick `@prisma/client`, `esbuild`, `prisma`, then `Enter` + `y`. This writes `pnpm.onlyBuiltDependencies` to the root `package.json` and re-runs scripts.
 
 ### 2. Start PostgreSQL
 
@@ -107,7 +119,7 @@ docker run --name calendar-clone-postgres \
   -d postgres:16
 ```
 
-Create a separate **test database** (used by e2e tests):
+Create a separate **test database** (used by API e2e tests):
 
 ```bash
 docker exec -it calendar-clone-postgres \
@@ -140,7 +152,7 @@ Generate a secure `JWT_SECRET`:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-**`apps/api/.env.test`** (e2e tests — do not commit):
+**`apps/api/.env.test`** (e2e tests):
 
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/calendar_clone_test?schema=public
@@ -168,9 +180,10 @@ pnpm -C apps/api exec prisma db seed
 pnpm dev
 ```
 
-- Web → `http://localhost:3000`
-- API → `http://localhost:3001`
-- API health: `GET /v1/health` · `GET /v1/db-health`
+- Web → http://localhost:3000
+- API → http://localhost:3001
+- API health → `GET /v1/health` · DB health → `GET /v1/db-health`
+- API docs (dev only) → http://localhost:3001/v1/docs
 
 ---
 
@@ -179,23 +192,23 @@ pnpm dev
 ### Flow
 
 1. User clicks "Sign in with Google" → browser navigates to `GET /v1/auth/google/start`
-2. API redirects to Google's consent screen
-3. Google redirects to `GET /v1/auth/google/callback?code=…`
-4. API exchanges code → verifies ID token → upserts user → sets **HttpOnly JWT cookie**
+2. API mints a CSRF `state`, stores it in a path-scoped HttpOnly cookie, redirects to Google's consent screen
+3. Google redirects to `GET /v1/auth/google/callback?code=…&state=…`
+4. API verifies the cookie matches the `state`, exchanges the code, verifies the ID token, upserts the user, sets the **HttpOnly JWT cookie**
 5. API redirects back to the web app (`WEB_ORIGIN`)
 
 ### Why HttpOnly cookies?
 
 - Tokens are not accessible to JavaScript — eliminates XSS token theft
 - Browser sends the cookie automatically on every API request
-- The `JwtCookieGuard` validates the JWT and sets `req.user` on every protected route
+- `JwtCookieGuard` validates the JWT and sets `req.user` on every protected route
 
 ### Endpoints
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/v1/auth/google/start` | No | Redirect to Google |
-| `GET` | `/v1/auth/google/callback` | No | Handle Google callback, set cookie |
+| `GET` | `/v1/auth/google/start` | No | Mint CSRF state, redirect to Google |
+| `GET` | `/v1/auth/google/callback` | No | Verify state, set cookie |
 | `GET` | `/v1/auth/me` | Required | Return current user |
 | `POST` | `/v1/auth/logout` | No | Clear cookie |
 
@@ -209,22 +222,22 @@ pnpm dev
 |---|---|---|
 | `GET` | `/v1/calendars` | List all calendars for current user |
 | `GET` | `/v1/calendars/:id` | Get a single calendar |
-| `POST` | `/v1/calendars` | Create a calendar `{ name, color? }` |
-| `PATCH` | `/v1/calendars/:id` | Rename / recolor `{ name?, color? }` |
+| `POST` | `/v1/calendars` | Create `{ name, color? }` |
+| `PATCH` | `/v1/calendars/:id` | Rename / recolor |
 | `DELETE` | `/v1/calendars/:id` | Delete calendar + all its events |
 
 ### Events
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/v1/events?from=&to=` | List events in date range (required) |
+| `GET` | `/v1/events?from=&to=` | List events in date range (required, ≤ 366 days) |
 | `GET` | `/v1/events/search?q=` | Full-text search across title, description, location |
 | `GET` | `/v1/events/:id` | Get a single event |
-| `POST` | `/v1/events` | Create an event |
-| `PATCH` | `/v1/events/:id?scope=` | Update event (`scope`: `this`/`following`/`all`) |
-| `DELETE` | `/v1/events/:id?scope=` | Delete event (`scope`: `this`/`following`/`all`) |
+| `POST` | `/v1/events` | Create |
+| `PATCH` | `/v1/events/:id?scope=` | Update (`scope`: `this`/`following`/`all`) |
+| `DELETE` | `/v1/events/:id?scope=` | Delete (`scope`: `this`/`following`/`all`) |
 
-All routes require the auth cookie.
+All routes require the auth cookie. Swagger docs available at `/v1/docs` in dev.
 
 ---
 
@@ -242,20 +255,43 @@ All routes require the auth cookie.
 
 ## Testing
 
-### e2e tests (API)
+### Frontend (`apps/web`)
+
+Vitest + React Testing Library.
 
 ```bash
-pnpm -C apps/api test:e2e
+pnpm -C apps/web test            # one-shot
+pnpm -C apps/web test:watch      # watch mode
+pnpm -C apps/web test:ui         # browser UI
+pnpm -C apps/web test:coverage   # HTML report in coverage/
 ```
 
-`pretest:e2e` runs `prisma migrate deploy` against the test DB automatically.
+Test categories:
+- `lib/**/*.test.ts` — pure utility & hook tests (no DOM)
+- `components/**/*.test.tsx` — component tests with RTL
 
-### How auth works in tests (no Google)
+### Backend (`apps/api`)
 
-- Test user + calendar created directly via Prisma
-- JWT signed with `JWT_SECRET` from `.env.test`
-- Sent as a cookie in `supertest` requests
-- The real `JwtCookieGuard` validates it — tests exercise actual HTTP handlers end-to-end
+Jest + Supertest. `pretest` regenerates the Prisma client; `pretest:e2e` runs `prisma migrate deploy` against the test DB.
+
+```bash
+pnpm -C apps/api test            # unit
+pnpm -C apps/api test:e2e        # e2e (requires test DB)
+pnpm -C apps/api test:cov        # coverage
+```
+
+E2E tests sign JWTs with `JWT_SECRET` from `.env.test` and send them as cookies via supertest, exercising the real `JwtCookieGuard`.
+
+### Continuous Integration
+
+Every PR runs:
+- ESLint
+- TypeScript strict typecheck (both apps)
+- Vitest (web) + Jest (api unit + e2e against an ephemeral Postgres service)
+- Production builds (`next build`, `nest build`)
+- CodeQL security analysis (`security-extended` queries)
+
+CI status is required to pass before merging to `main`.
 
 ---
 
@@ -271,6 +307,7 @@ pnpm -C apps/api test:e2e
 | `c` | Create new event |
 | `←` / `p` / `k` | Previous period |
 | `→` / `n` / `j` | Next period |
+| `Esc` | Close any open modal/popover |
 
 ---
 
@@ -288,10 +325,6 @@ Services:
 - `db` — PostgreSQL 16
 - `api` — NestJS API on port 3001
 - `web` — Next.js on port 3000
-
-### API documentation (dev only)
-
-Swagger UI available at `http://localhost:3001/v1/docs` when `NODE_ENV != production`.
 
 ---
 
@@ -326,15 +359,53 @@ Swagger UI available at `http://localhost:3001/v1/docs` when `NODE_ENV != produc
 - Reminders / notifications editor
 - Custom recurrence rule builder dialog
 
-### ✅ Milestone 6 — Polish & FAANG-portfolio level
-- **Calendar visibility filtering** — unchecking a calendar hides its events live
-- **Calendar management UI** — create, rename, recolor, delete calendars from sidebar
-- **Full-text event search** — debounced search bar in header with dropdown results
-- **Keyboard shortcuts** — `t/d/w/m/y/c/←/→` (matches Google Calendar)
-- **Google-style ViewSwitcher** — pill tab bar replacing native `<select>`
-- **Event Page Shell** — proper header with back-arrow on `/events/new` and `/events/edit/[id]`
-- **Toast notifications** — success/error/info feedback on all CRUD operations
-- **Security hardening** — `helmet` headers, rate limiting (120 req/min), production-secure cookies
-- **API documentation** — Swagger UI at `/v1/docs` (dev only)
-- **Docker production setup** — multi-stage Dockerfiles + `docker-compose.prod.yml`
-- **Next.js standalone output** — minimal self-contained production server
+### ✅ Milestone 6 - UI polish + UX improvements
+- Year / Month / Week / Day views with Google-style layout
+- Mobile-responsive (dots in MonthView, sticky headers in Week/DayView)
+- Dark mode (light / dark / system) persisted to localStorage
+- Loading skeletons (no spinner-over-content layout shift)
+- Route-level error boundary (`app/error.tsx`)
+- Modal a11y: focus trap, scroll lock, Esc to close, return focus
+- Bounded toast queue (max 3, pause-on-hover, dark-mode, mobile-responsive)
+- `React.memo` on all four views — no re-render on parent state change
+- All visual styling driven by `--gcal-*` CSS tokens
+
+### ✅ Milestone 7 — Testing & CI
+- Vitest + RTL set up in `apps/web`
+- Unit tests for `generateMonthGrid`, `layoutOverlappingEvents`, `day.ts`, `useIsMobile`
+- GitHub Actions CI: lint + typecheck + test + build on every PR
+- CodeQL weekly security scan (`security-extended`)
+- Dependabot with grouped weekly minor/patch updates
+- Required status checks on `main`
+
+### 🚧 Milestone 8 — Observability (next)
+- Structured logging (Pino + `nestjs-pino`) with request IDs
+- Sentry FE + BE for error tracking
+- `/v1/healthz` (liveness) and `/v1/readyz` (readiness)
+- Prometheus metrics at `/v1/metrics`
+- Web Vitals dispatched from the browser
+
+### 🔜 Milestone 9 — Hardening
+- Refresh token rotation
+- Tiered rate limiting (auth / search / default)
+- Soft delete + audit log
+- Full-text search via Postgres `tsvector`
+- Split `EventsService` into 3 narrower services
+
+### 🔜 Milestone 10 — Real-user features
+- Email invites with `.ics` attachment (Resend)
+- BullMQ + Redis worker for scheduled reminders + Web Push
+- Attendees + RSVP flow
+- Jitsi meeting links embedded in event detail
+- Drag-to-create / move / resize events
+
+### 🔜 Milestone 11 — Portfolio polish
+- ADRs in `docs/adr/`
+- Public demo URL with seeded data
+- Architecture diagram + screencast in README
+
+---
+
+## License
+
+MIT © Tania Lapalelo

@@ -1,8 +1,18 @@
-function formatUntilUtc(d: Date) {
-  const iso = d.toISOString(); // 2026-02-11T00:00:00.000Z
-  // -> 20260211T000000Z
-  return iso.replace(/[-:]/g, '').replace('.000Z', 'Z').replace('T', 'T');
+function formatUntilUtc(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  
+  return [
+    d.getUTCFullYear(),
+    pad(d.getUTCMonth() + 1),
+    pad(d.getUTCDate()),
+    'T',
+    pad(d.getUTCHours()),
+    pad(d.getUTCMinutes()),
+    pad(d.getUTCSeconds()),
+    'Z'
+  ].join('');
 }
+
 
 function formatUntilFloating(d: Date) {
   const y = d.getFullYear();
@@ -32,4 +42,9 @@ export function withUntilFloating(ruleOnly: string, untilLocal: Date) {
 
 export function stripUntil(ruleOnly: string) {
   return ruleOnly.replace(/;UNTIL=\d{8}T\d{6}Z/i, '');
+}
+
+/** Return a rule string with COUNT removed (helps when truncating series). */
+export function withoutCount(ruleOnly: string) {
+  return ruleOnly.replace(/;?COUNT=\d+/i, '');
 }

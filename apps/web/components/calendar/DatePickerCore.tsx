@@ -2,7 +2,7 @@
 
 import { addMonths, format, isSameDay, isSameMonth, startOfMonth, subMonths } from 'date-fns';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { shortDaysOfWeek } from '@/constants';
 import { generateMonthGrid } from '@/lib/month-grid';
 
@@ -29,12 +29,14 @@ type Props = {
  */
 export function DatePickerCore({ selected, onSelect, density = 'popover' }: Props) {
   const [cursor, setCursor] = useState<Date>(() => startOfMonth(selected));
+  const [prevSelected, setPrevSelected] = useState<Date>(selected);
 
   // If the parent jumps the selection far away (e.g. "Today" while sidebar showing a different month),
   // follow it. We only update when the month actually changed to avoid wasted renders.
-  useEffect(() => {
-    setCursor((prev) => (isSameMonth(prev, selected) ? prev : startOfMonth(selected)));
-  }, [selected]);
+  if (selected !== prevSelected) {
+    setPrevSelected(selected);
+    if (!isSameMonth(cursor, selected)) setCursor(startOfMonth(selected));
+  }
 
   const cells = useMemo(() => generateMonthGrid(cursor), [cursor]);
 
