@@ -378,7 +378,7 @@ export class EventsService {
           tzForNormalize,
         );
       nextEndDateCol = ensureEndAfterStartDateExclusive(
-        nextStartDateCol,
+        nextStartDateCol!,
         nextEndDateCol ??
           dateOnlyFromInstantInTz(nextEndAtInput, tzForNormalize),
       );
@@ -391,7 +391,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tzForNormalize)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
       : nextEndAtInput;
 
     const hasTimeChange =
