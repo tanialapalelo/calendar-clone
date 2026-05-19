@@ -89,21 +89,7 @@ describe('Events (e2e)', () => {
         location: 'somewhere',
         calendarId,
       })
-      .expect(201)
-      .catch((err) => {
-        // Debug: surface response body from server when create fails in CI
-        // print entire error and response to be safe
-        // eslint-disable-next-line no-console
-        console.error('Create event failed error:', err);
-        // If supertest attached a response, print its status/body
-        // eslint-disable-next-line no-console
-        console.error(
-          'Create event response:',
-          err?.response?.status,
-          err?.response?.body ?? err?.response?.text,
-        );
-        throw err;
-      });
+      .expect(201);
 
     const created = createRes.body as { id: string; title: string };
     expect(created.id).toBeTruthy();
@@ -169,38 +155,13 @@ describe('Events (e2e)', () => {
       },
     });
 
-    // Debug: log created user ID (helps diagnose FK failures in CI)
-    // eslint-disable-next-line no-console
-    console.error('DEBUG: userB created', userB);
-
-    let calendarB: { id: string } | undefined;
-
-    try {
-      calendarB = await prisma.calendar.create({
-        data: {
-          ownerId: userB.id,
-          name: 'B Default',
-          color: '#188038',
-        },
-      });
-      // eslint-disable-next-line no-console
-      console.error('DEBUG: calendarB created', calendarB);
-    } catch (err) {
-      // On FK error, dump current users table so we can inspect what's in DB
-      // eslint-disable-next-line no-console
-      console.error('DEBUG: calendar.create error', err?.message ?? err);
-      try {
-        const users = await prisma.user.findMany({
-          select: { id: true, email: true },
-        });
-        // eslint-disable-next-line no-console
-        console.error('DEBUG: users table:', users);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error('DEBUG: failed to read users table', e);
-      }
-      throw err;
-    }
+    const calendarB = await prisma.calendar.create({
+      data: {
+        ownerId: userB.id,
+        name: 'B Default',
+        color: '#188038',
+      },
+    });
 
     const cookieB = makeAuthCookie({ userId: userB.id, email: userB.email });
 
@@ -647,19 +608,7 @@ describe('Events (e2e)', () => {
         timeZone: 'UTC',
         recurrenceTimeZone: 'UTC',
       })
-      .expect(201)
-      .catch((err) => {
-        // Debug: surface response body from server when this create fails in CI
-        // eslint-disable-next-line no-console
-        console.error('Create all-day event failed error:', err);
-        // eslint-disable-next-line no-console
-        console.error(
-          'Create all-day response:',
-          err?.response?.status,
-          err?.response?.body ?? err?.response?.text,
-        );
-        throw err;
-      });
+      .expect(201);
 
     const masterId = createRes.body.id as string;
 
@@ -675,10 +624,12 @@ describe('Events (e2e)', () => {
 
     // Debug: if occurrences are fewer than expected, print body so CI log shows what's returned
     if (occurrences.length < 5) {
-      console.error('All-day occurrences fewer than expected', {
-        occurrencesLength: occurrences.length,
-        listBody: listRes.body,
-      });
+      if (process.env.DEBUG_RECURRENCE === '1') {
+        console.error('All-day occurrences fewer than expected', {
+          occurrencesLength: occurrences.length,
+          listBody: listRes.body,
+        });
+      }
     }
 
     expect(occurrences.length).toBeGreaterThanOrEqual(5);
