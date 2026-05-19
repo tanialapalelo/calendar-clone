@@ -94,7 +94,6 @@ export function expandRecurringMaster(
   // Debug: ensure master has a title (should always be true) — helps diagnose
   // unexpected undefined title observations in tests.
   if (typeof ev.title === 'undefined') {
-    // eslint-disable-next-line no-console
     console.error('expandRecurringMaster: master has undefined title', {
       eventId: ev.id,
       ev,
@@ -230,7 +229,7 @@ export function expandRecurringMaster(
   // after that instant (some rrule parsing edge-cases can produce an extra
   // occurrence; this ensures consistency with the explicit UNTIL value).
   if (untilUtc) {
-    return out.filter((inst) => inst.startAt.getTime() <= untilUtc!.getTime());
+    return out.filter((inst) => inst.startAt.getTime() <= untilUtc.getTime());
   }
 
   return out;

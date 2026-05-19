@@ -391,7 +391,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tzForNormalize)
       : nextEndAtInput;
 
     const hasTimeChange =
@@ -508,7 +508,7 @@ export class EventsService {
     const nextRecurrenceRule =
       dto.recurrenceRule !== undefined
         ? normalizeRuleOnly(dto.recurrenceRule)
-        : stripUntil(existing.recurrenceRule!);
+        : stripUntil(existing.recurrenceRule);
 
     const nextTimeZone = dto.timeZone ?? existing.timeZone ?? undefined;
     const nextRecurrenceTimeZone =
@@ -545,11 +545,11 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tzForNormalize)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tzForNormalize)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tzForNormalize)
       : nextEndAtInput;
 
     // Prepare truncated rule for the master (remove COUNT first so UNTIL truncates).
-    const baseRule = withoutCount(existing.recurrenceRule!);
+    const baseRule = withoutCount(existing.recurrenceRule);
     const truncatedRule = existing.allDay
       ? withUntilFloating(baseRule, addMilliseconds(occStartLocalMidnight, -1))
       : withUntil(baseRule, addMilliseconds(occStartUtc, -1));
@@ -574,12 +574,8 @@ export class EventsService {
         color: dto.color ?? existing.color,
         recurrenceRule: nextRecurrenceRule,
         recurrenceTimeZone: nextRecurrenceTimeZone,
-        guests: (dto.guests ?? existing.guests ?? undefined) as
-          | Prisma.InputJsonValue
-          | undefined,
-        notifications: (dto.notifications ??
-          existing.notifications ??
-          undefined) as Prisma.InputJsonValue | undefined,
+        guests: dto.guests ?? existing.guests ?? undefined,
+        notifications: dto.notifications ?? existing.notifications ?? undefined,
         visibility: dto.visibility ?? existing.visibility ?? undefined,
         busyStatus: dto.busyStatus ?? existing.busyStatus ?? undefined,
       },
@@ -673,10 +669,10 @@ export class EventsService {
     }
 
     const normalizedStartAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextStartDateCol!), tz)
+      ? fromZonedTime(naiveFromDateColumn(nextStartDateCol), tz)
       : nextStartAtInput;
     const normalizedEndAt = nextAllDay
-      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tz)
+      ? fromZonedTime(naiveFromDateColumn(nextEndDateCol), tz)
       : nextEndAtInput;
 
     return this.prisma.event.update({
@@ -796,11 +792,6 @@ export class EventsService {
         toWindow,
         exceptionMap,
       ).filter((o) => o.isRecurringInstance);
-      const occs = allOccs.filter(
-        (o) =>
-          new Date(o.originalStartAt).getTime() >=
-          inst!.originalStartAt.getTime(),
-      );
 
       // Ensure the exact target instance is canceled (defensive — handle off-by-1s/parsing issues).
       await this.prisma.eventRecurrenceException.upsert({
@@ -830,11 +821,11 @@ export class EventsService {
       );
       const truncatedRule = existing.allDay
         ? withUntilFloating(
-            withoutCount(existing.recurrenceRule!),
+            withoutCount(existing.recurrenceRule),
             addMilliseconds(occStartLocalMidnight, -1),
           )
         : withUntil(
-            withoutCount(existing.recurrenceRule!),
+            withoutCount(existing.recurrenceRule),
             addMilliseconds(inst!.originalStartAt, -1),
           );
       await this.prisma.event.update({
