@@ -1,3 +1,4 @@
+// apps/api/test/events.e2e-spec.ts
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
@@ -88,7 +89,16 @@ describe('Events (e2e)', () => {
         location: 'somewhere',
         calendarId,
       })
-      .expect(201);
+      .expect(201)
+      .catch((err) => {
+        // Debug: surface response body from server when create fails in CI
+        // eslint-disable-next-line no-console
+        console.error(
+          'Create event failed response body:',
+          err.response?.body ?? err.response?.text,
+        );
+        throw err;
+      });
 
     const created = createRes.body as { id: string; title: string };
     expect(created.id).toBeTruthy();
@@ -607,7 +617,16 @@ describe('Events (e2e)', () => {
         timeZone: 'UTC',
         recurrenceTimeZone: 'UTC',
       })
-      .expect(201);
+      .expect(201)
+      .catch((err) => {
+        // Debug: surface response body from server when this create fails in CI
+        // eslint-disable-next-line no-console
+        console.error(
+          'Create all-day event failed response body:',
+          err.response?.body ?? err.response?.text,
+        );
+        throw err;
+      });
 
     const masterId = createRes.body.id as string;
 
@@ -620,6 +639,16 @@ describe('Events (e2e)', () => {
     const occurrences = (listRes.body as any[]).filter(
       (e) => e.isRecurringInstance && e.recurringEventId === masterId,
     );
+
+    // Debug: if occurrences are fewer than expected, print body so CI log shows what's returned
+    if (occurrences.length < 5) {
+      // eslint-disable-next-line no-console
+      console.error('All-day occurrences fewer than expected', {
+        occurrencesLength: occurrences.length,
+        listBody: listRes.body,
+      });
+    }
+
     expect(occurrences.length).toBeGreaterThanOrEqual(5);
 
     const target = occurrences[2];
