@@ -781,12 +781,6 @@ export class EventsService {
         );
       }
 
-      // Compute future occurrences from the target onward (bounded window).
-      const fromWindow = inst!.originalStartAt;
-      const toWindow = new Date(
-        fromWindow.getTime() + 5 * 365 * 24 * 60 * 60 * 1000,
-      ); // 5 years
-      
       // Ensure the exact target instance is canceled (defensive — handle off-by-1s/parsing issues).
       await this.prisma.eventRecurrenceException.upsert({
         where: {
