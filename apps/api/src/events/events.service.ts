@@ -7,9 +7,11 @@ import {
 import { addDays, addMilliseconds } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { Prisma } from '@prisma/client';
+import { randomBytes } from 'crypto';
 
 import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import {
@@ -42,6 +44,7 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly calendars: CalendarsService,
+    private readonly mailer: MailerService,
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────
@@ -852,4 +855,100 @@ export class EventsService {
 
   // Re-export for backward compat if anything imports it from this file:
   static normalizeRuleOnly = normalizeRuleOnly;
+
+  // INVITATIONS: create invitations and send emails (stubbed)
+  async createInvitations(
+    userId: string,
+    eventId: string,
+    emails: string[],
+    expiresDays = 7,
+  ) {
+    // Ensure event exists and user is owner
+    const ev = await this.prisma.event.findFirst({
+      where: { id: eventId },
+      select: {
+        id: true,
+        calendar: { select: { ownerId: true } },
+        title: true,
+        startAt: true,
+        endAt: true,
+      },
+    });
+    if (!ev) throw new NotFoundException('Event not found');
+    if (ev.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
+
+    const results: { email: string; invitationId?: string; error?: string }[] =
+      [];
+    for (const email of emails) {
+      try {
+        const token = randomBytes(24).toString('hex');
+        const expiresAt = new Date(
+          Date.now() + expiresDays * 24 * 60 * 60 * 1000,
+        );
+        const created = await this.prisma.invitation.create({
+          data: {
+            event: { connect: { id: eventId } },
+            email,
+            token,
+            expiresAt,
+          },
+        });
+        // ensure attendee row exists
+        await this.prisma.eventAttendee.upsert({
+          where: { eventId_email: { eventId, email } },
+          create: {
+            event: { connect: { id: eventId } },
+            email,
+            rsvp: 'needsAction',
+          },
+          update: {},
+        });
+
+        // send stubbed email
+        await this.mailer.sendInvitation(
+          { id: ev.id, title: ev.title, startAt: ev.startAt, endAt: ev.endAt },
+          email,
+          token,
+        );
+
+        results.push({ email, invitationId: created.id });
+      } catch (err: unknown) {
+        const msg =
+          typeof err === 'string'
+            ? err
+            : err instanceof Error
+              ? err.message
+              : JSON.stringify(err);
+        results.push({ email, error: msg });
+      }
+    }
+    return results;
+  }
+
+  async rsvpByToken(
+    token: string,
+    rsvp: 'accepted' | 'declined' | 'tentative',
+  ) {
+    const inv = await this.prisma.invitation.findUnique({
+      where: { token },
+      select: { id: true, eventId: true, email: true, expiresAt: true },
+    });
+    if (!inv) throw new NotFoundException('Invitation not found');
+    if (inv.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Invitation expired');
+    }
+
+    // update attendee
+    await this.prisma.eventAttendee.updateMany({
+      where: { eventId: inv.eventId, email: inv.email },
+      data: { rsvp },
+    });
+    // mark invitation used (status)
+    await this.prisma.invitation.update({
+      where: { id: inv.id },
+      data: { status: 'delivered' },
+    });
+    return { ok: true };
+  }
 }

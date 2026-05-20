@@ -63,12 +63,42 @@ model Event {
 
   // recurrence exceptions (per-occurrence overrides/cancellations)
   recurrenceExceptions EventRecurrenceException[]
+  attendees            EventAttendee[]
+  invitations          Invitation[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([calendarId, startAt])
   @@index([calendarId, startDate])
+}
+
+model EventAttendee {
+  id        String   @id @default(cuid())
+  eventId   String
+  email     String
+  name      String?
+  rsvp      String   @default("needsAction") // accepted|declined|tentative|needsAction
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@index([eventId])
+  @@unique([eventId, email])
+}
+
+model Invitation {
+  id           String   @id @default(cuid())
+  eventId      String
+  email        String
+  token        String   @unique
+  expiresAt    DateTime
+  sentAt       DateTime?
+  status       String   @default("sent") // sent, delivered, bounced
+  createdAt    DateTime @default(now())
+
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@index([eventId])
 }
 
 model EventRecurrenceException {

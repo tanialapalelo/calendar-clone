@@ -664,4 +664,97 @@ describe('Events (e2e)', () => {
     expect(beforeTarget?.title).toBe('All Day Weekdays');
     expect(fromTarget?.title).toBe('All Day Weekdays (updated)');
   });
+
+  // New: Invitations flow
+  it('POST /v1/events/:id/invitations creates invitations and attendees', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Invite Test',
+        startAt: '2026-06-01T10:00:00.000Z',
+        endAt: '2026-06-01T11:00:00.000Z',
+        calendarId,
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+
+    const emails = ['invitee1@example.com', 'invitee2@example.com'];
+
+    const inviteRes = await request(app.getHttpServer())
+      .post(`/v1/events/${eventId}/invitations`)
+      .set('Cookie', authCookie)
+      .send({ emails })
+      .expect(201);
+
+    expect(Array.isArray(inviteRes.body)).toBe(true);
+    expect(inviteRes.body.length).toBe(emails.length);
+
+    for (const row of inviteRes.body) {
+      expect(row.email).toBeDefined();
+      expect(row.invitationId).toBeDefined();
+    }
+
+    // verify DB rows: attendee + invitation
+    const att = await prisma.eventAttendee.findUnique({
+      where: { eventId_email: { eventId, email: emails[0] } },
+    });
+    expect(att).not.toBeNull();
+    expect(att?.rsvp).toBe('needsAction');
+
+    const inv = await prisma.invitation.findUnique({
+      where: { id: inviteRes.body[0].invitationId },
+    });
+    expect(inv).not.toBeNull();
+    expect(inv?.email).toBe(emails[0]);
+  });
+
+  it('POST /v1/invitations/:token/rsvp updates attendee rsvp and invitation status', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/v1/events')
+      .set('Cookie', authCookie)
+      .send({
+        title: 'Invite RSVP Test',
+        startAt: '2026-06-02T10:00:00.000Z',
+        endAt: '2026-06-02T11:00:00.000Z',
+        calendarId,
+      })
+      .expect(201);
+
+    const eventId = createRes.body.id as string;
+    const emails = ['rsvp1@example.com'];
+
+    const inviteRes = await request(app.getHttpServer())
+      .post(`/v1/events/${eventId}/invitations`)
+      .set('Cookie', authCookie)
+      .send({ emails })
+      .expect(201);
+
+    const invitationId = inviteRes.body[0].invitationId as string;
+    const invRow = await prisma.invitation.findUnique({
+      where: { id: invitationId },
+    });
+    expect(invRow).not.toBeNull();
+    const token = invRow!.token;
+
+    // RSVP using token
+    await request(app.getHttpServer())
+      .post(`/v1/invitations/${encodeURIComponent(token)}/rsvp`)
+      .send({ rsvp: 'accepted' })
+      .expect(200);
+
+    // verify attendee updated
+    const att = await prisma.eventAttendee.findUnique({
+      where: { eventId_email: { eventId, email: emails[0] } },
+    });
+    expect(att).not.toBeNull();
+    expect(att?.rsvp).toBe('accepted');
+
+    // verify invitation status
+    const invAfter = await prisma.invitation.findUnique({
+      where: { id: invitationId },
+    });
+    expect(invAfter?.status).toBe('delivered');
+  });
 });

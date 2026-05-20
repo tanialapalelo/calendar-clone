@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -106,5 +107,30 @@ export class EventsController {
   ) {
     const userId = req.user!.sub;
     return this.events.deleteForUser(userId, id, parseScope(scope));
+  }
+
+  @Post(':id/invitations')
+  @UseGuards(JwtCookieGuard)
+  async createInvitations(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Body('emails') emails: string[],
+  ) {
+    const userId = req.user!.sub;
+    return this.events.createInvitations(userId, id, emails);
+  }
+}
+
+@Controller('invitations')
+export class InvitationsController {
+  constructor(private readonly events: EventsService) {}
+
+  @Post(':token/rsvp')
+  @HttpCode(200)
+  async rsvp(
+    @Param('token') token: string,
+    @Body('rsvp') rsvp: 'accepted' | 'declined' | 'tentative',
+  ) {
+    return this.events.rsvpByToken(token, rsvp);
   }
 }
