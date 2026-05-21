@@ -22,6 +22,9 @@ export const EVENT_SELECT = {
   busyStatus: true,
   createdAt: true,
   updatedAt: true,
+  attendees: {
+    select: { email: true, name: true, rsvp: true, permissions: true },
+  },
 } satisfies Prisma.EventSelect;
 
 export type EventRow = Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>;
@@ -77,4 +80,11 @@ export type EventInstance = {
   recurringEventId: string | null;
   originalStartAt: string | null; // ISO UTC
   isRecurringInstance: boolean;
+
+  attendees?: {
+    email: string;
+    name?: string | null;
+    rsvp: string;
+    permissions?: unknown;
+  }[];
 };

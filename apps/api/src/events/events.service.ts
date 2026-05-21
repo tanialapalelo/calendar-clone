@@ -240,7 +240,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(endDateCol!), tz)
       : endAtInput;
 
-    return this.prisma.event.create({
+    const created = await this.prisma.event.create({
       data: {
         calendarId,
         title: dto.title,
@@ -264,6 +264,27 @@ export class EventsService {
       },
       select: EVENT_SELECT,
     });
+
+    // If the creator supplied a list of guests at event creation, ensure
+    // attendees + invitations are created. Do not fail the event creation
+    // if invitation sending fails (non-fatal). This re-uses createInvitations
+    // which will upsert attendees and attempt to send email.
+    if (Array.isArray(dto.guests) && dto.guests.length > 0) {
+      try {
+        // dto.guests is string[] of emails
+        // Attach invitations on behalf of the current user (owner)
+        await this.createInvitations(userId, created.id, dto.guests);
+      } catch (inviteErr) {
+        // Non-fatal; surface to logs for debugging
+
+        console.error(
+          'createForUser: failed to create/send invitations',
+          inviteErr,
+        );
+      }
+    }
+
+    return created;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -870,6 +891,8 @@ export class EventsService {
         id: true,
         calendar: { select: { ownerId: true } },
         title: true,
+        description: true,
+        location: true,
         startAt: true,
         endAt: true,
       },
@@ -894,7 +917,7 @@ export class EventsService {
             expiresAt,
           },
         });
-        // ensure attendee row exists
+        // ensure attendee row exists (permissions default null)
         await this.prisma.eventAttendee.upsert({
           where: { eventId_email: { eventId, email } },
           create: {
@@ -902,15 +925,69 @@ export class EventsService {
             email,
             rsvp: 'needsAction',
           },
-          update: {},
+          // When re-sending an invitation we want to reset RSVP to needsAction
+          // so that existing attendees are put back into the "invited" state.
+          update: { rsvp: 'needsAction' },
         });
 
-        // send stubbed email
-        await this.mailer.sendInvitation(
-          { id: ev.id, title: ev.title, startAt: ev.startAt, endAt: ev.endAt },
+        // Build minimal ICS content for this single event (so recipients can add to calendar)
+        const uid = `${ev.id}-${token}`;
+        const dtStart =
+          ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const dtEnd =
+          ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const icsLines = [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//calendar-clone//EN',
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
+          ev.description
+            ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
+            : null,
+          ev.location ? `LOCATION:${String(ev.location)}` : null,
+          `DTSTART:${dtStart}`,
+          `DTEND:${dtEnd}`,
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ]
+          .filter(Boolean)
+          .join('\r\n');
+
+        // send invitation email (mailer returns boolean success)
+        const sent = await this.mailer.sendInvitation(
+          {
+            id: ev.id,
+            title: ev.title,
+            startAt: ev.startAt,
+            endAt: ev.endAt,
+            location: ev.location,
+            description: ev.description,
+          },
           email,
           token,
+          icsLines,
         );
+
+        // record send result on invitation row so callers/CI can inspect
+        try {
+          if (sent) {
+            await this.prisma.invitation.update({
+              where: { id: created.id },
+              data: { sentAt: new Date(), status: 'sent' },
+            });
+          } else {
+            await this.prisma.invitation.update({
+              where: { id: created.id },
+              data: { status: 'bounced' },
+            });
+          }
+        } catch (updateErr) {
+          // Non-fatal: we tried to persist delivery status but don't fail the whole flow
+
+          console.error('Failed to update invitation send status', updateErr);
+        }
 
         results.push({ email, invitationId: created.id });
       } catch (err: unknown) {

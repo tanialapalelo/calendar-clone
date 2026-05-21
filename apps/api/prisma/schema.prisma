@@ -79,6 +79,7 @@ model EventAttendee {
   email     String
   name      String?
   rsvp      String   @default("needsAction") // accepted|declined|tentative|needsAction
+  permissions Json?   // permissions/actions this attendee is allowed to perform (e.g. ["modify","seeGuests"])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
