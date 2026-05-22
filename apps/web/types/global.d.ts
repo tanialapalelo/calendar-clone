@@ -11,7 +11,7 @@ type CalendarEvent = {
   endDate?: string;
   isTask?: boolean;
   isAppointment?: boolean;
-  guests?: string[];
+  guests?: Array<string | { email: string; permissions?: string[] }>;
   location?: string;
   description?: string;
   notifications?: NotificationItem[];

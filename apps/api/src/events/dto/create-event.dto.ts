@@ -1,11 +1,11 @@
 import {
+  IsArray,
   IsBoolean,
   IsISO8601,
   IsOptional,
   IsString,
   Matches,
   MinLength,
-  IsArray,
 } from 'class-validator';
 
 export class CreateEventDto {
@@ -77,9 +77,12 @@ export class CreateEventDto {
   @IsString()
   recurrenceTimeZone?: string;
 
+  // Guests can be an array of email strings or objects { email, permissions }
   @IsOptional()
   @IsArray()
-  guests?: string[];
+  // Note: more specific per-item validation is done in the service where
+  // runtime shapes are easier to validate. Keep DTO flexible for API clients.
+  guests?: Array<string | { email: string; permissions?: unknown }>;
 
   @IsOptional()
   @IsArray()

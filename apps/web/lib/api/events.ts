@@ -19,6 +19,7 @@ export type ApiEvent = {
   recurrenceRule: string | null;
   recurrenceTimeZone: string | null;
   guests: string[] | null;
+  attendees?: { email: string; name?: string | null; rsvp: string; permissions?: unknown }[] | null;
   notifications: NotificationItem[] | null;
   visibility: 'public' | 'private' | 'default' | null;
   busyStatus: 'free' | 'busy' | null;
@@ -66,11 +67,32 @@ export function apiEventToCalendarEvent(ev: ApiEvent): CalendarEvent {
     recurringEventId: ev.recurringEventId ?? undefined,
     originalStartAt: ev.originalStartAt ?? undefined,
     isRecurringInstance: ev.isRecurringInstance,
-    guests: ev.guests ?? undefined,
+    guests: ev.guests ?? ev.attendees?.map((a) => a.email) ?? undefined,
+    // include attendees for UI components that may want RSVP/permissions
+    // cast to any so CalendarEvent keeps the simple shape; components can access attendees via ev.attendees if needed
+    // Note: where needed, we can extend CalendarEvent type to include attendees.
     notifications: ev.notifications ?? undefined,
     visibility: ev.visibility ?? 'default',
     busyStatus: ev.busyStatus ?? 'busy',
   };
+}
+
+/**
+ * Guest input accepted by create/update APIs in the web client — either a simple
+ * email string or an object with email + optional permissions.
+ */
+export type GuestInput = string | { email: string; permissions?: string[] };
+
+/** Normalize guest inputs to an array of email strings suitable for the API.
+ * Returns undefined when there are no guests. Filters out falsy/malformed entries.
+ */
+export function normalizeGuestsToStrings(guests?: Array<GuestInput> | null): string[] | undefined {
+  if (!guests || guests.length === 0) return undefined;
+  const out = guests
+    .map((g) => (typeof g === 'string' ? g : g?.email))
+    .filter((e): e is string => typeof e === 'string' && e.trim().length > 0)
+    .map((e) => e.trim());
+  return out.length ? out : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +125,7 @@ export function createEvent(input: {
   recurrenceRule?: string | null;
   timeZone?: string;
   recurrenceTimeZone?: string;
-  guests?: string[];
+  guests?: Array<string | { email: string; permissions?: string[] }>;
   notifications?: NotificationItem[];
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
@@ -129,7 +151,7 @@ export function updateEvent(
     recurrenceRule: string | null;
     timeZone: string;
     recurrenceTimeZone: string;
-    guests: string[];
+    guests: Array<string | { email: string; permissions?: string[] }>;
     notifications: NotificationItem[];
     visibility: 'public' | 'private' | 'default';
     busyStatus: 'free' | 'busy';

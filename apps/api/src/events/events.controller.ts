@@ -10,8 +10,10 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtCookieGuard } from '../auth/jwt-cookie.guard';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -114,7 +116,8 @@ export class EventsController {
   async createInvitations(
     @Req() req: RequestWithUser,
     @Param('id') id: string,
-    @Body('emails') emails: string[],
+    @Body('emails')
+    emails: Array<string | { email: string; permissions?: unknown }>,
   ) {
     const userId = req.user!.sub;
     return this.events.createInvitations(userId, id, emails);
@@ -132,5 +135,14 @@ export class InvitationsController {
     @Body('rsvp') rsvp: 'accepted' | 'declined' | 'tentative',
   ) {
     return this.events.rsvpByToken(token, rsvp);
+  }
+
+  @Get(':token/ics')
+  async getIcs(@Param('token') token: string, @Res() res: Response) {
+    // Serve a simple ICS file for the invitation token
+    const ics = await this.events.getIcsForToken(token);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="invite.ics"`);
+    res.send(ics);
   }
 }

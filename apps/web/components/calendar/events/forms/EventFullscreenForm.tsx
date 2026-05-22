@@ -151,6 +151,16 @@ export function EventFullscreenForm({
     initialValues.locationPlace,
   ); // optional full place
 
+  // Guest permissions (per-guest). Stored as array of permission keys.
+  const permissionOptions = [
+    { key: 'modify', label: 'Modify event', defaultChecked: false },
+    { key: 'invite', label: 'Invite others', defaultChecked: true },
+    { key: 'seeGuests', label: 'See guest list', defaultChecked: true },
+  ] as const;
+  const [guestPermissions, setGuestPermissions] = useState<string[]>(() =>
+    permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key),
+  );
+
   const [tab, setTab] = useState('detail');
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(
@@ -238,7 +248,12 @@ export function EventFullscreenForm({
       id: crypto.randomUUID(),
       title,
       allDay,
-      guests: guests.length ? guests : undefined,
+      // If guestPermissions selected, attach permissions per-guest; otherwise send simple strings
+      guests: guests.length
+        ? guestPermissions.length
+          ? guests.map((email) => ({ email, permissions: guestPermissions }))
+          : guests
+        : undefined,
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
       recurrence: recurrence?.rrule ?? null,
@@ -693,15 +708,16 @@ export function EventFullscreenForm({
               Guest permissions
             </p>
             <div className="space-y-2">
-              {[
-                { label: 'Modify event', defaultChecked: false },
-                { label: 'Invite others', defaultChecked: true },
-                { label: 'See guest list', defaultChecked: true },
-              ].map(({ label, defaultChecked }) => (
-                <label key={label} className="flex cursor-pointer items-center gap-2">
+              {permissionOptions.map(({ key, label }) => (
+                <label key={key} className="flex cursor-pointer items-center gap-2">
                   <input
                     type="checkbox"
-                    defaultChecked={defaultChecked}
+                    checked={guestPermissions.includes(key)}
+                    onChange={(e) => {
+                      setGuestPermissions((prev) =>
+                        e.target.checked ? [...prev, key] : prev.filter((x) => x !== key),
+                      );
+                    }}
                     className="h-4 w-4 rounded accent-[#0B57D0]"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>

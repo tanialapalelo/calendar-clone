@@ -881,7 +881,7 @@ export class EventsService {
   async createInvitations(
     userId: string,
     eventId: string,
-    emails: string[],
+    emails: Array<string | { email: string; permissions?: unknown }>,
     expiresDays = 7,
   ) {
     // Ensure event exists and user is owner
@@ -901,9 +901,15 @@ export class EventsService {
     if (ev.calendar?.ownerId !== userId)
       throw new ForbiddenException('Forbidden');
 
+    type GuestInput =
+      | string
+      | { email: string; permissions?: Prisma.InputJsonValue };
     const results: { email: string; invitationId?: string; error?: string }[] =
       [];
-    for (const email of emails) {
+    for (const raw of emails as GuestInput[]) {
+      // allow either string email or { email, permissions }
+      const email = typeof raw === 'string' ? raw : raw.email;
+      const permissions = typeof raw === 'string' ? undefined : raw.permissions;
       try {
         const token = randomBytes(24).toString('hex');
         const expiresAt = new Date(
@@ -917,17 +923,21 @@ export class EventsService {
             expiresAt,
           },
         });
-        // ensure attendee row exists (permissions default null)
+        // ensure attendee row exists (persist permissions if provided)
+        const createData: Prisma.EventAttendeeCreateInput = {
+          event: { connect: { id: eventId } },
+          email,
+          rsvp: 'needsAction',
+          permissions: permissions as Prisma.InputJsonValue | undefined,
+        } as Prisma.EventAttendeeCreateInput;
+        const updateData: Prisma.EventAttendeeUpdateInput = {
+          rsvp: 'needsAction',
+          permissions: permissions as Prisma.InputJsonValue | undefined,
+        } as Prisma.EventAttendeeUpdateInput;
         await this.prisma.eventAttendee.upsert({
           where: { eventId_email: { eventId, email } },
-          create: {
-            event: { connect: { id: eventId } },
-            email,
-            rsvp: 'needsAction',
-          },
-          // When re-sending an invitation we want to reset RSVP to needsAction
-          // so that existing attendees are put back into the "invited" state.
-          update: { rsvp: 'needsAction' },
+          create: createData,
+          update: updateData,
         });
 
         // Build minimal ICS content for this single event (so recipients can add to calendar)
@@ -1001,6 +1011,54 @@ export class EventsService {
       }
     }
     return results;
+  }
+
+  // Return ICS content for an invitation token
+  async getIcsForToken(token: string) {
+    const inv = await this.prisma.invitation.findUnique({
+      where: { token },
+      select: {
+        id: true,
+        token: true,
+        event: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            location: true,
+            startAt: true,
+            endAt: true,
+          },
+        },
+      },
+    });
+    if (!inv || !inv.event) throw new NotFoundException('Invitation not found');
+
+    const ev = inv.event;
+    const uid = `${ev.id}-${inv.token}`;
+    const dtStart =
+      ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+    const dtEnd =
+      ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//calendar-clone//EN',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
+      ev.description
+        ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
+        : null,
+      ev.location ? `LOCATION:${String(ev.location)}` : null,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ]
+      .filter(Boolean)
+      .join('\r\n');
+    return icsLines;
   }
 
   async rsvpByToken(

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  normalizeRuleOnly,
   apiEventToCalendarEvent,
   createEvent,
-  listEvents,
-  updateEvent,
   deleteEvent,
+  listEvents,
+  normalizeRuleOnly,
   type RecurrenceScope,
+  updateEvent,
 } from '@/lib/api/events';
 import { ApiError } from '@/lib/api/client';
 
@@ -85,7 +85,8 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
           timeZone: tz,
           recurrenceTimeZone: tz,
-          guests: evt.guests,
+          // allow guests to be either string[] or { email, permissions[] }[]; pass through
+          guests: evt.guests as any,
           notifications: evt.notifications,
           visibility: evt.visibility,
           busyStatus: evt.busyStatus,
@@ -123,7 +124,8 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             location: next.location ?? '',
             color: next.color,
             recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
-            guests: next.guests,
+            // allow guests with permissions (frontend passes objects) or plain strings
+            guests: next.guests as any,
             notifications: next.notifications,
             visibility: next.visibility,
             busyStatus: next.busyStatus,
