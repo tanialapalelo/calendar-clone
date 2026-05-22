@@ -6,6 +6,7 @@ import { toLocalDateTimeInputValue } from '@/lib/date';
 import { MapPinIcon, UsersIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
+import LocationAutocomplete from '@/components/calendar/events/LocationAutoComplete';
 
 function startOfDayLocal(d: Date) {
   const dt = new Date(d);
@@ -29,7 +30,8 @@ type Props = {
   initialDate: Date;
   calendars?: ApiCalendar[];
   onClose: () => void;
-  onCreate: (event: CalendarEvent & { guests?: string[]; location?: string }) => void;
+  // accept full CalendarEvent shape (guests may be strings or objects with permissions)
+  onCreate: (event: CalendarEvent) => void;
 };
 
 export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) {
@@ -47,9 +49,25 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
   const [guests, setGuests] = useState<string[]>([]);
   const [guestInput, setGuestInput] = useState('');
+  const [guestError, setGuestError] = useState<string | null>(null);
   const [location, setLocation] = useState('');
 
+  // Guest permissions (per-guest set applies to all added guests in this compact form)
+  const permissionOptions = [
+    { key: 'modify', label: 'Modify event', defaultChecked: false },
+    { key: 'invite', label: 'Invite others', defaultChecked: true },
+    { key: 'seeGuests', label: 'See guest list', defaultChecked: true },
+  ] as const;
+  const [guestPermissions, setGuestPermissions] = useState<string[]>(() =>
+    permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key),
+  );
+
   const router = useRouter();
+
+  function isValidEmail(email: string) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email.trim());
+  }
 
   const submit = () => {
     let startDate: Date;
@@ -62,6 +80,13 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       endDate = new Date(end);
     }
 
+    // Build guests payload: either string[] or { email, permissions[] }[]
+    const guestsPayload = guests.length
+      ? guestPermissions.length
+        ? guests.map((email) => ({ email, permissions: guestPermissions }))
+        : guests
+      : undefined;
+
     onCreate({
       id: crypto.randomUUID(),
       title,
@@ -69,7 +94,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       end: endDate.toISOString(),
       allDay,
       calendarId: calendarId || undefined,
-      guests: guests.length ? guests : undefined,
+      guests: guestsPayload,
       location: location || undefined,
       color: '#0B57D0',
     });
@@ -79,8 +104,13 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
   const addGuest = () => {
     const trimmed = guestInput.trim();
     if (!trimmed) return;
+    if (!isValidEmail(trimmed)) {
+      setGuestError('Enter a valid email address (e.g. name@example.com)');
+      return;
+    }
     setGuests((prev) => [...prev, trimmed]);
     setGuestInput('');
+    setGuestError(null);
   };
 
   const onGuestInputKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -186,11 +216,16 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
           <input
             className="flex-1 rounded border px-3 py-2 text-sm"
             value={guestInput}
-            onChange={(e) => setGuestInput(e.target.value)}
+            onChange={(e) => {
+              setGuestInput(e.target.value);
+              if (guestError) setGuestError(null);
+            }}
             onKeyDown={onGuestInputKey}
             placeholder="Add guest and press Enter"
           />
         </div>
+
+        {guestError && <p className="text-xs text-red-600">{guestError}</p>}
 
         {guests.length > 0 && (
           <div className="space-y-1">
@@ -211,17 +246,40 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
             ))}
           </div>
         )}
+
+        {/* Guest permissions (compact) */}
+        <div className="mt-2 border-t pt-2">
+          <div className="mb-2 text-xs text-gray-500">Guest permissions</div>
+          <div className="flex gap-3">
+            {permissionOptions.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={guestPermissions.includes(key)}
+                  onChange={(e) => {
+                    setGuestPermissions((prev) =>
+                      e.target.checked ? [...prev, key] : prev.filter((x) => x !== key),
+                    );
+                  }}
+                  className="h-4 w-4 rounded accent-[#0B57D0]"
+                />
+                <span className="text-sm text-gray-700">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Location */}
       <div className="flex items-center gap-2 border-t pt-3">
         <MapPinIcon size={16} />
-        <input
-          className="flex-1 rounded border px-3 py-2 text-sm"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Add location"
-        />
+        <div className="flex-1">
+          <LocationAutocomplete
+            value={location}
+            onChange={(v) => setLocation(v)}
+            placeholder="Add location"
+          />
+        </div>
       </div>
 
       {/* Calendar selector */}

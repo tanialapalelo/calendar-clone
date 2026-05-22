@@ -15,19 +15,68 @@ export class MailerService {
     const pass = process.env.MAIL_PASS ?? undefined;
 
     try {
+      // Determine whether to use a secure connection. Default to true for port 465.
+      const secureEnv = process.env.MAIL_SECURE;
+      const secure =
+        typeof secureEnv !== 'undefined'
+          ? secureEnv === '1' || secureEnv === 'true'
+          : port === 465;
+
+      // Optional service name (e.g. 'gmail') can be provided via MAIL_SERVICE,
+      // which nodemailer will map to provider defaults.
+      const service = process.env.MAIL_SERVICE ?? undefined;
+
+      // TLS options: allow opting out of strict cert validation for some environments
+      const tlsRejectUnauthorized =
+        process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
+
+      const baseOpts: nodemailer.TransportOptions = {
+        host,
+        port,
+        secure,
+        tls: { rejectUnauthorized: tlsRejectUnauthorized },
+      } as any;
+
       const opts: nodemailer.TransportOptions = user
-        ? { host, port, auth: { user, pass } }
-        : { host, port };
+        ? { ...baseOpts, auth: { user, pass }, ...(service ? { service } : {}) }
+        : { ...baseOpts, ...(service ? { service } : {}) };
+
       this.transporter = nodemailer.createTransport(opts as any);
       // Verify transporter to surface connection problems early in dev/CI.
       // If verification fails we fall back to logging behavior below.
-      this.transporter.verify().catch((err) => {
-        this.logger.warn(
-          'SMTP transporter verify failed; falling back to logger',
-          String(err),
-        );
-        this.transporter = null;
-      });
+      this.transporter
+        .verify()
+        .then(() => {
+          this.logger.debug(
+            `SMTP transporter configured (${host}:${port}, secure=${secure})`,
+          );
+        })
+        .catch((err) => {
+          const errMsg = String(err ?? '');
+          // Helpful guidance for common Gmail authentication errors
+          if (
+            errMsg.includes('535') ||
+            /BadCredentials|Invalid login/i.test(errMsg)
+          ) {
+            this.logger.warn(
+              `SMTP transporter verify failed (${host}:${port}); falling back to logger - authentication error detected. If you're using Gmail please:
+- enable 2-Step Verification on the Google account
+- generate an App Password and set MAIL_PASS to that 16-char password
+- or use port 587 with STARTTLS if 465 is blocked
+See: https://support.google.com/mail/?p=BadCredentials and https://support.google.com/accounts/answer/185833`,
+            );
+          } else if (/self signed certificate|certificate/i.test(errMsg)) {
+            this.logger.warn(
+              `SMTP transporter verify failed (${host}:${port}); TLS/certificate issue: ${errMsg}. You can temporarily set MAIL_TLS_REJECT_UNAUTHORIZED=0 for dev, but do not use that in production.`,
+            );
+          } else {
+            this.logger.warn(
+              `SMTP transporter verify failed (${host}:${port}); falling back to logger`,
+              errMsg,
+            );
+          }
+          this.transporter = null;
+        });
     } catch (err) {
       // Leave transporter null; sendInvitation will fallback to logging.
       this.logger.debug('Failed to create transporter, will log mails instead');
@@ -43,16 +92,21 @@ export class MailerService {
     ics?: string,
   ): Promise<boolean> {
     const frontend = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    // Use API_URL to build ICS download link (the API serves /v1/invitations/:token/ics).
+    // Fallback: if API_URL is not set, try FRONTEND_URL + '/v1' (useful in simple dev setups),
+    // but it's recommended to set API_URL to your API origin in production.
+    const apiBase = process.env.API_URL ?? `${frontend.replace(/\/$/, '')}/v1`;
     const rsvpUrl = `${frontend.replace(/\/$/, '')}/invitations/${encodeURIComponent(
       token,
     )}`;
-    const icsUrl = `${frontend.replace(/\/$/, '')}/invitations/${encodeURIComponent(token)}/ics`;
+    const icsUrl = `${apiBase.replace(/\/$/, '')}/invitations/${encodeURIComponent(token)}/ics`;
     const subject = `Invitation: ${ev.title ?? 'Event'}`;
     const text = `You're invited to ${ev.title ?? 'an event'}\n\nAccept: ${rsvpUrl}?rsvp=accepted\nTentative: ${rsvpUrl}?rsvp=tentative\nDecline: ${rsvpUrl}?rsvp=declined\n\nIf your mail client doesn't automatically add the calendar, you can download it here: ${icsUrl}`;
     const html = `<p>You're invited to <strong>${ev.title ?? 'an event'}</strong>.</p>
     <p><a href="${rsvpUrl}?rsvp=accepted">Accept</a> | <a href="${rsvpUrl}?rsvp=tentative">Tentative</a> | <a href="${rsvpUrl}?rsvp=declined">Decline</a></p>
     <p>If your mail client doesn't automatically add the calendar, <a href="${icsUrl}">download the .ics</a>.</p>`;
 
+    // If we have a transporter configured, prefer SMTP sending
     if (this.transporter) {
       try {
         const fromAddr =
@@ -83,11 +137,61 @@ export class MailerService {
           });
         return true;
       } catch (err) {
-        this.logger.warn(
-          'Mailer send failed, falling back to logging',
-          String(err),
-        );
-        return false;
+        const errMsg = String(err ?? '');
+        this.logger.warn('Mailer send failed, falling back to logger', errMsg);
+      }
+    }
+
+    // If Postmark token present, try Postmark HTTP API (no extra dependency)
+    const postmarkToken =
+      process.env.POSTMARK_API_TOKEN ?? process.env.POSTMARK_SERVER_TOKEN;
+    if (postmarkToken) {
+      try {
+        const body: any = {
+          From: process.env.MAIL_FROM ?? 'no-reply@example.com',
+          To: toEmail,
+          Subject: subject,
+          HtmlBody: html,
+          TextBody: text,
+        };
+        if (ics) {
+          body.Attachments = [
+            {
+              Name: 'invite.ics',
+              Content: Buffer.from(ics).toString('base64'),
+              ContentType: 'text/calendar; charset=utf-8',
+            },
+          ];
+        }
+
+        const res = await fetch('https://api.postmarkapp.com/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Postmark-Server-Token': postmarkToken,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          this.logger.warn('Postmark send failed', {
+            status: res.status,
+            body: txt,
+          });
+          return false;
+        }
+
+        if (process.env.DEBUG_MAILER === '1')
+          this.logger.debug('[MAILER][postmark] sent invitation', {
+            to: toEmail,
+            eventId: ev.id,
+            token,
+          });
+        return true;
+      } catch (err) {
+        this.logger.warn('Postmark send failed', String(err));
+        // fallthrough to logging
       }
     }
 

@@ -25,6 +25,8 @@ import LocationAutocomplete, {
 import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
 import ColorPicker from '@/components/calendar/events/ColorPicker';
 
+type GuestEntry = string | { email: string; permissions?: string[] };
+
 function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   try {
     const d = parseISO(value);
@@ -98,7 +100,8 @@ export function EventFullscreenForm({
         end: event.allDay ? (allDayEnd ?? fallbackEnd) : fallbackEnd,
         allDay: event.allDay,
         showTime: !event.allDay,
-        guests: event.guests ?? [],
+        // guests may be strings or objects
+        guests: (event.guests ?? []) as GuestEntry[],
         guestInput: '',
         guestError: null as string | null,
         location: locationText,
@@ -121,7 +124,7 @@ export function EventFullscreenForm({
       end: toLocalDateTimeInputValue(e),
       allDay: true,
       showTime: false,
-      guests: [] as string[],
+      guests: [] as GuestEntry[],
       guestInput: '',
       guestError: null as string | null,
       location: '',
@@ -142,7 +145,7 @@ export function EventFullscreenForm({
   const [end, setEnd] = useState(initialValues.end);
   const [allDay, setAllDay] = useState(initialValues.allDay);
 
-  const [guests, setGuests] = useState<string[]>(initialValues.guests);
+  const [guests, setGuests] = useState<GuestEntry[]>(initialValues.guests);
   const [guestInput, setGuestInput] = useState(initialValues.guestInput);
   const [guestError, setGuestError] = useState<string | null>(initialValues.guestError);
 
@@ -251,8 +254,12 @@ export function EventFullscreenForm({
       // If guestPermissions selected, attach permissions per-guest; otherwise send simple strings
       guests: guests.length
         ? guestPermissions.length
-          ? guests.map((email) => ({ email, permissions: guestPermissions }))
-          : guests
+          ? guests.map((g) =>
+              typeof g === 'string'
+                ? { email: g, permissions: guestPermissions }
+                : { email: g.email, permissions: g.permissions ?? guestPermissions },
+            )
+          : guests.map((g) => (typeof g === 'string' ? g : g.email))
         : undefined,
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
@@ -685,9 +692,11 @@ export function EventFullscreenForm({
                   {/* Avatar circle */}
                   <div className="flex items-center gap-2">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0B57D0] text-xs font-semibold text-white">
-                      {g[0]?.toUpperCase()}
+                      {typeof g === 'string' ? g[0]?.toUpperCase() : g.email[0]?.toUpperCase()}
                     </div>
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{g}</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      {typeof g === 'string' ? g : g.email}
+                    </span>
                   </div>
                   <button
                     type="button"

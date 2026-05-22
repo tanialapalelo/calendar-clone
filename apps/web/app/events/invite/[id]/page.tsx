@@ -4,7 +4,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ApiError } from '@/lib/api/client';
 import { sendInvitations } from '@/lib/api/invitations';
-import { Button } from '@/components/ui/button';
 
 export default function InvitePage() {
   const params = useParams();
@@ -46,12 +45,16 @@ export default function InvitePage() {
         onChange={(e) => setEmails(e.target.value)}
       />
       <div className="mt-3 flex gap-2">
-        <Button onClick={handleSend} disabled={loading || !emails.trim()}>
+        <button
+          onClick={handleSend}
+          disabled={loading || !emails.trim()}
+          className="rounded bg-[#0B57D0] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        >
           {loading ? 'Sending…' : 'Send Invitations'}
-        </Button>
-        <Button variant="ghost" onClick={() => router.back()}>
+        </button>
+        <button className="rounded border px-3 py-2 text-sm" onClick={() => router.back()}>
           Cancel
-        </Button>
+        </button>
       </div>
       {message && <div className="mt-3 text-sm">{message}</div>}
     </div>
