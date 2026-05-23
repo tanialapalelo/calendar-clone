@@ -15,6 +15,7 @@ import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
 import { eventsForDay } from '@/lib/events/day';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 
 function getGmtOffsetLabel(d: Date) {
   const parts = new Intl.DateTimeFormat(undefined, {
@@ -173,7 +174,10 @@ export function DayView(props: {
 
                 const leftPct = (p.col / p.colCount) * 100;
                 const widthPct = (1 / p.colCount) * 100;
-                const background = p.event.color ?? '#039BE5';
+
+                // Resolve visuals via centralized helper
+                const rv = resolveRsvpVisuals(p.event);
+                const { background, borderLeft, titleClass, textColorClass } = rv;
 
                 const KindIcon = p.event.isTask
                   ? CircleIcon
@@ -200,13 +204,14 @@ export function DayView(props: {
                   >
                     <div
                       className={[
-                        'relative h-full overflow-hidden px-2 py-1 text-left text-xs text-white',
+                        'relative h-full overflow-hidden px-2 py-1 text-left text-xs',
                         continuesFromPrev ? 'rounded-t-none' : 'rounded-t-md',
                         continuesToNext ? 'rounded-b-none' : 'rounded-b-md',
+                        textColorClass,
                       ].join(' ')}
-                      style={{ background }}
+                      style={{ background, borderLeft }}
                     >
-                      <div className="truncate font-semibold">{p.event.title}</div>
+                      <div className={`truncate font-semibold ${titleClass}`}>{p.event.title}</div>
                       {!allDay && !crossDay && (
                         <div className="truncate text-[11px] opacity-90">
                           {format(parseISO(p.event.start), 'h:mma').toLowerCase()} –{' '}

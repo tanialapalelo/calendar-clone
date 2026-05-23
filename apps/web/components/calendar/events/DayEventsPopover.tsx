@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
 import { compareEventsInDayBucket, isCrossDayTimedEventOnCalendar } from '@/lib/events/day';
 import { getEventRangeMs } from '@/lib/events/range';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 
 type Props = {
   open: boolean;
@@ -136,11 +137,11 @@ export function DayEventsPopover({
                 const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
                 const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
 
-                const eventColor = ev.color || '#0090d6';
+                const rv = resolveRsvpVisuals(ev);
+                const { background, borderLeft, titleClass, textColorClass } = rv;
                 const containerClass = isBar
-                  ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
+                  ? `${leftCap} ${rightCap} ${rv.textColorClass}`
                   : 'rounded-md hover:bg-gray-100 text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700';
-
                 const openId = ev.id;
 
                 // Only show time for non-bar (timed single-day) events
@@ -155,7 +156,7 @@ export function DayEventsPopover({
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
                         onPickEvent(openId, rect);
                       }}
-                      style={{ background: !isBar ? '' : eventColor }}
+                      style={{ background: !isBar ? '' : background, borderLeft }}
                     >
                       <div className="flex items-center gap-2 truncate text-xs font-medium">
                         {!isBar && (
@@ -167,7 +168,7 @@ export function DayEventsPopover({
                             <span>{format(evStart, 'hh:mm a')}</span>
                           </>
                         )}
-                        {ev.title}
+                        <span className={`${titleClass}`}>{ev.title}</span>
                       </div>
                     </button>
                   </li>

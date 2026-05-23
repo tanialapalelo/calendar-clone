@@ -10,6 +10,7 @@ import {
   type RecurrenceScope,
   updateEvent,
 } from '@/lib/api/events';
+import { useCurrentUser } from '@/lib/auth/useCurrentUser';
 import { ApiError } from '@/lib/api/client';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +40,7 @@ function getInstanceId(event: CalendarEvent): string | null {
 // ---------------------------------------------------------------------------
 
 export function useEventsApi(range: { from: Date; to: Date }) {
+  const currentUser = useCurrentUser();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
@@ -48,7 +50,8 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     try {
       const data = await listEvents(range);
       setUnauthorized(false);
-      setEvents(data.map(apiEventToCalendarEvent));
+      const email = currentUser.status === 'authenticated' ? currentUser.user.email : undefined;
+      setEvents(data.map((e) => apiEventToCalendarEvent(e, email)));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setUnauthorized(true);
@@ -61,7 +64,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, currentUser]);
 
   useEffect(() => {
     void refresh();

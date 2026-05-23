@@ -47,6 +47,19 @@ export class EventsService {
     private readonly mailer: MailerService,
   ) {}
 
+  // Helper: compute a lighter/transparent color from a hex input.
+  // Returns an rgba() string when hex is provided, otherwise undefined.
+  private computeLighterColor(hex?: string | null, alpha = 0.6) {
+    if (!hex) return undefined;
+    // accept #RRGGBB or RRGGBB
+    const m = hex.replace('#', '').trim();
+    if (!/^[0-9a-fA-F]{6}$/.test(m)) return undefined;
+    const r = parseInt(m.slice(0, 2), 16);
+    const g = parseInt(m.slice(2, 4), 16);
+    const b = parseInt(m.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
   // ─────────────────────────────────────────────────────────────────────
   // READ
   // ─────────────────────────────────────────────────────────────────────
@@ -900,6 +913,13 @@ export class EventsService {
         location: true,
         startAt: true,
         endAt: true,
+        allDay: true,
+        startDate: true,
+        endDate: true,
+        timeZone: true,
+        color: true,
+        visibility: true,
+        busyStatus: true,
       },
     });
     if (!ev) throw new NotFoundException('Event not found');
@@ -1027,7 +1047,75 @@ export class EventsService {
           console.error('Failed to update invitation send status', updateErr);
         }
 
-        results.push({ email, invitationId: created.id });
+        // Also create a copy of the event in the recipient's default calendar
+        // (if they're a registered user). Attach invitation metadata in the
+        // event.guests field so the frontend can detect recipient copies and
+        // apply special visuals (lighter background / stripes / strikethrough).
+        try {
+          const user = await this.prisma.user.findUnique({
+            where: { email },
+            select: { id: true, email: true },
+          });
+          if (user) {
+            const cal = await this.calendars.ensureDefaultCalendar(user.id);
+            // avoid creating obvious duplicates: same title + same startAt
+            const exists = await this.prisma.event.findFirst({
+              where: {
+                calendarId: cal.id,
+                title: ev.title,
+                startAt: ev.startAt,
+              },
+              select: { id: true },
+            });
+            if (!exists) {
+              // compute lighter color background for UI (frontend expects a
+              // lighter background color). Store it in guests.invitationMeta so
+              // the web client can detect recipient copies.
+              const lighter = this.computeLighterColor(ev.color ?? undefined);
+              // We'll store an object in guests to indicate invitation metadata
+              const invitationMeta = {
+                invitedEmail: email,
+                permissions,
+                lighterColor: lighter,
+              } as any;
+              const createdCopy = await this.prisma.event.create({
+                data: {
+                  calendarId: cal.id,
+                  title: ev.title,
+                  description: ev.description,
+                  location: ev.location,
+                  allDay: ev.allDay,
+                  startAt: ev.startAt,
+                  endAt: ev.endAt,
+                  startDate: ev.startDate ?? null,
+                  endDate: ev.endDate ?? null,
+                  timeZone: ev.timeZone ?? undefined,
+                  // keep original color for border/stripe, store lighter in guests metadata for UI
+                  color: ev.color ?? undefined,
+                  visibility: ev.visibility ?? undefined,
+                  busyStatus: ev.busyStatus ?? undefined,
+                  // store invitation metadata so UI can show lighter bg/stripe
+                  guests: invitationMeta as Prisma.InputJsonValue,
+                },
+                select: { id: true },
+              });
+
+              // create attendee for the new event and mark needsAction
+              await this.prisma.eventAttendee.create({
+                data: {
+                  event: { connect: { id: createdCopy.id } },
+                  email,
+                  rsvp: 'needsAction',
+                },
+              });
+            }
+          }
+        } catch (copyErr) {
+          console.error(
+            'Failed to create recipient calendar copy for invitation',
+            copyErr,
+          );
+        }
       } catch (err: unknown) {
         const msg =
           typeof err === 'string'
@@ -1137,23 +1225,78 @@ export class EventsService {
       where: { eventId: inv.eventId, email: inv.email },
       data: { rsvp },
     });
-    // If no attendee row was updated (possible mismatch), upsert one so DB reflects RSVP
-    if (updateResult.count === 0) {
-      await this.prisma.eventAttendee.upsert({
-        where: { eventId_email: { eventId: inv.eventId, email: inv.email } },
-        create: {
-          event: { connect: { id: inv.eventId } },
-          email: inv.email,
-          rsvp,
+    // Also update any attendee rows in recipient copies (events in the
+    // recipient's own calendar) so their local copy reflects the RSVP.
+    try {
+      const masterEv = await this.prisma.event.findUnique({
+        where: { id: inv.eventId },
+        select: {
+          title: true,
+          startAt: true,
+          endAt: true,
+          id: true,
+          color: true,
         },
-        update: { rsvp },
       });
+      if (masterEv) {
+        // find candidate copies in recipient calendars (match by owner email + same title + startAt)
+        const copies = await this.prisma.event.findMany({
+          where: {
+            title: masterEv.title,
+            startAt: masterEv.startAt,
+            calendar: { owner: { email: inv.email } },
+          },
+          select: { id: true, guests: true },
+        });
+
+        // Update attendee rows for those copies (if any) so the recipient's
+        // local copy has its attendee row updated to the chosen RSVP.
+        try {
+          const copyIds = copies.map((c) => c.id).filter(Boolean);
+          if (copyIds.length > 0) {
+            await this.prisma.eventAttendee.updateMany({
+              where: { eventId: { in: copyIds }, email: inv.email },
+              data: { rsvp },
+            });
+          }
+        } catch (innerUpdate) {
+          console.error(
+            'Failed to update attendee rows on recipient copies',
+            innerUpdate,
+          );
+        }
+
+        for (const c of copies) {
+          try {
+            const existing = c.guests as any;
+            const lighter = this.computeLighterColor(
+              masterEv.color ?? undefined,
+            );
+            const base =
+              existing && typeof existing === 'object' ? { ...existing } : {};
+            if (!base.lighterColor && lighter) base.lighterColor = lighter;
+            base.rsvp = rsvp;
+            base.invitedEmail = base.invitedEmail ?? inv.email;
+            const nextMeta = base;
+            await this.prisma.event.update({
+              where: { id: c.id },
+              data: { guests: nextMeta as Prisma.InputJsonValue },
+            });
+          } catch (inner) {
+            console.error(
+              'Failed to write RSVP into recipient copy guests JSON',
+              inner,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.error(
+        'Failed to update recipient copies guests JSON for RSVP',
+        e,
+      );
     }
-    // mark invitation used (status)
-    await this.prisma.invitation.update({
-      where: { id: inv.id },
-      data: { status: 'delivered' },
-    });
+
     // If attendee accepted and the recipient is a registered user, create an
     // event copy in their default calendar so it appears in their calendar UI.
     if (rsvp === 'accepted') {
@@ -1193,6 +1336,11 @@ export class EventsService {
               select: { id: true },
             });
             if (!exists) {
+              const lighter = this.computeLighterColor(ev.color ?? undefined);
+              const invitationMeta = {
+                invitedEmail: inv.email,
+                lighterColor: lighter,
+              } as any;
               const created = await this.prisma.event.create({
                 data: {
                   calendarId: cal.id,
@@ -1208,6 +1356,8 @@ export class EventsService {
                   color: ev.color ?? undefined,
                   visibility: ev.visibility ?? undefined,
                   busyStatus: ev.busyStatus ?? undefined,
+                  // store invitation metadata so UI can show lighter bg/stripe
+                  guests: invitationMeta as Prisma.InputJsonValue,
                 },
                 select: { id: true },
               });

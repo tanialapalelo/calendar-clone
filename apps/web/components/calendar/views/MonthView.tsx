@@ -2,6 +2,7 @@
 
 import { addDays, format, parseISO, startOfDay } from 'date-fns';
 import { CircleIcon, Grid2X2Icon } from 'lucide-react';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 
 import { daysOfWeek } from '@/constants';
 import { eventsForDay } from '@/lib/events/day';
@@ -123,16 +124,26 @@ export function MonthView(props: {
 
                           const openId = ev.id;
 
+                          // RSVP visuals for visible timed events in month cells
+                          const rv = resolveRsvpVisuals(ev);
+                          const {
+                            background: bgStyle,
+                            borderLeft,
+                            titleClass,
+                            textColorClass,
+                          } = rv;
+
                           return (
                             <div
                               key={ev.id}
-                              className="hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] text-gray-800 hover:bg-gray-200 sm:flex dark:text-gray-300 dark:hover:bg-gray-700"
+                              className={`hidden cursor-pointer items-center gap-2 truncate rounded px-1 text-[11px] hover:bg-gray-200 sm:flex dark:hover:bg-gray-700 ${textColorClass}`}
                               title={ev.title}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 onOpenEvent(openId, rect);
                               }}
+                              style={{ background: bgStyle }}
                             >
                               <span
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
@@ -143,7 +154,7 @@ export function MonthView(props: {
                               </span>
                               <div className="flex items-center gap-1">
                                 {isNotEvent}
-                                <span className="truncate">{ev.title}</span>
+                                <span className={titleClass}>{ev.title}</span>
                               </div>
                             </div>
                           );
@@ -186,16 +197,19 @@ export function MonthView(props: {
                       const rightCapClass = roundedRight ? 'rounded-r-full' : 'rounded-r-none';
 
                       const ev = s.event as CalendarEvent & { color?: string };
+                      const rv = resolveRsvpVisuals(ev);
+                      const { background: bg, borderLeft, titleClass, textColorClass } = rv;
                       const openId = ev.id;
 
                       return (
                         <div
                           key={`${s.event.id}-${weekIdx}-${s.startCol}-${s.lane}`}
-                          className={`pointer-events-auto relative flex items-center truncate px-2 text-[11px] font-medium text-white hover:bg-[#0090d6] ${leftCapClass} ${rightCapClass}`}
+                          className={`pointer-events-auto relative flex items-center truncate px-2 text-[11px] font-medium ${textColorClass} hover:bg-[#0090d6] ${leftCapClass} ${rightCapClass}`}
                           style={{
                             gridColumn: `${s.startCol + 1} / ${s.endColExclusive + 1}`,
                             gridRow: `${s.lane + 1}`,
-                            background: ev.color ?? '#039BE5',
+                            background: bg,
+                            borderLeft: borderLeft,
                           }}
                           title={s.event.title}
                           onClick={(e) => {
@@ -204,7 +218,7 @@ export function MonthView(props: {
                             onOpenEvent(openId, rect);
                           }}
                         >
-                          <span className="truncate">{s.event.title}</span>
+                          <span className={titleClass + ' truncate'}>{s.event.title}</span>
                         </div>
                       );
                     })}
