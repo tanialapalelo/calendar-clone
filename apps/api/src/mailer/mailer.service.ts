@@ -119,14 +119,33 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
           subject,
           text,
           html,
+          // include calendar as alternative so mail clients parse meeting request
+          alternatives: ics
+            ? [
+                {
+                  content: ics,
+                  contentType: 'text/calendar; method=REQUEST; charset=utf-8',
+                  contentTransferEncoding: '7bit',
+                },
+              ]
+            : undefined,
           attachments: ics
             ? [
                 {
                   content: ics,
                   filename: 'invite.ics',
                   contentType: 'text/calendar; charset=utf-8',
+                  contentDisposition: 'inline',
+                  contentTransferEncoding: '7bit',
                 },
               ]
+            : undefined,
+          // calendar-specific headers that help some clients
+          headers: ics
+            ? {
+                'Content-class': 'urn:content-classes:calendarmessage',
+                'X-Entity-Ref-ID': 'invite.ics',
+              }
             : undefined,
         });
         if (process.env.DEBUG_MAILER === '1')

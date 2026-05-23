@@ -889,7 +889,12 @@ export class EventsService {
       where: { id: eventId },
       select: {
         id: true,
-        calendar: { select: { ownerId: true } },
+        calendar: {
+          select: {
+            ownerId: true,
+            owner: { select: { email: true, name: true } },
+          },
+        },
         title: true,
         description: true,
         location: true,
@@ -940,23 +945,46 @@ export class EventsService {
           update: updateData,
         });
 
-        // Build minimal ICS content for this single event (so recipients can add to calendar)
+        // Build a meeting-request ICS so mail clients recognize this as an invite
         const uid = `${ev.id}-${token}`;
+        const dtStamp =
+          new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
         const dtStart =
           ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
         const dtEnd =
           ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        // Organizer: prefer calendar owner email, fall back to MAIL_FROM env
+        let organizerEmail =
+          ev.calendar?.owner?.email ?? process.env.MAIL_FROM ?? undefined;
+        let organizerCN = ev.calendar?.owner?.name ?? undefined;
+        if (organizerEmail && organizerEmail.includes('<')) {
+          const m = organizerEmail.match(/<([^>]+)>/);
+          if (m) organizerEmail = m[1];
+        }
+        const organizerLine = organizerEmail
+          ? organizerCN
+            ? `ORGANIZER;CN=${organizerCN}:mailto:${organizerEmail}`
+            : `ORGANIZER:mailto:${organizerEmail}`
+          : null;
+        const attendeeLine = `ATTENDEE;RSVP=TRUE:mailto:${email}`;
+
         const icsLines = [
           'BEGIN:VCALENDAR',
+          'METHOD:REQUEST',
           'VERSION:2.0',
           'PRODID:-//calendar-clone//EN',
           'BEGIN:VEVENT',
           `UID:${uid}`,
+          `DTSTAMP:${dtStamp}`,
           `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
           ev.description
             ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
             : null,
           ev.location ? `LOCATION:${String(ev.location)}` : null,
+          organizerLine,
+          attendeeLine,
+          'SEQUENCE:0',
+          'STATUS:CONFIRMED',
           `DTSTART:${dtStart}`,
           `DTEND:${dtEnd}`,
           'END:VEVENT',
@@ -1020,6 +1048,7 @@ export class EventsService {
       select: {
         id: true,
         token: true,
+        email: true,
         event: {
           select: {
             id: true,
@@ -1036,21 +1065,50 @@ export class EventsService {
 
     const ev = inv.event;
     const uid = `${ev.id}-${inv.token}`;
+    const dtStamp =
+      new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
     const dtStart =
       ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
     const dtEnd =
       ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+
+    // Organizer: prefer MAIL_FROM or fall back to calendar owner (if available via join)
+    const rawMailFrom = process.env.MAIL_FROM ?? undefined;
+    let organizerEmail: string | undefined = undefined;
+    let organizerCN: string | undefined = undefined;
+    if (rawMailFrom) {
+      const m = rawMailFrom.match(/<([^>]+)>/);
+      if (m) organizerEmail = m[1];
+      else if (rawMailFrom.includes('@')) organizerEmail = rawMailFrom;
+      const nameMatch = rawMailFrom.match(/^(.*?)\s*</);
+      if (nameMatch && nameMatch[1].trim()) organizerCN = nameMatch[1].trim();
+    }
+
+    const organizerLine = organizerEmail
+      ? organizerCN
+        ? `ORGANIZER;CN=${organizerCN}:mailto:${organizerEmail}`
+        : `ORGANIZER:mailto:${organizerEmail}`
+      : null;
+
+    const attendeeLine = `ATTENDEE;RSVP=TRUE:mailto:${inv.email}`;
+
     const icsLines = [
       'BEGIN:VCALENDAR',
+      'METHOD:REQUEST',
       'VERSION:2.0',
       'PRODID:-//calendar-clone//EN',
       'BEGIN:VEVENT',
       `UID:${uid}`,
+      `DTSTAMP:${dtStamp}`,
       `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
       ev.description
         ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
         : null,
       ev.location ? `LOCATION:${String(ev.location)}` : null,
+      organizerLine,
+      attendeeLine,
+      'SEQUENCE:0',
+      'STATUS:CONFIRMED',
       `DTSTART:${dtStart}`,
       `DTEND:${dtEnd}`,
       'END:VEVENT',
@@ -1075,15 +1133,110 @@ export class EventsService {
     }
 
     // update attendee
-    await this.prisma.eventAttendee.updateMany({
+    const updateResult = await this.prisma.eventAttendee.updateMany({
       where: { eventId: inv.eventId, email: inv.email },
       data: { rsvp },
     });
+    // If no attendee row was updated (possible mismatch), upsert one so DB reflects RSVP
+    if (updateResult.count === 0) {
+      await this.prisma.eventAttendee.upsert({
+        where: { eventId_email: { eventId: inv.eventId, email: inv.email } },
+        create: {
+          event: { connect: { id: inv.eventId } },
+          email: inv.email,
+          rsvp,
+        },
+        update: { rsvp },
+      });
+    }
     // mark invitation used (status)
     await this.prisma.invitation.update({
       where: { id: inv.id },
       data: { status: 'delivered' },
     });
-    return { ok: true };
+    // If attendee accepted and the recipient is a registered user, create an
+    // event copy in their default calendar so it appears in their calendar UI.
+    if (rsvp === 'accepted') {
+      try {
+        const ev = await this.prisma.event.findUnique({
+          where: { id: inv.eventId },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            location: true,
+            startAt: true,
+            endAt: true,
+            allDay: true,
+            startDate: true,
+            endDate: true,
+            timeZone: true,
+            color: true,
+            visibility: true,
+            busyStatus: true,
+          },
+        });
+        if (ev) {
+          const user = await this.prisma.user.findUnique({
+            where: { email: inv.email },
+            select: { id: true, email: true },
+          });
+          if (user) {
+            const cal = await this.calendars.ensureDefaultCalendar(user.id);
+            // avoid creating obvious duplicates: same title + same startAt
+            const exists = await this.prisma.event.findFirst({
+              where: {
+                calendarId: cal.id,
+                title: ev.title,
+                startAt: ev.startAt,
+              },
+              select: { id: true },
+            });
+            if (!exists) {
+              const created = await this.prisma.event.create({
+                data: {
+                  calendarId: cal.id,
+                  title: ev.title,
+                  description: ev.description,
+                  location: ev.location,
+                  allDay: ev.allDay,
+                  startAt: ev.startAt,
+                  endAt: ev.endAt,
+                  startDate: ev.startDate ?? null,
+                  endDate: ev.endDate ?? null,
+                  timeZone: ev.timeZone ?? undefined,
+                  color: ev.color ?? undefined,
+                  visibility: ev.visibility ?? undefined,
+                  busyStatus: ev.busyStatus ?? undefined,
+                },
+                select: { id: true },
+              });
+
+              // create attendee for the new event and mark accepted
+              await this.prisma.eventAttendee.create({
+                data: {
+                  event: { connect: { id: created.id } },
+                  email: inv.email,
+                  rsvp,
+                },
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // Non-fatal: if anything goes wrong creating the recipient copy we still
+        // want to treat RSVP as successful. Log for debugging.
+        console.error('Failed to create event copy for recipient on RSVP', err);
+      }
+    }
+
+    console.info('RSVP recorded', {
+      token,
+      eventId: inv.eventId,
+      email: inv.email,
+      rsvp,
+      updatedCount: updateResult.count,
+    });
+    return { ok: true, updatedCount: updateResult.count };
   }
 }
