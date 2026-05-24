@@ -178,7 +178,7 @@ export default function LocationAutocomplete(props: {
         <div
           id="location-suggestions"
           role="listbox"
-          className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-white shadow-sm"
+          className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-white shadow-sm dark:bg-gray-700"
         >
           {loading && suggestions.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-500">Searching…</div>
@@ -189,7 +189,7 @@ export default function LocationAutocomplete(props: {
               key={s.place_id}
               id={`loc-${s.place_id}`}
               type="button"
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${idx === highlight ? 'bg-gray-100' : ''}`}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800 ${idx === highlight ? 'bg-gray-100 dark:bg-gray-700' : ''}`}
               onMouseEnter={() => setHighlight(idx)}
               onClick={() => handleSelect(s)}
             >

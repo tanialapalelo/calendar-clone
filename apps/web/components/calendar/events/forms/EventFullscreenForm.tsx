@@ -1,14 +1,17 @@
 'use client';
 
 import { addDays, format, isValid, parseISO, subDays } from 'date-fns';
-import { KeyboardEvent, useMemo, useState } from 'react';
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { startOfDayDefaultHour, toLocalDateTimeInputValue } from '@/lib/date';
 import {
   BellIcon,
+  BoldIcon,
   BriefcaseBusinessIcon,
   CalendarIcon,
+  ItalicIcon,
   MapPinIcon,
   NotebookPenIcon,
+  UnderlineIcon,
   UsersIcon,
   VideoIcon,
   XIcon,
@@ -218,7 +221,7 @@ export function EventFullscreenForm({
   const [end, setEnd] = useState(initialValues.end);
   const [allDay, setAllDay] = useState(initialValues.allDay);
   // initialize addMeeting from the computed initialValues (handles edit case with meetingUrl)
-  const [addMeeting, setAddMeeting] = useState<boolean>(!!initialValues.addMeeting);
+  const [addMeeting, setAddMeeting] = useState(initialValues.addMeeting);
 
   // meeting details (provider / explicit URL)
   const [meetingProvider, setMeetingProvider] = useState<string | undefined>(
@@ -253,7 +256,167 @@ export function EventFullscreenForm({
     initialValues.notifications,
   );
 
-  const [description, setDescription] = useState(initialValues.description);
+  const [descriptionHtml, setDescriptionHtml] = useState(initialValues.description);
+  const descRef = useRef<HTMLDivElement | null>(null);
+  // live ref to avoid re-rendering on every keystroke (prevents caret/IME issues)
+  const descriptionHtmlRef = useRef<string>(String(initialValues.description ?? ''));
+  const isComposingRef = useRef(false);
+
+  // Toolbar active states
+  const [boldActive, setBoldActive] = useState(false);
+  const [italicActive, setItalicActive] = useState(false);
+  const [underlineActive, setUnderlineActive] = useState(false);
+
+  const isSelectionInsideEditor = () => {
+    const el = descRef.current;
+    if (!el) return false;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    return el.contains(range.startContainer) || el === range.startContainer;
+  };
+
+  const updateToolbarState = () => {
+    try {
+      if (!isSelectionInsideEditor()) {
+        setBoldActive(false);
+        setItalicActive(false);
+        setUnderlineActive(false);
+        return;
+      }
+
+      // Prefer queryCommandState where available (simple and widely supported) and
+      // fall back to DOM inspection for lists.
+      const q = (cmd: string) => {
+        try {
+          // @ts-ignore execCommand/queryCommandState still available in DOM
+          return Boolean(document.queryCommandState && document.queryCommandState(cmd));
+        } catch {
+          return false;
+        }
+      };
+
+      setBoldActive(q('bold'));
+      setItalicActive(q('italic'));
+      setUnderlineActive(q('underline'));
+
+      // List detection: try queryCommandState, otherwise inspect ancestor tags
+      const orderedByCmd = q('insertOrderedList');
+      const bulletByCmd = q('insertUnorderedList');
+
+      let orderedByDom = false;
+      let bulletByDom = false;
+      const sel = window.getSelection();
+      let cur: Node | null = sel?.anchorNode ?? null;
+      const root = descRef.current;
+      while (cur && cur !== root) {
+        if (cur.nodeType === 1) {
+          const tag = (cur as HTMLElement).tagName;
+          if (tag === 'OL') orderedByDom = true;
+          if (tag === 'UL') bulletByDom = true;
+        }
+        cur = cur.parentNode;
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // Update toolbar state on selection changes and pointer/keyboard events
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateToolbarState);
+    document.addEventListener('mouseup', updateToolbarState);
+    document.addEventListener('keyup', updateToolbarState);
+    // initial update
+    setTimeout(updateToolbarState, 0);
+    return () => {
+      document.removeEventListener('selectionchange', updateToolbarState);
+      document.removeEventListener('mouseup', updateToolbarState);
+      document.removeEventListener('keyup', updateToolbarState);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Initialize the editor's innerHTML once from initial values. Avoid updating innerHTML on every
+  // render because it resets the DOM and breaks IME / caret position while typing.
+  useEffect(() => {
+    const el = descRef.current;
+    const html = String(initialValues.description ?? '');
+    descriptionHtmlRef.current = html;
+    setDescriptionHtml(html);
+    if (!el) return;
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }, [initialValues.description]);
+
+  // composition handlers to avoid applying formatting during IME composition
+  const onCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+  const onCompositionEnd = () => {
+    isComposingRef.current = false;
+  };
+
+  // Ensure selection is inside the editor. If not, focus editor and put caret at end.
+  const ensureSelectionInEditor = () => {
+    if (isComposingRef.current) return;
+    const el = descRef.current;
+    if (!el) return;
+    // Always focus the editor - many execCommand operations require the editable to be focused
+    // but focusing itself does not change selection when selection is already inside.
+    el.focus();
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (el.contains(range.startContainer) || el === range.startContainer) return;
+    }
+    // move caret to end
+    try {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      r.collapse(false);
+      const s = window.getSelection();
+      s?.removeAllRanges();
+      s?.addRange(r);
+    } catch {
+      // ignore
+    }
+  };
+
+  // Local toolbar button component that preserves selection (preventDefault on mousedown)
+  function ToolbarButtonLocal({
+    children,
+    label,
+    onClick,
+    active,
+  }: {
+    children: React.ReactNode;
+    label?: string;
+    onClick: () => void;
+    active?: boolean;
+  }) {
+    const base = 'rounded p-1 text-xs';
+    const inactive = 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700';
+    const activeCls = 'bg-[#0B57D0] text-white rounded';
+    return (
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          if (isComposingRef.current) return; // don't run while IME composing
+          ensureSelectionInEditor();
+          onClick();
+          // refresh toolbar state after command
+          setTimeout(updateToolbarState, 0);
+        }}
+        title={label}
+        aria-pressed={active ? 'true' : 'false'}
+        className={[base, active ? activeCls : inactive].join(' ')}
+      >
+        {children}
+      </button>
+    );
+  }
+
   const [busy, setBusy] = useState<'busy' | 'free'>(initialValues.busy);
   const [visibility, setVisibility] = useState<'default' | 'public' | 'private'>(
     initialValues.visibility,
@@ -347,7 +510,9 @@ export function EventFullscreenForm({
       location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
       notifications: notifications.length ? notifications : undefined,
       recurrence: recurrence?.rrule ?? null,
-      description: description || undefined,
+      // Prefer the live editor content if available (avoids race where ref/state not synced)
+      description:
+        (descRef.current?.innerHTML ?? descriptionHtmlRef.current ?? descriptionHtml) || undefined,
       busyStatus: busy || undefined,
       visibility: visibility || undefined,
       color: color || '#0B57D0',
@@ -404,12 +569,8 @@ export function EventFullscreenForm({
     | undefined;
 
   return (
-    // ─── STEP 1: Root layout — flex column, full screen ───────────────────────
     <div className="flex min-h-screen flex-col">
-      {/* ── TOP BAR: X + Title input + Save button ──────────────────────────── */}
-      {/* STEP 1 + 5: Save moved to top-right, X on far left */}
       <div className="flex w-2/3 items-center gap-4 px-6 py-3 dark:border-gray-700">
-        {/* X close button */}
         <button
           type="button"
           onClick={onClose}
@@ -419,8 +580,6 @@ export function EventFullscreenForm({
           <XIcon size={20} />
         </button>
 
-        {/* Title input — grows to fill space, underline only on focus */}
-        {/* STEP 1: title is now in the header, not inside the form body */}
         <input
           className="flex-1 border-b bg-transparent text-xl text-gray-900 placeholder-gray-400 focus:border-[#0B57D0] focus:outline-none dark:text-gray-100"
           value={title}
@@ -429,8 +588,6 @@ export function EventFullscreenForm({
           autoFocus
         />
 
-        {/* Save button — top right */}
-        {/* STEP 5: moved from bottom to header */}
         <button
           type="button"
           onClick={submit}
@@ -450,19 +607,14 @@ export function EventFullscreenForm({
         )}
       </div>
 
-      {/* ── BODY: Left column (form) + Right column (guests) ──────────────────── */}
-      {/* STEP 1: two clear columns, not mixed grid */}
       <div className="flex flex-1 overflow-auto px-6">
-        {/* ── LEFT COLUMN ──────────────────────────────────────────────────────── */}
         <div className="flex-1 space-y-1">
-          {/* ── STEP 2: Date/Time — inline row like Google Calendar ────────────── */}
-          {/* Layout: [start date] [start time] to [end time] [end date]          */}
           <div className="flex flex-wrap items-center gap-1 py-2">
             {/* Start date */}
             <div className="relative">
               <input
                 type="date"
-                className="bg-#E9EEF6 cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                className="cursor-pointer rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 focus:outline-none dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 value={start.slice(0, 10)}
                 onChange={(e) =>
                   setStart(
@@ -476,7 +628,7 @@ export function EventFullscreenForm({
             {!allDay && (
               <input
                 type="time"
-                className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                className="cursor-pointer rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 focus:outline-none dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 value={start.slice(11, 16)}
                 onChange={(e) => setStart(`${start.slice(0, 10)}T${e.target.value}`)}
               />
@@ -488,7 +640,7 @@ export function EventFullscreenForm({
             {!allDay && (
               <input
                 type="time"
-                className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+                className="cursor-pointer rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 focus:outline-none dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                 value={end.slice(11, 16)}
                 onChange={(e) => setEnd(`${end.slice(0, 10)}T${e.target.value}`)}
               />
@@ -497,7 +649,7 @@ export function EventFullscreenForm({
             {/* End date */}
             <input
               type="date"
-              className="cursor-pointer rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:text-gray-300 dark:hover:bg-gray-800"
+              className="cursor-pointer rounded bg-gray-100 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 focus:outline-none dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               value={allDay ? end.slice(0, 10) : end.slice(0, 10)}
               onChange={(e) =>
                 setEnd(
@@ -507,8 +659,6 @@ export function EventFullscreenForm({
             />
           </div>
 
-          {/* ── STEP 3: All day + Recurrence — standalone row, always visible ───── */}
-          {/* Before: hidden inside conditional. Now: always shown as its own row  */}
           <div className="flex items-center gap-6 py-1">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -549,9 +699,6 @@ export function EventFullscreenForm({
 
             {tab === 'detail' && (
               <div className="space-y-1 pt-2">
-                {/* ── STEP 6: Every detail row uses the same icon + content pattern ── */}
-                {/* Pattern: [icon 20px, text-gray-500] [flex-1 content]              */}
-
                 {/* Location */}
                 <div className="flex items-start gap-4 rounded-lg px-2 py-2">
                   <div className="mt-2 shrink-0">
@@ -582,7 +729,7 @@ export function EventFullscreenForm({
                     {notifications.map((n) => (
                       <div key={n.id} className="flex items-center gap-2">
                         <select
-                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                           value={n.method}
                           onChange={(e) => updateNotification(n.id, { method: e.target.value })}
                         >
@@ -598,7 +745,7 @@ export function EventFullscreenForm({
                           min={1}
                           max={40320}
                           value={n.amount}
-                          className="w-16 rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700"
+                          className="w-16 rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200"
                           onChange={(e) =>
                             updateNotification(n.id, { amount: Number(e.target.value) })
                           }
@@ -606,7 +753,7 @@ export function EventFullscreenForm({
 
                         <select
                           value={n.unit}
-                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                          className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                           onChange={(e) =>
                             updateNotification(n.id, {
                               unit: e.target.value as NotificationItem['unit'],
@@ -623,7 +770,7 @@ export function EventFullscreenForm({
                         <button
                           type="button"
                           onClick={() => removeNotification(n.id)}
-                          className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700"
                           aria-label="Remove notification"
                         >
                           <XIcon size={16} />
@@ -651,7 +798,7 @@ export function EventFullscreenForm({
                   <div className="flex flex-1 flex-wrap items-center gap-3">
                     {/* Status: Busy / Free */}
                     <select
-                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                       value={busy}
                       onChange={(e) => setBusy(e.target.value as 'busy' | 'free')}
                     >
@@ -664,7 +811,7 @@ export function EventFullscreenForm({
 
                     {/* Visibility */}
                     <select
-                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      className="rounded-md bg-gray-100 px-3 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                       value={visibility}
                       onChange={(e) =>
                         setVisibility(e.target.value as 'default' | 'public' | 'private')
@@ -710,7 +857,7 @@ export function EventFullscreenForm({
                       <select
                         value={meetingProvider ?? 'jitsi'}
                         onChange={(e) => setMeetingProvider(e.target.value)}
-                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                       >
                         <option value="jitsi">Jitsi (generate)</option>
                         <option value="custom">Custom URL</option>
@@ -721,7 +868,7 @@ export function EventFullscreenForm({
                         placeholder="Optional meeting URL"
                         value={meetingUrl}
                         onChange={(e) => setMeetingUrl(e.target.value)}
-                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                       />
                     </div>
                   )}
@@ -739,57 +886,52 @@ export function EventFullscreenForm({
                   )}
                 </div>
 
-                {/* ── STEP 7: Description with toolbar hint ─────────────────────────── */}
                 <div className="flex items-start gap-4 px-2 py-2">
                   <div className="mt-2 shrink-0">
                     <NotebookPenIcon size={20} className="text-gray-500" />
                   </div>
-                  <div className="flex-1 overflow-hidden rounded-lg border border-transparent focus-within:border-gray-300 hover:border-gray-200 dark:hover:border-gray-600">
-                    {/* Simple formatting toolbar (visual only for now) */}
-                    <div className="flex items-center gap-0.5 border-b border-gray-100 px-2 py-1 dark:border-gray-700">
-                      <button
-                        type="button"
-                        className="rounded p-1 text-xs font-bold text-gray-500 hover:bg-gray-100"
-                        title="Bold"
+                  <div className="flex-1 overflow-hidden rounded-lg border border-gray-800 bg-white dark:bg-gray-800 dark:text-gray-200">
+                    {/* Rich text toolbar + editable area */}
+                    <div className="flex items-center gap-1 border-b border-gray-300 px-2 py-1 dark:border-gray-700">
+                      <ToolbarButtonLocal
+                        label="Bold"
+                        onClick={() => exec('bold')}
+                        active={boldActive}
                       >
-                        B
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-xs text-gray-500 italic hover:bg-gray-100"
-                        title="Italic"
+                        <BoldIcon size={14} />
+                      </ToolbarButtonLocal>
+                      <ToolbarButtonLocal
+                        label="Italic"
+                        onClick={() => exec('italic')}
+                        active={italicActive}
                       >
-                        I
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-xs text-gray-500 underline hover:bg-gray-100"
-                        title="Underline"
+                        <ItalicIcon size={14} />
+                      </ToolbarButtonLocal>
+                      <ToolbarButtonLocal
+                        label="Underline"
+                        onClick={() => exec('underline')}
+                        active={underlineActive}
                       >
-                        U
-                      </button>
-                      <div className="mx-1 h-4 w-px bg-gray-200" />
-                      <button
-                        type="button"
-                        className="rounded p-1 text-xs text-gray-500 hover:bg-gray-100"
-                        title="Ordered list"
-                      >
-                        1.
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-xs text-gray-500 hover:bg-gray-100"
-                        title="Bullet list"
-                      >
-                        •
-                      </button>
+                        <UnderlineIcon size={16} />
+                      </ToolbarButtonLocal>
                     </div>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Add description"
-                      rows={4}
-                      className="w-full resize-none p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none dark:bg-gray-900 dark:text-gray-200"
+                    <div
+                      contentEditable
+                      ref={descRef}
+                      onCompositionStart={onCompositionStart}
+                      onCompositionEnd={onCompositionEnd}
+                      onInput={(e) => {
+                        // update ref only; avoid setState to prevent re-renders while typing
+                        descriptionHtmlRef.current = (e.target as HTMLElement).innerHTML;
+                      }}
+                      onBlur={() => {
+                        // sync to state when user leaves the editor
+                        setDescriptionHtml(descriptionHtmlRef.current);
+                      }}
+                      suppressContentEditableWarning
+                      className="min-h-[120px] w-full resize-none p-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none dark:bg-gray-900 dark:text-gray-200"
+                      aria-label="Event description"
+                      role="textbox"
                     />
                   </div>
                 </div>
@@ -805,15 +947,13 @@ export function EventFullscreenForm({
           {submitError && <p className="text-sm text-red-600">{submitError}</p>}
         </div>
 
-        {/* ── RIGHT COLUMN: Guests ──────────────────────────────────────────────── */}
-        {/* STEP 1: Guests always in its own right column, not nested inside left  */}
         <div className="w-2/5 shrink-0 px-8 py-32">
           <h3 className="mb-3 w-fit border-b-2 border-[#0B57D0] text-sm font-semibold text-[#0B57D0] dark:text-gray-300">
             Guests
           </h3>
 
           {/* Add guest input */}
-          <div className="flex items-center gap-2 rounded-md bg-gray-200 px-3 py-1.5 focus-within:border-[#0B57D0] hover:bg-gray-300 dark:bg-gray-600">
+          <div className="flex items-center gap-2 rounded-md bg-gray-200 px-3 py-1.5 focus-within:border-[#0B57D0] hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
             <UsersIcon size={16} className="shrink-0 text-gray-400" />
             <input
               className="flex-1 text-sm text-gray-700 placeholder-gray-400 focus:outline-none dark:bg-transparent dark:text-gray-200"
@@ -889,3 +1029,11 @@ export function EventFullscreenForm({
 }
 
 export default EventFullscreenForm;
+
+function exec(command: string, value?: string) {
+  try {
+    document.execCommand(command, false, value ?? undefined);
+  } catch (err) {
+    // noop
+  }
+}

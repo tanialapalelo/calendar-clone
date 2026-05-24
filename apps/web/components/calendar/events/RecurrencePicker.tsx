@@ -164,7 +164,7 @@ export default function RecurrencePicker(props: {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <select
-          className="rounded bg-gray-200 p-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none"
+          className="rounded bg-gray-200 p-1.5 text-sm text-gray-700 hover:bg-gray-300 focus:outline-none dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           value={preset}
           onChange={(e) => {
             const v = e.target.value;
