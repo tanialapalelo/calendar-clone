@@ -10,6 +10,7 @@ import {
   MapPinIcon,
   NotebookPenIcon,
   UsersIcon,
+  VideoIcon,
   XIcon,
 } from 'lucide-react';
 import {
@@ -438,18 +439,6 @@ export function EventFullscreenForm({
           Save
         </button>
 
-        {/* If the event already has a meeting URL, show a Join button in the header for quick access */}
-        {event && apiAny?.meetingUrl && (
-          <a
-            href={String(apiAny.meetingUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
-          >
-            Join meeting
-          </a>
-        )}
-
         {event && (
           <button
             type="button"
@@ -549,7 +538,7 @@ export function EventFullscreenForm({
                     'px-4 py-2 text-sm font-medium transition-colors',
                     tab === option.value
                       ? 'border-b-2 border-[#0B57D0] text-[#0B57D0]'
-                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400',
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200',
                   ].join(' ')}
                   onClick={() => setTab(option.value)}
                 >
@@ -699,7 +688,10 @@ export function EventFullscreenForm({
                 </div>
 
                 {/* Meeting option */}
-                <div className="flex items-center gap-4 px-2 py-2">
+                <div className="flex items-center gap-4 px-2 py-1">
+                  <div className="w-5 shrink-0">
+                    <VideoIcon size={20} className="text-gray-500" />
+                  </div>
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
@@ -707,7 +699,9 @@ export function EventFullscreenForm({
                       onChange={(e) => setAddMeeting(e.target.checked)}
                       className="h-4 w-4 rounded accent-[#0B57D0]"
                     />
-                    <span className="text-sm text-gray-700">Add meeting (Jitsi)</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Add meeting (Jitsi)
+                    </span>
                   </label>
 
                   {/* Provider + URL fields when addMeeting is enabled */}
@@ -738,7 +732,7 @@ export function EventFullscreenForm({
                       href={String(apiAny.meetingUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-2 rounded-3xl bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                      className="ml-2 rounded-full bg-green-600 px-3 py-2 text-sm font-semibold text-white"
                     >
                       Join meeting
                     </a>

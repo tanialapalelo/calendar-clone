@@ -2,7 +2,15 @@
 
 import { format, parseISO } from 'date-fns';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
+import {
+  BellIcon,
+  CalendarIcon,
+  PencilIcon,
+  Trash2Icon,
+  UsersIcon,
+  VideoIcon,
+  XIcon,
+} from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { useRouter } from 'next/navigation';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
@@ -153,11 +161,51 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
         'HH:mm',
       )}`;
 
+  // Helpers to extract guest/attendee info safely
+  const guestEmails = (() => {
+    if (!event?.guests) return [] as string[];
+    if (Array.isArray(event.guests)) {
+      return event.guests
+        .map((g) =>
+          typeof g === 'string' ? g : g && typeof g === 'object' ? (g as any).email : String(g),
+        )
+        .filter(Boolean) as string[];
+    }
+    return [] as string[];
+  })();
+
+  const attendeeList = event.attendees ?? [];
+  const guestCount = (attendeeList && attendeeList.length) || guestEmails.length || 0;
+
+  // Notification description helper
+  const notificationDesc = (() => {
+    const n = event.notifications && event.notifications.length ? event.notifications[0] : null;
+    if (!n) return null;
+    // If it's 1 day before, show 'The day before at 5pm' style
+    if (n.unit === 'days' && n.amount === 1) {
+      try {
+        const start = parseISO(event.start);
+        return `The day before at ${format(start, 'h:mma').toLowerCase()}`;
+      } catch {
+        return '1 day before';
+      }
+    }
+    return `${n.amount} ${n.unit} before`;
+  })();
+
+  // Organizer: prefer first attendee with a name, else show calendarId if present
+  const organizerName =
+    attendeeList.find((a) => a.name)?.name ??
+    attendeeList[0]?.email ??
+    // TODO: email of owner
+    event.calendarId ??
+    undefined;
+
   return (
     <div className="fixed inset-0 z-[60]">
       <div
         ref={popoverRef}
-        className="fixed w-[320px] rounded-3xl border border-gray-200 bg-white shadow-xl"
+        className="fixed w-[320px] rounded-3xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
         style={{ left: position.left, top: position.top }}
         role="dialog"
         aria-modal="true"
@@ -196,22 +244,60 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             <XIcon size={16} />
           </button>
         </div>
-        <div className="items-start justify-between gap-3 border-b border-gray-100 px-4 py-2">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-gray-900">{event.title}</div>
-            <div className="mt-0.5 text-xs text-gray-500">{formattedDate}</div>
+        <div className="items-start justify-between gap-3 px-4 py-2">
+          <div className="flex min-w-0 items-start gap-3">
+            <div
+              className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm"
+              style={{ background: event.color ?? 'var(--gcal-blue)' }}
+            />
+            <div>
+              <div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {event.title}
+              </div>
+              <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-300">{formattedDate}</div>
+            </div>
           </div>
-          {/* If a meeting URL exists, expose a Join button even when not editing */}
+
           {!editing && event.meetingUrl && (
-            <div className="ml-2">
-              <a
-                href={event.meetingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-3xl bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
-              >
-                Join meeting
-              </a>
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <VideoIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <a
+                  href={event.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-green-600 px-3 py-2 text-xs font-semibold text-white"
+                >
+                  Join meeting
+                </a>
+              </div>
+            </div>
+          )}
+
+          {guestCount > 0 && (
+            <div className="flex min-w-0 items-start gap-3">
+              <UsersIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{guestCount} guests</span>
+              </div>
+            </div>
+          )}
+
+          {notificationDesc && (
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <BellIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{notificationDesc}</span>
+              </div>
+            </div>
+          )}
+
+          {organizerName && (
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <CalendarIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{organizerName}</span>
+              </div>
             </div>
           )}
         </div>
@@ -256,7 +342,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
                     href={event.meetingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded-3xl bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                    className="gcal-btn bg-green-600 px-3 py-2 text-sm"
                   >
                     Join meeting
                   </a>

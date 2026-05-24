@@ -32,8 +32,3 @@
   --gcal-bg-hover: #2a2b2f;
   --gcal-bg-app: #1f1f1f;
 }
-
-html, body {
-  background-color: var(--gcal-bg-app);
-  color: var(--gcal-text);
-}

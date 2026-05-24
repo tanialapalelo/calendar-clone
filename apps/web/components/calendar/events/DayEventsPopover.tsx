@@ -97,7 +97,7 @@ export function DayEventsPopover({
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[250px] rounded-3xl bg-white shadow-xl dark:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300"
+        className="fixed w-[250px] text-gray-900 dark:text-gray-300"
         style={{ left: position.left, top: position.top }}
         role="dialog"
         aria-modal="true"
@@ -107,10 +107,7 @@ export function DayEventsPopover({
             <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-gray-400">
               <span className="uppercase">{format(date, 'EEE')}</span>
               <span
-                className={[
-                  'px-3 py-1.5 font-bold',
-                  isSameDay(today, date) ? 'rounded-full bg-[#0B57D0] text-white' : '',
-                ].join(' ')}
+                className={`px-3 py-1.5 font-bold ${isSameDay(today, date) ? 'rounded-full bg-[var(--gcal-blue)] text-white' : ''}`}
               >
                 {format(date, 'd')}
               </span>
@@ -140,7 +137,7 @@ export function DayEventsPopover({
                 const rv = resolveRsvpVisuals(ev);
                 const { background, borderLeft, titleClass } = rv;
                 const containerClass = isBar
-                  ? `${leftCap} ${rightCap} ${rv.textColorClass}`
+                  ? `${leftCap} ${rightCap} ${rv.textColorClass} gcal-pill`
                   : 'rounded-md hover:bg-gray-100 text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700';
                 const openId = ev.id;
 
@@ -163,7 +160,7 @@ export function DayEventsPopover({
                           <>
                             <span
                               className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{ background: ev.color ?? '#039BE5' }}
+                              style={{ background: ev.color ?? 'var(--gcal-blue)' }}
                             />
                             <span>{format(evStart, 'hh:mm a')}</span>
                           </>

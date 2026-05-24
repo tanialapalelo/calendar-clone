@@ -23,13 +23,10 @@ type CalendarEvent = {
   originalStartAt?: string | null;
   isRecurringInstance?: boolean;
   attendees?: { email: string; name?: string | null; rsvp: string; permissions?: unknown }[];
-  // RSVP for the current user (mapped from API attendees when present)
   userRsvp?: string;
-  // Meeting-related optional fields added for meeting feature (Jitsi MVP)
   meetingUrl?: string;
   meetingProvider?: string;
   meetingData?: unknown;
-  // Transient client-side flag to request a meeting be created on create/update
   addMeeting?: boolean;
   color: string;
 };
