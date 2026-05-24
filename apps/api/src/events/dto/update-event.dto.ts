@@ -98,4 +98,9 @@ export class UpdateEventDto {
 
   @IsOptional()
   meetingData?: Record<string, unknown>;
+
+  // allow forcing regeneration of meeting URL (transient client-side flag)
+  @IsOptional()
+  @IsBoolean()
+  regenerateMeeting?: boolean;
 }

@@ -5,7 +5,9 @@ import {
   apiEventToCalendarEvent,
   createEvent,
   deleteEvent,
+  type GuestInput,
   listEvents,
+  normalizeGuestsToStrings,
   normalizeRuleOnly,
   type RecurrenceScope,
   updateEvent,
@@ -70,6 +72,31 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     void refresh();
   }, [refresh]);
 
+  // Helper: coerce various runtime shapes into the GuestInput[] expected by
+  // the API helpers. Accepts arrays of strings, objects with `email`, or
+  // returns undefined when nothing sensible can be derived.
+  const coerceToGuestInputArray = (g: unknown): GuestInput[] | undefined => {
+    if (!g) return undefined;
+    if (!Array.isArray(g)) return undefined;
+    const out: GuestInput[] = [];
+    for (const it of g) {
+      if (typeof it === 'string') {
+        out.push(it);
+        continue;
+      }
+      if (it && typeof it === 'object') {
+        const obj = it as Record<string, unknown>;
+        if (typeof obj.email === 'string') {
+          const permissions = Array.isArray(obj.permissions)
+            ? (obj.permissions as unknown[]).map(String)
+            : undefined;
+          out.push({ email: String(obj.email), permissions });
+        }
+      }
+    }
+    return out.length ? out : undefined;
+  };
+
   const addEvent = useCallback(
     async (evt: CalendarEvent) => {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -78,7 +105,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           title: evt.title,
           startAt: evt.start,
           endAt: evt.end,
-          allDay: !!evt.allDay,
+          allDay: evt.allDay,
           startDate: evt.allDay ? evt.start.slice(0, 10) : undefined,
           endDate: evt.allDay ? evt.end.slice(0, 10) : undefined,
           description: evt.description,
@@ -88,16 +115,16 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
           timeZone: tz,
           recurrenceTimeZone: tz,
-          // allow guests to be either string[] or { email, permissions[] }[]; pass through
-          guests: evt.guests as any,
+          // allow guests to be either string[] or { email, permissions[] }[]; pass through normalized to string[]
+          guests: normalizeGuestsToStrings(coerceToGuestInputArray(evt.guests)) ?? undefined,
           notifications: evt.notifications,
           visibility: evt.visibility,
           busyStatus: evt.busyStatus,
           // Meeting-related fields (allow frontend to request generation or supply a URL)
-          addMeeting: (evt as any).addMeeting ?? undefined,
-          meetingProvider: (evt as any).meetingProvider ?? undefined,
-          meetingUrl: (evt as any).meetingUrl ?? undefined,
-          meetingData: (evt as any).meetingData ?? undefined,
+          addMeeting: evt.addMeeting ?? undefined,
+          meetingProvider: evt.meetingProvider ?? undefined,
+          meetingUrl: evt.meetingUrl ?? undefined,
+          meetingData: evt.meetingData ?? undefined,
         });
         await refresh();
       } catch (err) {
@@ -125,7 +152,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             title: next.title,
             startAt: next.start,
             endAt: next.end,
-            allDay: !!next.allDay,
+            allDay: next.allDay,
             startDate: next.allDay ? next.start.slice(0, 10) : undefined,
             endDate: next.allDay ? next.end.slice(0, 10) : undefined,
             description: next.description ?? '',
@@ -133,15 +160,15 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             color: next.color,
             recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
             // allow guests with permissions (frontend passes objects) or plain strings
-            guests: next.guests as any,
+            guests: normalizeGuestsToStrings(coerceToGuestInputArray(next.guests)) ?? undefined,
             notifications: next.notifications,
             visibility: next.visibility,
             busyStatus: next.busyStatus,
             // propagate meeting flags if present
-            addMeeting: (next as any).addMeeting ?? undefined,
-            meetingProvider: (next as any).meetingProvider ?? undefined,
-            meetingUrl: (next as any).meetingUrl ?? undefined,
-            meetingData: (next as any).meetingData ?? undefined,
+            addMeeting: next.addMeeting ?? undefined,
+            meetingProvider: next.meetingProvider ?? undefined,
+            meetingUrl: next.meetingUrl ?? undefined,
+            meetingData: next.meetingData ?? undefined,
           },
           scope,
         );

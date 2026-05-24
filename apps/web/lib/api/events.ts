@@ -18,7 +18,8 @@ export type ApiEvent = {
   color: string | null;
   recurrenceRule: string | null;
   recurrenceTimeZone: string | null;
-  guests: string[] | null;
+  // guests may be a plain list of emails OR an object holding invitation metadata
+  guests: string[] | Record<string, unknown> | null;
   attendees?: { email: string; name?: string | null; rsvp: string; permissions?: unknown }[] | null;
   notifications: NotificationItem[] | null;
   visibility: 'public' | 'private' | 'default' | null;
@@ -58,6 +59,13 @@ export function apiEventToCalendarEvent(ev: ApiEvent, currentUserEmail?: string)
   // Determine RSVP for the current user (if present in attendees)
   const userAtt = (ev.attendees ?? []).find((a) => a.email === currentUserEmail);
   const userRsvp = userAtt ? userAtt.rsvp : undefined;
+  // If guests is an object with lighterColor metadata, prefer that for color
+  const guestsMeta =
+    ev.guests && typeof ev.guests === 'object' && !Array.isArray(ev.guests)
+      ? (ev.guests as Record<string, unknown>)
+      : undefined;
+  const lighterColor = guestsMeta?.lighterColor as string | undefined | null;
+
   return {
     id: ev.id,
     calendarId: ev.calendarId,
@@ -72,7 +80,7 @@ export function apiEventToCalendarEvent(ev: ApiEvent, currentUserEmail?: string)
     recurrence: ev.recurrenceRule ?? null,
     // If the backend stored invitation metadata (recipient copy), prefer
     // the lighterColor provided there so the recipient sees a softer background.
-    color: (ev as any).guests?.lighterColor ?? ev.color ?? '#0B57D0',
+    color: lighterColor ?? ev.color ?? '#0B57D0',
     recurringEventId: ev.recurringEventId ?? undefined,
     originalStartAt: ev.originalStartAt ?? undefined,
     isRecurringInstance: ev.isRecurringInstance,

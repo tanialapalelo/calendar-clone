@@ -2,10 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Event } from '@prisma/client';
 import nodemailer from 'nodemailer';
 
+// Minimal interface we rely on from nodemailer to avoid importing noisy types
+interface SmtpTransporter {
+  sendMail(options: Record<string, unknown>): Promise<unknown>;
+  verify?(): Promise<void>;
+}
+
 @Injectable()
 export class MailerService {
   private readonly logger = new Logger(MailerService.name);
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: SmtpTransporter | null = null;
 
   constructor() {
     // Configure transporter lazily when first used. Respect env vars for prod SMTP.
@@ -30,56 +36,82 @@ export class MailerService {
       const tlsRejectUnauthorized =
         process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
 
-      const baseOpts: nodemailer.TransportOptions = {
+      const baseOpts: Record<string, unknown> = {
         host,
         port,
         secure,
         tls: { rejectUnauthorized: tlsRejectUnauthorized },
-      } as any;
+      };
 
-      const opts: nodemailer.TransportOptions = user
+      const opts: Record<string, unknown> = user
         ? { ...baseOpts, auth: { user, pass }, ...(service ? { service } : {}) }
         : { ...baseOpts, ...(service ? { service } : {}) };
 
-      this.transporter = nodemailer.createTransport(opts as any);
+      const createTransport = (
+        nodemailer as unknown as {
+          createTransport: (opts: Record<string, unknown>) => unknown;
+        }
+      ).createTransport;
+      this.transporter = createTransport(opts) as SmtpTransporter;
       // Verify transporter to surface connection problems early in dev/CI.
       // If verification fails we fall back to logging behavior below.
-      this.transporter
-        .verify()
-        .then(() => {
-          this.logger.debug(
-            `SMTP transporter configured (${host}:${port}, secure=${secure})`,
-          );
-        })
-        .catch((err) => {
-          const errMsg = String(err ?? '');
-          // Helpful guidance for common Gmail authentication errors
-          if (
-            errMsg.includes('535') ||
-            /BadCredentials|Invalid login/i.test(errMsg)
-          ) {
-            this.logger.warn(
-              `SMTP transporter verify failed (${host}:${port}); falling back to logger - authentication error detected. If you're using Gmail please:
+      if (this.transporter?.verify) {
+        // Call verify() and attach handlers; constructor cannot be async so use promise callbacks.
+        this.transporter
+          .verify()
+          .then(() => {
+            this.logger.debug(
+              `SMTP transporter configured (${host}:${port}, secure=${secure})`,
+            );
+          })
+          .catch((err: unknown) => {
+            const errMsg =
+              err instanceof Error
+                ? err.message
+                : typeof err === 'string'
+                  ? err
+                  : JSON.stringify(err);
+            // Helpful guidance for common Gmail authentication errors
+            if (
+              errMsg.includes('535') ||
+              /BadCredentials|Invalid login/i.test(errMsg)
+            ) {
+              this.logger.warn(
+                `SMTP transporter verify failed (${host}:${port}); falling back to logger - authentication error detected. If you're using Gmail please:
 - enable 2-Step Verification on the Google account
 - generate an App Password and set MAIL_PASS to that 16-char password
 - or use port 587 with STARTTLS if 465 is blocked
 See: https://support.google.com/mail/?p=BadCredentials and https://support.google.com/accounts/answer/185833`,
-            );
-          } else if (/self signed certificate|certificate/i.test(errMsg)) {
-            this.logger.warn(
-              `SMTP transporter verify failed (${host}:${port}); TLS/certificate issue: ${errMsg}. You can temporarily set MAIL_TLS_REJECT_UNAUTHORIZED=0 for dev, but do not use that in production.`,
-            );
-          } else {
-            this.logger.warn(
-              `SMTP transporter verify failed (${host}:${port}); falling back to logger`,
-              errMsg,
-            );
-          }
-          this.transporter = null;
-        });
-    } catch (err) {
+              );
+            } else if (/self signed certificate|certificate/i.test(errMsg)) {
+              this.logger.warn(
+                `SMTP transporter verify failed (${host}:${port}); TLS/certificate issue: ${errMsg}. You can temporarily set MAIL_TLS_REJECT_UNAUTHORIZED=0 for dev, but do not use that in production.`,
+              );
+            } else {
+              this.logger.warn(
+                `SMTP transporter verify failed (${host}:${port}); falling back to logger`,
+                errMsg,
+              );
+            }
+            this.transporter = null;
+          });
+      } else {
+        this.logger.debug(
+          `SMTP transporter configured (${host}:${port}, secure=${secure})`,
+        );
+      }
+    } catch (err: unknown) {
       // Leave transporter null; sendInvitation will fallback to logging.
-      this.logger.debug('Failed to create transporter, will log mails instead');
+      const errMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : JSON.stringify(err);
+      this.logger.debug(
+        'Failed to create transporter, will log mails instead',
+        errMsg,
+      );
       this.transporter = null;
     }
   }
@@ -155,8 +187,13 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
             token,
           });
         return true;
-      } catch (err) {
-        const errMsg = String(err ?? '');
+      } catch (err: unknown) {
+        const errMsg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : JSON.stringify(err);
         this.logger.warn('Mailer send failed, falling back to logger', errMsg);
       }
     }
@@ -166,7 +203,7 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
       process.env.POSTMARK_API_TOKEN ?? process.env.POSTMARK_SERVER_TOKEN;
     if (postmarkToken) {
       try {
-        const body: any = {
+        const body: Record<string, unknown> = {
           From: process.env.MAIL_FROM ?? 'no-reply@example.com',
           To: toEmail,
           Subject: subject,
@@ -174,7 +211,7 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
           TextBody: text,
         };
         if (ics) {
-          body.Attachments = [
+          body['Attachments'] = [
             {
               Name: 'invite.ics',
               Content: Buffer.from(ics).toString('base64'),
@@ -208,8 +245,14 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
             token,
           });
         return true;
-      } catch (err) {
-        this.logger.warn('Postmark send failed', String(err));
+      } catch (err: unknown) {
+        const errMsg =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : JSON.stringify(err);
+        this.logger.warn('Postmark send failed', errMsg);
         // fallthrough to logging
       }
     }

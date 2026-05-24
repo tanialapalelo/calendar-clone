@@ -18,7 +18,13 @@ export default function NewEventClient() {
     if (!Array.isArray(x)) return false;
     return x.every((it) => {
       if (typeof it === 'string') return true;
-      if (it && typeof it === 'object' && typeof (it as any).email === 'string') return true;
+      if (
+        it &&
+        typeof it === 'object' &&
+        'email' in it &&
+        typeof (it as { email?: unknown }).email === 'string'
+      )
+        return true;
       return false;
     });
   }
@@ -48,10 +54,10 @@ export default function NewEventClient() {
         visibility: evt.visibility,
         busyStatus: evt.busyStatus,
         // Meeting-related fields: forward flags so backend can generate or persist meeting URL
-        addMeeting: (evt as any).addMeeting ?? undefined,
-        meetingProvider: (evt as any).meetingProvider ?? undefined,
-        meetingUrl: (evt as any).meetingUrl ?? undefined,
-        meetingData: (evt as any).meetingData ?? undefined,
+        addMeeting: evt.addMeeting ?? undefined,
+        meetingProvider: evt.meetingProvider ?? undefined,
+        meetingUrl: evt.meetingUrl ?? undefined,
+        meetingData: evt.meetingData ?? undefined,
       });
 
       // Success — go back to the calendar

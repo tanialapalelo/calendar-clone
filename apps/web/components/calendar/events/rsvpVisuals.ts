@@ -23,14 +23,18 @@ function toRgba(input: string | undefined, alpha = 0.16) {
   return `rgba(3,155,229,${alpha})`;
 }
 
-function extractLighterColorFromGuests(guests: any): string | undefined {
+function extractLighterColorFromGuests(guests: unknown): string | undefined {
   if (!guests) return undefined;
-  if (typeof guests === 'object' && !Array.isArray(guests) && (guests as any).lighterColor) {
-    return (guests as any).lighterColor;
+  if (typeof guests === 'object' && !Array.isArray(guests)) {
+    const obj = guests as Record<string, unknown>;
+    if (typeof obj.lighterColor === 'string') return obj.lighterColor;
   }
   if (Array.isArray(guests)) {
     for (const g of guests) {
-      if (g && typeof g === 'object' && g.lighterColor) return g.lighterColor;
+      if (g && typeof g === 'object') {
+        const gg = g as Record<string, unknown>;
+        if (typeof gg.lighterColor === 'string') return gg.lighterColor;
+      }
     }
   }
   return undefined;
@@ -51,14 +55,22 @@ export type RsvpVisuals = {
  * Resolve RSVP visuals for an event-like object. Accepts objects shaped like
  * CalendarEvent or ApiEvent. Returns background, border and text classes.
  */
-export function resolveRsvpVisuals(ev: any): RsvpVisuals {
-  const attendee = ev?.attendees?.find((a: any) => !!a.email);
-  const rsvp = (ev as any).userRsvp ?? attendee?.rsvp;
+export function resolveRsvpVisuals(ev: unknown): RsvpVisuals {
+  const evt = ev as
+    | {
+        attendees?: Array<{ email?: string; rsvp?: string }>;
+        userRsvp?: string;
+        color?: string;
+        guests?: unknown;
+      }
+    | undefined;
+  const attendee = evt?.attendees?.find((a) => !!a.email);
+  const rsvp = evt?.userRsvp ?? attendee?.rsvp;
   const isDeclined = rsvp === 'declined';
   const isTentative = rsvp === 'tentative';
 
-  const guestLighter = extractLighterColorFromGuests(ev?.guests);
-  const baseColor = (guestLighter ?? ev?.color ?? '#039BE5') as string;
+  const guestLighter = extractLighterColorFromGuests(evt?.guests);
+  const baseColor = (guestLighter ?? evt?.color ?? '#039BE5') as string;
   const stripe = toRgba(baseColor, 0.16);
   // Tentative: denser diagonal stripes; declined -> transparent
   const background = isDeclined

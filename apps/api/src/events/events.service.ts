@@ -483,9 +483,7 @@ export class EventsService {
     // a meeting for this occurrence (or supplied meeting fields) persist them
     // in the exception row so the occurrence materializes with meeting info.
     const wantsMeetingForException =
-      !!(dto as any).addMeeting ||
-      dto.meetingProvider === 'jitsi' ||
-      !!dto.meetingUrl;
+      !!dto.addMeeting || dto.meetingProvider === 'jitsi' || !!dto.meetingUrl;
     if (wantsMeetingForException) {
       if (dto.meetingUrl) {
         Object.assign(exceptionData, {
@@ -525,7 +523,9 @@ export class EventsService {
   }
 
   private async updateFollowing(
-    existing: any,
+    existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }> & {
+      calendar?: { ownerId?: string | null } | null;
+    },
     inst: { masterId: string; originalStartAt: Date },
     dto: UpdateEventDto,
   ) {
@@ -672,12 +672,14 @@ export class EventsService {
 
     // Possibly generate meeting for the newly created following instance
     try {
-      await this._maybeGenerateAndPersistMeeting(
-        existing.calendar.ownerId,
-        created.id,
-        dto,
-      );
-    } catch (err) {
+      // existing.calendar may be undefined in some code paths; re-fetch ownerId to be safe
+      const calRow = await this.prisma.calendar.findUnique({
+        where: { id: existing.calendarId },
+        select: { ownerId: true },
+      });
+      const ownerId = calRow?.ownerId ?? '';
+      await this._maybeGenerateAndPersistMeeting(ownerId, created.id, dto);
+    } catch (err: unknown) {
       console.error('Failed to generate meeting for following instance', err);
     }
 
@@ -882,7 +884,7 @@ export class EventsService {
 
     // Idempotent: if meetingUrl already exists and DTO didn't explicitly provide a meetingUrl or request regeneration, do nothing
     const explicitUrlProvided = !!dto.meetingUrl;
-    const requestedRegenerate = (dto as any).regenerateMeeting === true;
+    const requestedRegenerate = dto.regenerateMeeting === true;
     if (ev.meetingUrl && !explicitUrlProvided && !requestedRegenerate) return;
 
     // If client provided a meetingUrl, persist it directly
@@ -1110,11 +1112,11 @@ export class EventsService {
           event: { connect: { id: eventId } },
           email,
           rsvp: 'needsAction',
-          permissions: permissions as Prisma.InputJsonValue | undefined,
+          permissions: permissions,
         } as Prisma.EventAttendeeCreateInput;
         const updateData: Prisma.EventAttendeeUpdateInput = {
           rsvp: 'needsAction',
-          permissions: permissions as Prisma.InputJsonValue | undefined,
+          permissions: permissions,
         } as Prisma.EventAttendeeUpdateInput;
         await this.prisma.eventAttendee.upsert({
           where: { eventId_email: { eventId, email } },
@@ -1133,7 +1135,7 @@ export class EventsService {
         // Organizer: prefer calendar owner email, fall back to MAIL_FROM env
         let organizerEmail =
           ev.calendar?.owner?.email ?? process.env.MAIL_FROM ?? undefined;
-        let organizerCN = ev.calendar?.owner?.name ?? undefined;
+        const organizerCN = ev.calendar?.owner?.name ?? undefined;
         if (organizerEmail && organizerEmail.includes('<')) {
           const m = organizerEmail.match(/<([^>]+)>/);
           if (m) organizerEmail = m[1];
@@ -1230,11 +1232,17 @@ export class EventsService {
               // the web client can detect recipient copies.
               const lighter = this.computeLighterColor(ev.color ?? undefined);
               // We'll store an object in guests to indicate invitation metadata
-              const invitationMeta = {
+              type InvitationMeta = {
+                invitedEmail?: string;
+                permissions?: Prisma.InputJsonValue | undefined;
+                lighterColor?: string | null;
+                rsvp?: string | undefined;
+              };
+              const invitationMeta: InvitationMeta = {
                 invitedEmail: email,
                 permissions,
                 lighterColor: lighter,
-              } as any;
+              };
               const createdCopy = await this.prisma.event.create({
                 data: {
                   calendarId: cal.id,
@@ -1429,16 +1437,20 @@ export class EventsService {
 
         for (const c of copies) {
           try {
-            const existing = c.guests as any;
+            const existingRaw = c.guests as unknown;
             const lighter = this.computeLighterColor(
               masterEv.color ?? undefined,
             );
-            const base =
-              existing && typeof existing === 'object' ? { ...existing } : {};
-            if (!base.lighterColor && lighter) base.lighterColor = lighter;
-            base.rsvp = rsvp;
-            base.invitedEmail = base.invitedEmail ?? inv.email;
-            const nextMeta = base;
+            const base: Record<string, unknown> =
+              existingRaw && typeof existingRaw === 'object'
+                ? { ...(existingRaw as Record<string, unknown>) }
+                : {};
+            if (!('lighterColor' in base) && lighter)
+              base['lighterColor'] = lighter;
+            base['rsvp'] = rsvp;
+            base['invitedEmail'] =
+              (base['invitedEmail'] as string | undefined) ?? inv.email;
+            const nextMeta: Record<string, unknown> = base;
             await this.prisma.event.update({
               where: { id: c.id },
               data: { guests: nextMeta as Prisma.InputJsonValue },
@@ -1502,10 +1514,15 @@ export class EventsService {
             });
             if (!exists) {
               const lighter = this.computeLighterColor(ev.color ?? undefined);
-              const invitationMeta = {
+              type InvitationMeta2 = {
+                invitedEmail?: string;
+                lighterColor?: string | null;
+                rsvp?: string | undefined;
+              };
+              const invitationMeta: InvitationMeta2 = {
                 invitedEmail: inv.email,
                 lighterColor: lighter,
-              } as any;
+              };
               const created = await this.prisma.event.create({
                 data: {
                   calendarId: cal.id,

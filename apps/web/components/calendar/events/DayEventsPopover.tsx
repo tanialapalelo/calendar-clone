@@ -138,7 +138,7 @@ export function DayEventsPopover({
                 const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
 
                 const rv = resolveRsvpVisuals(ev);
-                const { background, borderLeft, titleClass, textColorClass } = rv;
+                const { background, borderLeft, titleClass } = rv;
                 const containerClass = isBar
                   ? `${leftCap} ${rightCap} ${rv.textColorClass}`
                   : 'rounded-md hover:bg-gray-100 text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700';

@@ -126,12 +126,7 @@ export function MonthView(props: {
 
                           // RSVP visuals for visible timed events in month cells
                           const rv = resolveRsvpVisuals(ev);
-                          const {
-                            background: bgStyle,
-                            borderLeft,
-                            titleClass,
-                            textColorClass,
-                          } = rv;
+                          const { background: bgStyle, titleClass, textColorClass } = rv;
 
                           return (
                             <div

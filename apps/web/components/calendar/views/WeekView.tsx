@@ -158,10 +158,13 @@ export function WeekView(props: {
                 >
                   {dayAllDay.map((ev) => {
                     // RSVP + color resolution for all-day pills
-                    const attendee = (ev as any).attendees?.find((a: any) => !!a.email);
-                    const rsvp = (ev as any).userRsvp ?? attendee?.rsvp;
+                    const evTyped = ev as {
+                      attendees?: Array<{ email?: string; rsvp?: string }>;
+                      userRsvp?: string;
+                    };
+                    const attendee = evTyped.attendees?.find((a) => !!a.email);
+                    const rsvp = evTyped.userRsvp ?? attendee?.rsvp;
                     const isDeclined = rsvp === 'declined';
-                    const isTentative = rsvp === 'tentative';
                     const rv = resolveRsvpVisuals(ev);
                     const { background: bg, borderLeft } = rv;
 
@@ -258,10 +261,6 @@ export function WeekView(props: {
 
                       // RSVP visual state and invitation lighter color
                       // Prefer userRsvp mapping, fall back to attendee.rsvp
-                      const attendee = (p.event as any).attendees?.find((a: any) => !!a.email);
-                      const rsvp = (p.event as any).userRsvp ?? attendee?.rsvp;
-                      const isDeclined = rsvp === 'declined';
-                      const isTentative = rsvp === 'tentative';
                       const rv = resolveRsvpVisuals(p.event);
                       const { background: bg, borderLeft } = rv;
 

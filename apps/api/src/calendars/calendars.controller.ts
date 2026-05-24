@@ -31,12 +31,16 @@ export class CalendarsController {
       // (possible with stale auth cookie), surface a safe empty list instead of
       // throwing an internal/top-level error we display to users.
       await this.calendars.ensureDefaultCalendar(userId);
-    } catch (err) {
+    } catch (err: unknown) {
       // If the user truly doesn't exist return an empty list so the UI can handle
       // unauthenticated state gracefully. Re-throw other unexpected errors.
       // (NotFoundException uses message 'User not found')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((err as any)?.message === 'User not found') {
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'message' in err &&
+        (err as { message?: unknown }).message === 'User not found'
+      ) {
         return [];
       }
       throw err;

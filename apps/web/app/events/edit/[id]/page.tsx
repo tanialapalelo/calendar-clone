@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
 import { EventPageShell } from '@/components/calendar/events/EventPageShell';
-import type { RecurrenceScope } from '@/lib/api/events';
+import type { GuestInput, RecurrenceScope } from '@/lib/api/events';
 import {
   apiEventToCalendarEvent,
   deleteEvent,
@@ -93,15 +93,15 @@ export default function EditEventPage() {
           location: updated.location ?? '',
           color: updated.color ?? null,
           recurrenceRule: normalizeRuleOnly(updated.recurrence ?? null),
-          guests: normalizeGuestsToStrings(updated.guests as any) ?? [],
+          guests: normalizeGuestsToStrings(updated.guests as unknown as Array<GuestInput>) ?? [],
           notifications: updated.notifications ?? [],
           visibility: updated.visibility ?? 'default',
           busyStatus: updated.busyStatus ?? 'busy',
           // Meeting-related fields - allow edit page to request generation or provide explicit URL
-          addMeeting: (updated as any).addMeeting ?? undefined,
-          meetingProvider: (updated as any).meetingProvider ?? undefined,
-          meetingUrl: (updated as any).meetingUrl ?? undefined,
-          meetingData: (updated as any).meetingData ?? undefined,
+          addMeeting: updated.addMeeting ?? undefined,
+          meetingProvider: updated.meetingProvider ?? undefined,
+          meetingUrl: updated.meetingUrl ?? undefined,
+          meetingData: updated.meetingData ?? undefined,
         },
         scope,
       );

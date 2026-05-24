@@ -31,20 +31,23 @@ type GuestEntry = string | { email: string; permissions?: string[] };
 function normalizeGuests(
   guests: GuestEntry[] | undefined,
   guestPermissions: string[],
-): Array<string> | Array<{ email: string; permissions?: string[] }> | undefined {
+): Array<string | { email: string; permissions?: string[] }> | undefined {
   if (!guests || guests.length === 0) return undefined;
-  return guests.map((g) => {
-    if (typeof g === 'string') {
-      return guestPermissions.length ? { email: g, permissions: guestPermissions } : g;
-    }
-    return guestPermissions.length
-      ? { email: g.email, permissions: g.permissions ?? guestPermissions }
-      : g.email;
-  }) as any;
-}
-
-function isGuestObject(g: GuestEntry): g is { email: string; permissions?: string[] } {
-  return typeof g !== 'string' && (g as any).email !== undefined;
+  return guests
+    .map((g) => {
+      if (typeof g === 'string') {
+        return guestPermissions.length ? { email: g, permissions: guestPermissions } : g;
+      }
+      return guestPermissions.length
+        ? { email: g.email, permissions: g.permissions ?? guestPermissions }
+        : g.email;
+    })
+    .filter((v): v is string | { email: string; permissions?: string[] } => {
+      return (
+        typeof v === 'string' ||
+        (v && typeof v === 'object' && typeof (v as { email?: unknown }).email === 'string')
+      );
+    });
 }
 
 type Props = {
@@ -118,7 +121,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       id: crypto.randomUUID(),
       title,
       allDay,
-      guests: mappedGuests as any,
+      guests: mappedGuests,
       // compact form: we only have a plain location string and a minimal set of fields
       location: location || undefined,
       notifications: undefined,
@@ -154,7 +157,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     }
 
     // transient flag to request meeting generation
-    (payload as any).addMeeting = addMeeting || undefined;
+    payload.addMeeting = addMeeting || undefined;
 
     onCreate(payload);
   };
