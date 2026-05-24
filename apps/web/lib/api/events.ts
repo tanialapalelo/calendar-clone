@@ -23,6 +23,10 @@ export type ApiEvent = {
   notifications: NotificationItem[] | null;
   visibility: 'public' | 'private' | 'default' | null;
   busyStatus: 'free' | 'busy' | null;
+  // meeting fields (optional)
+  meetingProvider?: string | null;
+  meetingUrl?: string | null;
+  meetingData?: unknown;
   recurringEventId: string | null;
   originalStartAt: string | null;
   isRecurringInstance: boolean;
@@ -75,6 +79,9 @@ export function apiEventToCalendarEvent(ev: ApiEvent, currentUserEmail?: string)
     guests: ev.guests ?? ev.attendees?.map((a) => a.email) ?? undefined,
     attendees: ev.attendees ?? undefined,
     userRsvp,
+    // expose meetingUrl to the calendar UI so the popover/full editor can show a Join action
+    // (CalendarEvent keeps a compact shape; components that need meetingUrl will access it via this property)
+    meetingUrl: ev.meetingUrl ?? undefined,
     // Note: attendees remain available on the raw ApiEvent when needed via
     // the fetch response; CalendarEvent keeps the compact shape used by the
     // calendar UI components.
@@ -139,6 +146,11 @@ export function createEvent(input: {
   notifications?: NotificationItem[];
   visibility?: 'public' | 'private' | 'default';
   busyStatus?: 'free' | 'busy';
+  // request a meeting to be generated (MVP: Jitsi)
+  addMeeting?: boolean;
+  meetingProvider?: string;
+  meetingUrl?: string;
+  meetingData?: unknown;
 }) {
   return apiFetch<ApiEvent>('/v1/events', {
     method: 'POST',
@@ -165,6 +177,10 @@ export function updateEvent(
     notifications: NotificationItem[];
     visibility: 'public' | 'private' | 'default';
     busyStatus: 'free' | 'busy';
+    addMeeting?: boolean;
+    meetingProvider?: string;
+    meetingUrl?: string;
+    meetingData?: unknown;
   }>,
   scope?: RecurrenceScope,
 ) {

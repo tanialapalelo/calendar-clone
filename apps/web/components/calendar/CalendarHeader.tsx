@@ -3,17 +3,17 @@
 import { addDays, format, startOfWeek } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   MenuIcon,
   SearchIcon,
-  ChevronDownIcon,
 } from 'lucide-react';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { SettingsMenu } from '@/components/ui/SettingsMenu';
 import { apiFetch } from '@/lib/api/client';
-import { apiEventToCalendarEvent, type ApiEvent } from '@/lib/api/events';
+import { type ApiEvent, apiEventToCalendarEvent } from '@/lib/api/events';
 import { DatePickerPopover } from '@/components/calendar/DatePickerPopover';
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -35,13 +35,13 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
   const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
-  if (!debouncedQuery.trim()) return;
+    if (!debouncedQuery.trim()) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching is a legitimate external-system sync; loading flag must reflect the in-flight request
     setLoading(true);
     const qs = new URLSearchParams({ q: debouncedQuery });
     apiFetch<ApiEvent[]>(`/v1/events/search?${qs.toString()}`)
       .then((data) => {
-        setResults(data.map(apiEventToCalendarEvent));
+        setResults(data.map((d) => apiEventToCalendarEvent(d)));
         setOpen(true);
       })
       .catch(() => setResults([]))

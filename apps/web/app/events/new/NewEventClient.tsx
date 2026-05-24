@@ -47,6 +47,11 @@ export default function NewEventClient() {
         notifications: evt.notifications,
         visibility: evt.visibility,
         busyStatus: evt.busyStatus,
+        // Meeting-related fields: forward flags so backend can generate or persist meeting URL
+        addMeeting: (evt as any).addMeeting ?? undefined,
+        meetingProvider: (evt as any).meetingProvider ?? undefined,
+        meetingUrl: (evt as any).meetingUrl ?? undefined,
+        meetingData: (evt as any).meetingData ?? undefined,
       });
 
       // Success — go back to the calendar

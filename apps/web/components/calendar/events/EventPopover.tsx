@@ -201,6 +201,19 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             <div className="truncate text-sm font-semibold text-gray-900">{event.title}</div>
             <div className="mt-0.5 text-xs text-gray-500">{formattedDate}</div>
           </div>
+          {/* If a meeting URL exists, expose a Join button even when not editing */}
+          {!editing && event.meetingUrl && (
+            <div className="ml-2">
+              <a
+                href={event.meetingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-3xl bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700"
+              >
+                Join meeting
+              </a>
+            </div>
+          )}
         </div>
 
         {editing && (
@@ -236,21 +249,35 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                onClick={() => setEditing(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-                onClick={submitEdit}
-              >
-                Save
-              </button>
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="flex items-center gap-2">
+                {event?.meetingUrl && (
+                  <a
+                    href={event.meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-3xl bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                  >
+                    Join meeting
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                  onClick={submitEdit}
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         )}

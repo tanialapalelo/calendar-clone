@@ -24,6 +24,8 @@ import LocationAutocomplete, {
 } from '@/components/calendar/events/LocationAutoComplete';
 import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
 import ColorPicker from '@/components/calendar/events/ColorPicker';
+import { EventForm } from './EventForm';
+import { GuestInput } from '@/lib/api/events';
 
 type GuestEntry = string | { email: string; permissions?: string[] };
 
@@ -94,6 +96,55 @@ export function EventFullscreenForm({
 
       if (!locationText) locationText = event.location ?? '';
 
+      // Normalize guests: if they are objects, send as-is; if strings, convert to objects
+      const normalizedGuests: GuestInput[] = (() => {
+        const apiAny = event as any;
+
+        // Prefer explicit attendees list if present
+        if (Array.isArray(apiAny.attendees) && apiAny.attendees.length > 0) {
+          return apiAny.attendees
+            .map((a: any) =>
+              a && a.email
+                ? {
+                    email: String(a.email),
+                    permissions: Array.isArray(a.permissions)
+                      ? a.permissions.map(String)
+                      : undefined,
+                  }
+                : undefined,
+            )
+            .filter(Boolean) as GuestInput[];
+        }
+
+        // If guests is an array, normalize each item
+        if (Array.isArray(apiAny.guests) && apiAny.guests.length > 0) {
+          return apiAny.guests.map((g: any) =>
+            typeof g === 'string'
+              ? g
+              : g && g.email
+                ? { email: g.email, permissions: g.permissions }
+                : String(g),
+          );
+        }
+
+        // If guests is an object (invitation meta), try to extract invitedEmail
+        if (apiAny.guests && typeof apiAny.guests === 'object' && !Array.isArray(apiAny.guests)) {
+          const meta = apiAny.guests as { invitedEmail?: string; permissions?: any };
+          if (meta.invitedEmail) {
+            return [
+              {
+                email: String(meta.invitedEmail),
+                permissions: Array.isArray(meta.permissions)
+                  ? meta.permissions.map(String)
+                  : undefined,
+              },
+            ];
+          }
+        }
+
+        return [] as GuestInput[];
+      })();
+
       return {
         title: event.title ?? '',
         start: event.allDay ? (allDayStart ?? fallbackStart) : fallbackStart,
@@ -101,7 +152,7 @@ export function EventFullscreenForm({
         allDay: event.allDay,
         showTime: !event.allDay,
         // guests may be strings or objects
-        guests: (event.guests ?? []) as GuestEntry[],
+        guests: normalizedGuests,
         guestInput: '',
         guestError: null as string | null,
         location: locationText,
@@ -112,6 +163,11 @@ export function EventFullscreenForm({
         visibility: event.visibility ?? 'default',
         recurrence: { rrule: event.recurrence ?? null } as RecurrenceValue,
         color: event.color ?? '#0B57D0',
+        // If the event already has a meeting URL, default the "addMeeting" flag
+        addMeeting: !!(event as any)?.meetingUrl,
+        // expose existing meeting provider/url when editing
+        meetingProvider: (event as any)?.meetingProvider ?? undefined,
+        meetingUrl: (event as any)?.meetingUrl ?? '',
       };
     }
 
@@ -137,6 +193,9 @@ export function EventFullscreenForm({
       visibility: 'default' as 'default' | 'public' | 'private',
       recurrence: { rrule: null } as RecurrenceValue,
       color: '#0B57D0',
+      addMeeting: false,
+      meetingProvider: undefined,
+      meetingUrl: '',
     };
   }, [event, initialDate]);
 
@@ -144,8 +203,16 @@ export function EventFullscreenForm({
   const [start, setStart] = useState(initialValues.start);
   const [end, setEnd] = useState(initialValues.end);
   const [allDay, setAllDay] = useState(initialValues.allDay);
+  // initialize addMeeting from the computed initialValues (handles edit case with meetingUrl)
+  const [addMeeting, setAddMeeting] = useState<boolean>(!!initialValues.addMeeting);
 
-  const [guests, setGuests] = useState<GuestEntry[]>(initialValues.guests);
+  // meeting details (provider / explicit URL)
+  const [meetingProvider, setMeetingProvider] = useState<string | undefined>(
+    (initialValues as any).meetingProvider ?? undefined,
+  );
+  const [meetingUrl, setMeetingUrl] = useState<string>((initialValues as any).meetingUrl ?? '');
+
+  const [guests, setGuests] = useState<GuestEntry[]>(initialValues.guests as GuestEntry[]);
   const [guestInput, setGuestInput] = useState(initialValues.guestInput);
   const [guestError, setGuestError] = useState<string | null>(initialValues.guestError);
 
@@ -295,6 +362,16 @@ export function EventFullscreenForm({
       payload.end = endObj.toISOString();
     }
 
+    // Include meeting request flag (frontend -> backend)
+    // cast to any so we don't run into strict CalendarEvent typings
+    (payload as any).addMeeting = addMeeting || undefined;
+
+    // Include explicit meeting provider/url if present
+    (payload as any).meetingProvider = meetingProvider ?? undefined;
+    (payload as any).meetingUrl = meetingUrl || undefined;
+    // Preserve any existing meetingData when editing (readonly)
+    (payload as any).meetingData = (event as any)?.meetingData ?? undefined;
+
     if (event) onSave?.({ ...payload, id: event.id });
     else onCreate?.(payload);
   };
@@ -306,6 +383,9 @@ export function EventFullscreenForm({
       return undefined;
     }
   })();
+
+  // Lightweight alias for the raw API-backed event shape when present
+  const apiAny = event as any;
 
   return (
     // ─── STEP 1: Root layout — flex column, full screen ───────────────────────
@@ -342,6 +422,18 @@ export function EventFullscreenForm({
         >
           Save
         </button>
+
+        {/* If the event already has a meeting URL, show a Join button in the header for quick access */}
+        {event && (apiAny as any)?.meetingUrl && (
+          <a
+            href={(apiAny as any).meetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+          >
+            Join meeting
+          </a>
+        )}
 
         {event && (
           <button
@@ -589,6 +681,53 @@ export function EventFullscreenForm({
                     <CalendarIcon size={20} className="text-gray-500" />
                   </div>
                   <ColorPicker value={color} onChange={setColor} />
+                </div>
+
+                {/* Meeting option */}
+                <div className="flex items-center gap-4 px-2 py-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={addMeeting}
+                      onChange={(e) => setAddMeeting(e.target.checked)}
+                      className="h-4 w-4 rounded accent-[#0B57D0]"
+                    />
+                    <span className="text-sm text-gray-700">Add meeting (Jitsi)</span>
+                  </label>
+
+                  {/* Provider + URL fields when addMeeting is enabled */}
+                  {addMeeting && (
+                    <div className="ml-4 flex items-center gap-2">
+                      <select
+                        value={meetingProvider ?? 'jitsi'}
+                        onChange={(e) => setMeetingProvider(e.target.value)}
+                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      >
+                        <option value="jitsi">Jitsi (generate)</option>
+                        <option value="custom">Custom URL</option>
+                      </select>
+
+                      <input
+                        type="url"
+                        placeholder="Optional meeting URL"
+                        value={meetingUrl}
+                        onChange={(e) => setMeetingUrl(e.target.value)}
+                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                      />
+                    </div>
+                  )}
+
+                  {/* Also show join link in details if present */}
+                  {(apiAny as any)?.meetingUrl && (
+                    <a
+                      href={(apiAny as any).meetingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 rounded-3xl bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                    >
+                      Join meeting
+                    </a>
+                  )}
                 </div>
 
                 {/* ── STEP 7: Description with toolbar hint ─────────────────────────── */}

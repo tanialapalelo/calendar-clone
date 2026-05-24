@@ -7,7 +7,7 @@ import {
 import { addDays, addMilliseconds } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { Prisma } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 
 import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -278,6 +278,14 @@ export class EventsService {
       select: EVENT_SELECT,
     });
 
+    // If client requested a meeting (or supplied meetingProvider 'jitsi'), generate a Jitsi URL and persist it.
+    try {
+      await this._maybeGenerateAndPersistMeeting(userId, created.id, dto);
+    } catch (meetErr) {
+      // Non-fatal; log and continue returning created event. Frontend can refresh to see meeting.
+      console.error('Failed to generate meeting for event', meetErr);
+    }
+
     // If the creator supplied a list of guests at event creation, ensure
     // attendees + invitations are created. Do not fail the event creation
     // if invitation sending fails (non-fatal). This re-uses createInvitations
@@ -297,7 +305,12 @@ export class EventsService {
       }
     }
 
-    return created;
+    // Re-fetch the event with meeting fields included and return
+    const refreshed = await this.prisma.event.findUnique({
+      where: { id: created.id },
+      select: EVENT_SELECT,
+    });
+    return refreshed;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -466,6 +479,32 @@ export class EventsService {
       });
     }
 
+    // Meeting support for single-occurrence exceptions: if client requested
+    // a meeting for this occurrence (or supplied meeting fields) persist them
+    // in the exception row so the occurrence materializes with meeting info.
+    const wantsMeetingForException =
+      !!(dto as any).addMeeting ||
+      dto.meetingProvider === 'jitsi' ||
+      !!dto.meetingUrl;
+    if (wantsMeetingForException) {
+      if (dto.meetingUrl) {
+        Object.assign(exceptionData, {
+          meetingProvider: dto.meetingProvider ?? 'jitsi',
+          meetingUrl: dto.meetingUrl,
+          meetingData: dto.meetingData as Prisma.InputJsonValue | undefined,
+        });
+      } else {
+        // Generate a Jitsi room for the exception occurrence
+        const room = `event-${randomUUID()}`;
+        const url = `https://meet.jit.si/${room}`;
+        Object.assign(exceptionData, {
+          meetingProvider: 'jitsi',
+          meetingUrl: url,
+          meetingData: { room } as Prisma.InputJsonValue,
+        });
+      }
+    }
+
     await this.prisma.eventRecurrenceException.upsert({
       where: {
         eventId_originalStartAt: {
@@ -486,7 +525,7 @@ export class EventsService {
   }
 
   private async updateFollowing(
-    existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>,
+    existing: any,
     inst: { masterId: string; originalStartAt: Date },
     dto: UpdateEventDto,
   ) {
@@ -631,7 +670,23 @@ export class EventsService {
       select: EVENT_SELECT,
     });
 
-    return created;
+    // Possibly generate meeting for the newly created following instance
+    try {
+      await this._maybeGenerateAndPersistMeeting(
+        existing.calendar.ownerId,
+        created.id,
+        dto,
+      );
+    } catch (err) {
+      console.error('Failed to generate meeting for following instance', err);
+    }
+
+    // Re-fetch to include any meeting fields that may have been persisted
+    const refreshed = await this.prisma.event.findUnique({
+      where: { id: created.id },
+      select: EVENT_SELECT,
+    });
+    return refreshed ?? created;
   }
 
   private updateAll(
@@ -729,7 +784,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tz)
       : nextEndAtInput;
 
-    return this.prisma.event.update({
+    const updatePromise = this.prisma.event.update({
       where: { id: existing.id },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
@@ -763,7 +818,105 @@ export class EventsService {
       },
       select: EVENT_SELECT,
     });
+
+    // After update completes, possibly generate meeting if requested. We return the updated event promise but also chain meeting generation side-effect.
+    return (async () => {
+      const updated = await updatePromise;
+      try {
+        // existing.calendar.ownerId isn't available here; re-fetch owner for permission checks
+        const cal = await this.prisma.calendar.findUnique({
+          where: { id: existing.calendarId },
+          select: { ownerId: true },
+        });
+        await this._maybeGenerateAndPersistMeeting(
+          cal?.ownerId ?? '',
+          updated.id,
+          dto,
+        );
+      } catch (err) {
+        console.error('Failed to generate meeting for updated event', err);
+      }
+
+      // Re-fetch updated event so any meeting fields are included in the response
+      const refreshed = await this.prisma.event.findUnique({
+        where: { id: updated.id },
+        select: EVENT_SELECT,
+      });
+      return refreshed ?? updated;
+    })();
   }
+
+  // Helper: generate a Jitsi meeting URL and persist to the event if requested by DTO
+  private async _maybeGenerateAndPersistMeeting(
+    userId: string,
+    eventId: string,
+    dto: CreateEventDto | UpdateEventDto,
+  ) {
+    // Determine whether the client requested meeting creation or supplied a provider
+    const wantsMeeting =
+      !!dto.addMeeting || dto.meetingProvider === 'jitsi' || !!dto.meetingUrl;
+    if (!wantsMeeting) return;
+
+    // Fetch event with minimal fields to check existing meetingUrl and calendar owner
+    const ev = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        meetingUrl: true,
+        calendar: { select: { ownerId: true } },
+      },
+    });
+    if (!ev) throw new NotFoundException('Event not found');
+
+    // Enforce that only owner or attendees can create/regenerate meetings for private events
+    // (Callers of this helper should have already enforced owner for create; here we defensively check)
+    const calOwnerId = ev.calendar?.ownerId ?? null;
+    if (calOwnerId && userId !== calOwnerId) {
+      // Check if user is an attendee with permission to modify
+      const attendee = await this.prisma.eventAttendee.findUnique({
+        where: { eventId_email: { eventId, email: userId } },
+        select: { id: true },
+      });
+      if (!attendee) throw new ForbiddenException('Forbidden');
+    }
+
+    // Idempotent: if meetingUrl already exists and DTO didn't explicitly provide a meetingUrl or request regeneration, do nothing
+    const explicitUrlProvided = !!dto.meetingUrl;
+    const requestedRegenerate = (dto as any).regenerateMeeting === true;
+    if (ev.meetingUrl && !explicitUrlProvided && !requestedRegenerate) return;
+
+    // If client provided a meetingUrl, persist it directly
+    if (explicitUrlProvided) {
+      await this.prisma.event.update({
+        where: { id: eventId },
+        data: {
+          meetingProvider: dto.meetingProvider ?? 'jitsi',
+          meetingUrl: dto.meetingUrl,
+          meetingData: dto.meetingData as Prisma.InputJsonValue | undefined,
+        },
+      });
+      return;
+    }
+
+    // Generate a Jitsi room and URL: use event-{uuid}
+    const room = `event-${randomUUID()}`;
+    const url = `https://meet.jit.si/${room}`;
+
+    const meetingData = { room };
+
+    await this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        meetingProvider: 'jitsi',
+        meetingUrl: url,
+        meetingData: meetingData as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // DELETE
+  // ─────────────────────────────────────────────────────────────────────
 
   async deleteForUser(
     userId: string,
@@ -920,6 +1073,10 @@ export class EventsService {
         color: true,
         visibility: true,
         busyStatus: true,
+        // include meeting fields so invitation copies can carry the join link
+        meetingProvider: true,
+        meetingUrl: true,
+        meetingData: true,
       },
     });
     if (!ev) throw new NotFoundException('Event not found');
@@ -1094,6 +1251,10 @@ export class EventsService {
                   color: ev.color ?? undefined,
                   visibility: ev.visibility ?? undefined,
                   busyStatus: ev.busyStatus ?? undefined,
+                  // copy meeting fields so recipient copies also expose the join link
+                  meetingProvider: ev.meetingProvider ?? undefined,
+                  meetingUrl: ev.meetingUrl ?? undefined,
+                  meetingData: ev.meetingData ?? undefined,
                   // store invitation metadata so UI can show lighter bg/stripe
                   guests: invitationMeta as Prisma.InputJsonValue,
                 },
@@ -1317,6 +1478,10 @@ export class EventsService {
             color: true,
             visibility: true,
             busyStatus: true,
+            // include meeting fields so accepted recipients receive the join link on their copy
+            meetingProvider: true,
+            meetingUrl: true,
+            meetingData: true,
           },
         });
         if (ev) {
@@ -1356,6 +1521,10 @@ export class EventsService {
                   color: ev.color ?? undefined,
                   visibility: ev.visibility ?? undefined,
                   busyStatus: ev.busyStatus ?? undefined,
+                  // copy meeting fields so accepted recipients also see the join link
+                  meetingProvider: ev.meetingProvider ?? undefined,
+                  meetingUrl: ev.meetingUrl ?? undefined,
+                  meetingData: ev.meetingData ?? undefined,
                   // store invitation metadata so UI can show lighter bg/stripe
                   guests: invitationMeta as Prisma.InputJsonValue,
                 },

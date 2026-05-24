@@ -26,6 +26,27 @@ function ensureDateTimeInputValueFrom(value: string, preferHour = 9) {
   }
 }
 
+type GuestEntry = string | { email: string; permissions?: string[] };
+
+function normalizeGuests(
+  guests: GuestEntry[] | undefined,
+  guestPermissions: string[],
+): Array<string> | Array<{ email: string; permissions?: string[] }> | undefined {
+  if (!guests || guests.length === 0) return undefined;
+  return guests.map((g) => {
+    if (typeof g === 'string') {
+      return guestPermissions.length ? { email: g, permissions: guestPermissions } : g;
+    }
+    return guestPermissions.length
+      ? { email: g.email, permissions: g.permissions ?? guestPermissions }
+      : g.email;
+  }) as any;
+}
+
+function isGuestObject(g: GuestEntry): g is { email: string; permissions?: string[] } {
+  return typeof g !== 'string' && (g as any).email !== undefined;
+}
+
 type Props = {
   initialDate: Date;
   calendars?: ApiCalendar[];
@@ -47,10 +68,14 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
   const [allDay, setAllDay] = useState(true);
   const [calendarId, setCalendarId] = useState<string>(calendars?.[0]?.id ?? '');
 
-  const [guests, setGuests] = useState<string[]>([]);
+  const [guests, setGuests] = useState<GuestEntry[]>([]);
   const [guestInput, setGuestInput] = useState('');
   const [guestError, setGuestError] = useState<string | null>(null);
   const [location, setLocation] = useState('');
+  const [addMeeting, setAddMeeting] = useState(false);
+
+  // Local submit validation error
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Guest permissions (per-guest set applies to all added guests in this compact form)
   const permissionOptions = [
@@ -69,36 +94,69 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     return re.test(email.trim());
   }
 
-  const submit = () => {
-    let startDate: Date;
-    let endDate: Date;
-    if (allDay) {
-      startDate = startOfDayLocal(new Date(start));
-      endDate = addDays(startOfDayLocal(new Date(end)), 1);
-    } else {
-      startDate = new Date(start);
-      endDate = new Date(end);
+  const validateBeforeSubmit = () => {
+    // For timed events ensure end > start
+    if (!allDay) {
+      const s = new Date(start).getTime();
+      const e = new Date(end).getTime();
+      if (Number.isNaN(s) || Number.isNaN(e) || e <= s) {
+        setSubmitError('End must be after start');
+        return false;
+      }
     }
+    setSubmitError(null);
+    return true;
+  };
 
-    // Build guests payload: either string[] or { email, permissions[] }[]
-    const guestsPayload = guests.length
-      ? guestPermissions.length
-        ? guests.map((email) => ({ email, permissions: guestPermissions }))
-        : guests
-      : undefined;
+  const submit = () => {
+    if (!validateBeforeSubmit()) return;
 
-    onCreate({
+    // Normalize guests to the API-friendly shape (string or {email, permissions})
+    const mappedGuests = normalizeGuests(guests, guestPermissions);
+
+    const payload: CalendarEvent = {
       id: crypto.randomUUID(),
       title,
-      start: startDate.toISOString(),
-      end: endDate.toISOString(),
       allDay,
-      calendarId: calendarId || undefined,
-      guests: guestsPayload,
+      guests: mappedGuests as any,
+      // compact form: we only have a plain location string and a minimal set of fields
       location: location || undefined,
+      notifications: undefined,
+      recurrence: null,
+      description: undefined,
+      busyStatus: 'busy',
+      visibility: 'default',
       color: '#0B57D0',
-    });
-    onClose();
+      start: '',
+      end: '',
+      recurringEventId: undefined,
+      originalStartAt: undefined,
+      isRecurringInstance: false,
+    };
+
+    if (allDay) {
+      const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
+      const startDateObj = parseISO(`${startDateStr}T00:00:00`);
+      const endDateObj = addDays(startDateObj, 1);
+
+      const endDateStr = format(endDateObj, 'yyyy-MM-dd'); // exclusive endDate
+
+      payload.startDate = startDateStr;
+      payload.endDate = endDateStr;
+
+      payload.start = startDateObj.toISOString();
+      payload.end = endDateObj.toISOString();
+    } else {
+      const startObj = new Date(start);
+      const endObj = new Date(end);
+      payload.start = startObj.toISOString();
+      payload.end = endObj.toISOString();
+    }
+
+    // transient flag to request meeting generation
+    (payload as any).addMeeting = addMeeting || undefined;
+
+    onCreate(payload);
   };
 
   const addGuest = () => {
@@ -152,6 +210,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
   return (
     <div className="space-y-3 px-4 py-4 dark:text-[var(--gcal-text),e8eaed]">
+      {submitError && <p className="text-sm text-red-600">{submitError}</p>}
       <div>
         <input
           className="w-full rounded border px-3 py-2 text-sm"
@@ -229,12 +288,12 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
         {guests.length > 0 && (
           <div className="space-y-1">
-            {guests.map((g, i) => (
+            {guests.map((g: GuestEntry, i: number) => (
               <div
-                key={`${g}-${i}`}
+                key={`${typeof g === 'string' ? g : g.email}-${i}`}
                 className="flex items-center justify-between gap-2 px-1 py-1 hover:bg-gray-100"
               >
-                <span className="text-sm text-gray-700">{g}</span>
+                <span className="text-sm text-gray-700">{typeof g === 'string' ? g : g.email}</span>
                 <button
                   type="button"
                   className="rounded-full px-2 py-1 text-sm hover:bg-gray-200"
@@ -301,6 +360,16 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       )}
 
       {/* Actions */}
+      <div className="flex items-center gap-3 px-4 py-2">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={addMeeting}
+            onChange={(e) => setAddMeeting(e.target.checked)}
+          />
+          <span className="text-sm text-gray-700">Add meeting (Jitsi)</span>
+        </label>
+      </div>
       <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">
         <button
           type="button"

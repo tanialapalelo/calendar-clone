@@ -93,6 +93,11 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           notifications: evt.notifications,
           visibility: evt.visibility,
           busyStatus: evt.busyStatus,
+          // Meeting-related fields (allow frontend to request generation or supply a URL)
+          addMeeting: (evt as any).addMeeting ?? undefined,
+          meetingProvider: (evt as any).meetingProvider ?? undefined,
+          meetingUrl: (evt as any).meetingUrl ?? undefined,
+          meetingData: (evt as any).meetingData ?? undefined,
         });
         await refresh();
       } catch (err) {
@@ -132,6 +137,11 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             notifications: next.notifications,
             visibility: next.visibility,
             busyStatus: next.busyStatus,
+            // propagate meeting flags if present
+            addMeeting: (next as any).addMeeting ?? undefined,
+            meetingProvider: (next as any).meetingProvider ?? undefined,
+            meetingUrl: (next as any).meetingUrl ?? undefined,
+            meetingData: (next as any).meetingData ?? undefined,
           },
           scope,
         );

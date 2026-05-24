@@ -1,11 +1,11 @@
 import {
+  IsArray,
   IsBoolean,
   IsISO8601,
   IsOptional,
   IsString,
   Matches,
   MinLength,
-  IsArray,
 } from 'class-validator';
 
 export class UpdateEventDto {
@@ -82,4 +82,20 @@ export class UpdateEventDto {
   @IsOptional()
   @IsString()
   busyStatus?: string;
+
+  // Meeting-related
+  @IsOptional()
+  @IsBoolean()
+  addMeeting?: boolean; // request to create meeting on save
+
+  @IsOptional()
+  @IsString()
+  meetingProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  meetingUrl?: string;
+
+  @IsOptional()
+  meetingData?: Record<string, unknown>;
 }

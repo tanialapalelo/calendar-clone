@@ -61,6 +61,11 @@ model Event {
   visibility    String?
   busyStatus    String?
 
+  // meeting support (Jitsi MVP)
+  meetingProvider String?  // e.g. 'jitsi'
+  meetingUrl      String?
+  meetingData     Json?
+
   // recurrence exceptions (per-occurrence overrides/cancellations)
   recurrenceExceptions EventRecurrenceException[]
   attendees            EventAttendee[]
@@ -128,6 +133,12 @@ model EventRecurrenceException {
   notifications    Json?
   visibility       String?
   busyStatus       String?
+
+  // meeting override support
+  meetingProvider  String?
+  meetingUrl       String?
+  meetingData      Json?
+
   updatedAt        DateTime  @updatedAt
   createdAt        DateTime  @default(now())
 

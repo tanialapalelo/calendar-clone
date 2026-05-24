@@ -4,16 +4,17 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
 import { EventPageShell } from '@/components/calendar/events/EventPageShell';
+import type { RecurrenceScope } from '@/lib/api/events';
 import {
   apiEventToCalendarEvent,
   deleteEvent,
   getEvent,
+  normalizeGuestsToStrings,
   normalizeRuleOnly,
   updateEvent,
 } from '@/lib/api/events';
 import { ApiError } from '@/lib/api/client';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
-import type { RecurrenceScope } from '@/lib/api/events';
 
 function getInstanceId(event: CalendarEvent): string | null {
   if (event.id.includes('@')) return event.id;
@@ -92,10 +93,15 @@ export default function EditEventPage() {
           location: updated.location ?? '',
           color: updated.color ?? null,
           recurrenceRule: normalizeRuleOnly(updated.recurrence ?? null),
-          guests: updated.guests ?? [],
+          guests: normalizeGuestsToStrings(updated.guests as any) ?? [],
           notifications: updated.notifications ?? [],
           visibility: updated.visibility ?? 'default',
           busyStatus: updated.busyStatus ?? 'busy',
+          // Meeting-related fields - allow edit page to request generation or provide explicit URL
+          addMeeting: (updated as any).addMeeting ?? undefined,
+          meetingProvider: (updated as any).meetingProvider ?? undefined,
+          meetingUrl: (updated as any).meetingUrl ?? undefined,
+          meetingData: (updated as any).meetingData ?? undefined,
         },
         scope,
       );

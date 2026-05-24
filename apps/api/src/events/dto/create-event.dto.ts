@@ -95,4 +95,20 @@ export class CreateEventDto {
   @IsOptional()
   @IsString()
   busyStatus?: string;
+
+  // Meeting-related (MVP: Jitsi)
+  @IsOptional()
+  @IsBoolean()
+  addMeeting?: boolean; // if true, backend will generate a Jitsi URL on save
+
+  @IsOptional()
+  @IsString()
+  meetingProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  meetingUrl?: string; // optional client-supplied URL (backend will accept but may generate)
+
+  @IsOptional()
+  meetingData?: Record<string, unknown>;
 }
