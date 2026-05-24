@@ -221,11 +221,10 @@ export function EventFullscreenForm({
 
   // meeting details (provider / explicit URL)
   const [meetingProvider, setMeetingProvider] = useState<string | undefined>(
-    ((initialValues as { meetingProvider?: unknown }).meetingProvider as string | undefined) ??
-      undefined,
+    (initialValues as { meetingProvider?: string | null }).meetingProvider ?? undefined,
   );
   const [meetingUrl, setMeetingUrl] = useState<string>(
-    ((initialValues as { meetingUrl?: unknown }).meetingUrl as string | undefined) ?? '',
+    (initialValues as { meetingUrl?: string | null }).meetingUrl ?? '',
   );
 
   const [guests, setGuests] = useState<GuestEntry[]>(initialValues.guests as GuestEntry[]);
@@ -399,7 +398,9 @@ export function EventFullscreenForm({
   })();
 
   // Lightweight alias for the raw API-backed event shape when present
-  const apiAny = event as { meetingUrl?: unknown } | undefined;
+  const apiAny = event as
+    | { meetingUrl?: string | null; meetingProvider?: string | null }
+    | undefined;
 
   return (
     // ─── STEP 1: Root layout — flex column, full screen ───────────────────────

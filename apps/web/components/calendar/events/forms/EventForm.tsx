@@ -33,21 +33,32 @@ function normalizeGuests(
   guestPermissions: string[],
 ): Array<string | { email: string; permissions?: string[] }> | undefined {
   if (!guests || guests.length === 0) return undefined;
-  return guests
-    .map((g) => {
-      if (typeof g === 'string') {
-        return guestPermissions.length ? { email: g, permissions: guestPermissions } : g;
+  const out: Array<string | { email: string; permissions?: string[] }> = [];
+  for (const g of guests) {
+    if (typeof g === 'string') {
+      if (guestPermissions.length) out.push({ email: g, permissions: guestPermissions });
+      else out.push(g);
+      continue;
+    }
+
+    if (g && typeof g === 'object') {
+      const email = (g as { email?: unknown }).email;
+      if (typeof email !== 'string') continue;
+      if (guestPermissions.length) {
+        out.push({
+          email: String(email),
+          permissions:
+            Array.isArray((g as { permissions?: unknown }).permissions) &&
+            (g as { permissions?: unknown }).permissions !== undefined
+              ? ((g as { permissions?: unknown }).permissions as unknown[]).map(String)
+              : guestPermissions,
+        });
+      } else {
+        out.push(String(email));
       }
-      return guestPermissions.length
-        ? { email: g.email, permissions: g.permissions ?? guestPermissions }
-        : g.email;
-    })
-    .filter((v): v is string | { email: string; permissions?: string[] } => {
-      return (
-        typeof v === 'string' ||
-        (v && typeof v === 'object' && typeof (v as { email?: unknown }).email === 'string')
-      );
-    });
+    }
+  }
+  return out.length ? out : undefined;
 }
 
 type Props = {
