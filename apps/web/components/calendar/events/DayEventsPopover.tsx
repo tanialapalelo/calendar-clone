@@ -97,14 +97,14 @@ export function DayEventsPopover({
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[250px] text-gray-900 dark:text-gray-300"
+        className="fixed w-[250px] rounded-xl bg-[#f8fafd] p-1 text-gray-900 shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-100/5"
         style={{ left: position.left, top: position.top }}
         role="dialog"
         aria-modal="true"
       >
         <div className="max-h-fit overflow-auto px-2 py-2">
           <div className="flex w-full items-center justify-between px-3 pb-2">
-            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-gray-400">
+            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-white">
               <span className="uppercase">{format(date, 'EEE')}</span>
               <span
                 className={`px-3 py-1.5 font-bold ${isSameDay(today, date) ? 'rounded-full bg-[var(--gcal-blue)] text-white' : ''}`}
@@ -112,7 +112,7 @@ export function DayEventsPopover({
                 {format(date, 'd')}
               </span>
             </div>
-            <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-gray-100">
+            <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-gray-700">
               <XIcon size={16} />
             </button>
           </div>
