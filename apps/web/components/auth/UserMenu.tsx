@@ -71,7 +71,7 @@ export function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute top-10 right-0 z-50 w-64 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:bg-gray-700">
+        <div className="absolute top-10 right-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-64 dark:bg-gray-700">
           {/* User info */}
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0B57D0] text-sm font-semibold text-white">

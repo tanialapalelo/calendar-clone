@@ -93,7 +93,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
       </div>
 
       {open && (
-        <div className="absolute top-10 left-0 z-50 w-80 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute top-10 left-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-80 dark:border-gray-700 dark:bg-gray-800">
           {loading && <p className="px-4 py-3 text-sm text-gray-400">Searching…</p>}
           {!loading && results.length === 0 && (
             <p className="px-4 py-3 text-sm text-gray-400">No results found</p>

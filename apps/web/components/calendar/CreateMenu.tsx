@@ -5,8 +5,8 @@ import {
   CheckCircleIcon,
   ChevronDownIcon,
   ClockIcon,
-  PlusIcon,
   type LucideIcon,
+  PlusIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -93,7 +93,8 @@ export function CreateMenu({ onSelect, collapsed = false }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute top-full left-0 z-40 mt-2 w-56 overflow-hidden rounded-xl border border-[var(--gcal-border,#dadce0)] bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+          className="absolute top-full left-0 z-40 mt-2 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-xl border border-[var(--gcal-border,#dadce0)] bg-white py-1 shadow-xl sm:w-56 dark:border-gray-700 dark:bg-gray-800"
+          style={{ left: 0 }}
         >
           {ITEMS.map(({ kind, label, Icon, disabled, disabledHint }) => (
             <button

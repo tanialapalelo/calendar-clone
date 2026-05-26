@@ -336,7 +336,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
                   }}
                   className="h-4 w-4 rounded accent-[#0B57D0]"
                 />
-                <span className="text-sm text-gray-700">{label}</span>
+                <span className="text-sm text-gray-700 dark:text-white">{label}</span>
               </label>
             ))}
           </div>
@@ -381,7 +381,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
             checked={addMeeting}
             onChange={(e) => setAddMeeting(e.target.checked)}
           />
-          <span className="text-sm text-gray-700">Add meeting (Jitsi)</span>
+          <span className="text-sm text-gray-700 dark:text-white">Add meeting (Jitsi)</span>
         </label>
       </div>
       <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">

@@ -570,7 +570,7 @@ export function EventFullscreenForm({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="flex w-2/3 items-center gap-4 px-6 py-3 dark:border-gray-700">
+      <div className="flex w-full items-center gap-4 px-4 py-3 sm:w-2/3 sm:px-6 dark:border-gray-700">
         <button
           type="button"
           onClick={onClose}
@@ -947,7 +947,7 @@ export function EventFullscreenForm({
           {submitError && <p className="text-sm text-red-600">{submitError}</p>}
         </div>
 
-        <div className="w-2/5 shrink-0 px-8 py-32">
+        <div className="w-full shrink-0 px-4 py-6 sm:w-2/5 sm:px-8 sm:py-32">
           <h3 className="mb-3 w-fit border-b-2 border-[#0B57D0] text-sm font-semibold text-[#0B57D0] dark:text-gray-300">
             Guests
           </h3>

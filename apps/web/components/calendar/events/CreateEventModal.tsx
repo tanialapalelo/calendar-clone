@@ -1,6 +1,6 @@
 'use client';
 
-import { XIcon, MenuIcon } from 'lucide-react';
+import { MenuIcon, XIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { EventForm } from '@/components/calendar/events/forms/EventForm';
@@ -104,7 +104,7 @@ export function CreateEventModal({
           <button
             type="button"
             aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--gcal-text-muted,#70757a)] hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300 dark:hover:bg-gray-700"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--gcal-text-muted,#70757a)] hover:bg-gray-300 dark:text-gray-300 dark:hover:bg-gray-700"
             onClick={onClose}
           >
             <XIcon size={16} aria-hidden="true" />

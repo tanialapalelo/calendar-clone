@@ -97,6 +97,16 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
+    // If the viewport is narrow, we won't anchor the popover - we'll show a centered modal-like sheet
+    const smallScreen = vw < 520;
+    if (smallScreen) {
+      return {
+        left: Math.max(8, (vw - Math.min(POPOVER_W, vw - 32)) / 2),
+        top: Math.max(8, vh - 360),
+        smallScreen: true,
+      } as any;
+    }
+
     const preferredLeft = anchorRect.right + GAP;
     const canFitRight = preferredLeft + POPOVER_W <= vw - 8;
 
@@ -104,7 +114,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
     const top = clamp(anchorRect.top, 8, vh - POPOVER_H - 8);
 
-    return { left: Math.max(8, left), top };
+    return { left: Math.max(8, left), top, smallScreen: false } as any;
   }, [anchorRect]);
 
   if (!open || !event || !anchorRect || !position) return null;
@@ -205,8 +215,16 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     <div className="fixed inset-0 z-[60]">
       <div
         ref={popoverRef}
-        className="fixed w-[320px] rounded-3xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
-        style={{ left: position.left, top: position.top }}
+        className={[
+          'fixed rounded-3xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800',
+          // Bottom-sheet style for small screens: full-width with side margin, rounded top, scrollable
+          position.smallScreen
+            ? 'top-auto right-4 bottom-4 left-4 max-h-[70vh] w-auto max-w-[95vw] overflow-auto rounded-t-2xl'
+            : 'w-[320px]',
+        ].join(' ')}
+        style={
+          position.smallScreen ? ({} as any) : ({ left: position.left, top: position.top } as any)
+        }
         role="dialog"
         aria-modal="true"
       >

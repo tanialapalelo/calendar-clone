@@ -97,8 +97,11 @@ export function DayEventsPopover({
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[250px] rounded-xl bg-[#f8fafd] p-1 text-gray-900 shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-100/5"
-        style={{ left: position.left, top: position.top }}
+        className={[
+          'fixed rounded-xl bg-[#f8fafd] p-1 text-gray-900 shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-100/5',
+          'w-[calc(100vw-2rem)] max-w-xs sm:w-[250px]',
+        ].join(' ')}
+        style={{ left: '50%', transform: 'translateX(-50%)', top: position.top }}
         role="dialog"
         aria-modal="true"
       >
