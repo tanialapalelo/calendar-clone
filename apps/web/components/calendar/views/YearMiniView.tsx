@@ -35,7 +35,7 @@ export function YearMiniView(props: {
           const base =
             'mx-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-center text-[var(--gcal-text,#3c4043)]';
           const todayClass = isToday ? 'bg-[#0B57D0] font-bold text-white' : '';
-          const selectedClass = isSelected && !isToday ? 'bg-[#1c6a9c] font-semibold' : '';
+          const selectedClass = isSelected && !isToday ? 'bg-[#c2e7ff] font-semibold' : '';
           const outsideClass = !belongsToMonth ? 'text-gray-300 dark:text-gray-500' : '';
           const hoverClass =
             !isToday && !isSelected ? 'hover:bg-[var(--gcal-bg-hover,#f1f3f4)]' : '';

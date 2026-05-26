@@ -84,4 +84,36 @@ export class AuthService {
 
     return { user, jwt: token };
   }
+
+  /** Create or fetch a seeded demo user and issue a JWT for them.
+   * Only intended for non-production demo deployments. */
+  async createDemoToken() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new UnauthorizedException('Demo login disabled in production');
+    }
+
+    const email = 'demo@calendar-clone.local';
+    const name = 'Demo User';
+
+    const user = await this.prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: { email, name },
+    });
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new Error('Missing JWT_SECRET');
+
+    const token = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        name: user.name ?? undefined,
+      },
+      jwtSecret,
+      { expiresIn: '7d' },
+    );
+
+    return { user, jwt: token };
+  }
 }

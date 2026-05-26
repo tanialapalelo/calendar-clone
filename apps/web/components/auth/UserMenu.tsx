@@ -28,12 +28,20 @@ export function UserMenu() {
 
   if (state.status === 'unauthenticated') {
     return (
-      <a
-        href={`${API_URL}/v1/auth/google/start`}
-        className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
-      >
-        Sign in
-      </a>
+      <div className="flex items-center gap-2">
+        <a
+          href={`${API_URL}/v1/auth/google/start`}
+          className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
+        >
+          Sign in
+        </a>
+        <a
+          href={`${API_URL}/v1/auth/demo`}
+          className="rounded-full bg-[#0B57D0] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#044dc2] sm:text-sm"
+        >
+          Demo
+        </a>
+      </div>
     );
   }
 
