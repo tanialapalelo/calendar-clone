@@ -23,10 +23,13 @@ import {
   statusOptions,
   unitOfTimeOptions,
 } from '@/constants';
-import LocationAutocomplete, { PlaceSuggestion, } from '@/components/calendar/events/LocationAutoComplete';
+import LocationAutocomplete, {
+  PlaceSuggestion,
+} from '@/components/calendar/events/LocationAutoComplete';
 import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
 import ColorPicker from '@/components/calendar/events/ColorPicker';
 import { GuestInput } from '@/lib/api/events';
+import { useCalendarsApi } from '@/lib/calendars/useCalendarsApi';
 
 type GuestEntry = string | { email: string; permissions?: string[] };
 
@@ -158,6 +161,7 @@ export function EventFullscreenForm({
 
       return {
         title: event.title ?? '',
+        calendarId: event.calendarId ?? '',
         start: event.allDay ? (allDayStart ?? fallbackStart) : fallbackStart,
         end: event.allDay ? (allDayEnd ?? fallbackEnd) : fallbackEnd,
         allDay: event.allDay,
@@ -213,11 +217,12 @@ export function EventFullscreenForm({
       meetingUrl: '',
     };
   }, [event, initialDate]);
-
+  const { calendars } = useCalendarsApi();
   const [title, setTitle] = useState(initialValues.title);
   const [start, setStart] = useState(initialValues.start);
   const [end, setEnd] = useState(initialValues.end);
   const [allDay, setAllDay] = useState(initialValues.allDay);
+  const [calendarId, setCalendarId] = useState<string>(initialValues.calendarId ?? '');
   // initialize addMeeting from the computed initialValues (handles edit case with meetingUrl)
   const [addMeeting, setAddMeeting] = useState(initialValues.addMeeting);
 
@@ -288,8 +293,13 @@ export function EventFullscreenForm({
       const q = (cmd: string) => {
         try {
           // Safely access queryCommandState with a typed cast (avoid `any`)
-          const docWithQuery = document as Document & { queryCommandState?: (c: string) => boolean };
-          return Boolean(typeof docWithQuery.queryCommandState === 'function' && docWithQuery.queryCommandState(cmd));
+          const docWithQuery = document as Document & {
+            queryCommandState?: (c: string) => boolean;
+          };
+          return Boolean(
+            typeof docWithQuery.queryCommandState === 'function' &&
+            docWithQuery.queryCommandState(cmd),
+          );
         } catch {
           return false;
         }
@@ -478,6 +488,7 @@ export function EventFullscreenForm({
 
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
+      calendarId: calendarId,
       title,
       allDay,
       // If guestPermissions selected, attach permissions per-guest; otherwise send simple strings
@@ -771,9 +782,6 @@ export function EventFullscreenForm({
                   </div>
                 </div>
 
-                {/* ── STEP 4: Calendar dropdown + Color circle ──────────────────────── */}
-                {/* Before: CalendarIcon + ColorPicker floating alone                   */}
-                {/* After:  "📅 [Calendar name ▼]  [🔵 color circle]"                 */}
                 <div className="flex items-center gap-4 px-2 py-2">
                   <div className="shrink-0">
                     <BriefcaseBusinessIcon size={20} className="text-gray-500" />
@@ -810,11 +818,27 @@ export function EventFullscreenForm({
                 </div>
 
                 {/* Color picker row */}
-                <div className="flex items-center gap-4 px-2 py-1">
-                  <div className="w-5 shrink-0">
+
+                <div className="flex items-center gap-4 px-2 py-2">
+                  <div className="shrink-0">
                     <CalendarIcon size={20} className="text-gray-500" />
                   </div>
-                  <ColorPicker value={color} onChange={setColor} />
+                  <div className="flex flex-1 flex-wrap items-center gap-3">
+                    {calendars && calendars.length > 0 && (
+                      <select
+                        className="rounded border px-2 py-1.5 text-sm"
+                        value={calendarId}
+                        onChange={(e) => setCalendarId(e.target.value)}
+                      >
+                        {calendars.map((cal) => (
+                          <option key={cal.id} value={cal.id}>
+                            {cal.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <ColorPicker value={color} onChange={setColor} />
+                  </div>
                 </div>
 
                 {/* Meeting option */}
@@ -982,8 +1006,8 @@ export function EventFullscreenForm({
             </ul>
           )}
 
-          {/* Guest permissions */}
-          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700">
+          {/* TODO: Guest permissions */}
+          {/* <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-700">
             <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
               Guest permissions
             </p>
@@ -1005,6 +1029,7 @@ export function EventFullscreenForm({
               ))}
             </div>
           </div>
+          */}
         </div>
       </div>
     </div>

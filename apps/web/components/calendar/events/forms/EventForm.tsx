@@ -3,7 +3,7 @@
 import { addDays, addMinutes, format, parseISO } from 'date-fns';
 import { KeyboardEvent, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
-import { MapPinIcon, UsersIcon } from 'lucide-react';
+import { CalendarIcon, MapPinIcon, UsersIcon, VideoIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 import LocationAutocomplete from '@/components/calendar/events/LocationAutoComplete';
@@ -130,6 +130,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
+      calendarId: calendarId,
       title,
       allDay,
       guests: mappedGuests,
@@ -170,6 +171,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     // transient flag to request meeting generation
     payload.addMeeting = addMeeting || undefined;
 
+    console.log(JSON.stringify(payload));
     onCreate(payload);
   };
 
@@ -320,8 +322,8 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
           </div>
         )}
 
-        {/* Guest permissions (compact) */}
-        <div className="mt-2 border-t pt-2">
+        {/* TODO: Guest permissions */}
+        {/* <div className="mt-2 border-t pt-2">
           <div className="mb-2 text-xs text-gray-500">Guest permissions</div>
           <div className="flex gap-3">
             {permissionOptions.map(({ key, label }) => (
@@ -341,10 +343,11 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
             ))}
           </div>
         </div>
+        */}
       </div>
 
       {/* Location */}
-      <div className="flex items-center gap-2 border-t pt-3">
+      <div className="flex items-center gap-2 pt-3">
         <MapPinIcon size={16} />
         <div className="flex-1">
           <LocationAutocomplete
@@ -357,8 +360,8 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
       {/* Calendar selector */}
       {calendars && calendars.length > 1 && (
-        <div className="flex items-center gap-2 border-t pt-3">
-          <span className="text-xs">Calendar</span>
+        <div className="flex items-center gap-2 pt-3">
+          <CalendarIcon size={16} />
           <select
             className="flex-1 rounded border px-2 py-1.5 text-sm"
             value={calendarId}
@@ -374,7 +377,8 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-3 px-4 py-2">
+      <div className="flex items-center gap-2 pt-3">
+        <VideoIcon size={18} />
         <label className="inline-flex items-center gap-2 text-sm">
           <input
             type="checkbox"
@@ -384,6 +388,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
           <span className="text-sm text-gray-700 dark:text-white">Add meeting (Jitsi)</span>
         </label>
       </div>
+
       <div className="flex items-center justify-end gap-2 px-4 py-3 font-semibold">
         <button
           type="button"

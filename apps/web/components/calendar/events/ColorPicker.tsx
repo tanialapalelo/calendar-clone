@@ -115,7 +115,7 @@ export default function ColorPicker({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={toggle}
-        className="inline-flex items-center gap-2 rounded-md bg-gray-100 p-3 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+        className="inline-flex items-center gap-2 rounded-md bg-gray-100 p-2 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
       >
         <span
           aria-hidden
