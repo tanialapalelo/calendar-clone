@@ -15,6 +15,7 @@ import {
 } from '@/lib/api/events';
 import { ApiError } from '@/lib/api/client';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
+import { useToast } from '@/components/ui/Toast';
 
 function getInstanceId(event: CalendarEvent): string | null {
   if (event.id.includes('@')) return event.id;
@@ -35,6 +36,7 @@ export default function EditEventPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
 
   const id = String(params?.id ?? '');
   const occ = searchParams.get('occ');
@@ -105,10 +107,14 @@ export default function EditEventPage() {
         },
         scope,
       );
+      showToast('Event updated', 'success');
       router.push('/');
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) router.replace('/login');
       else console.error('updateEvent failed', err);
+      showToast('Failed to update event', 'error');
+      return false;
     }
   };
 
@@ -128,10 +134,14 @@ export default function EditEventPage() {
 
     try {
       await deleteEvent(String(targetId), scope);
+      showToast('Event deleted', 'success');
       router.push('/');
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) router.replace('/login');
       else console.error('deleteEvent failed', err);
+      showToast('Failed to delete event', 'error');
+      return false;
     }
   };
 

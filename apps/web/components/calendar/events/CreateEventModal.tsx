@@ -18,7 +18,7 @@ type Props = {
   initialKind?: Kind;
   calendars?: ApiCalendar[];
   onClose: () => void;
-  onCreate: (event: CalendarEvent) => void;
+  onCreate: (event: CalendarEvent) => Promise<boolean> | void | boolean;
 };
 
 export function CreateEventModal({
@@ -45,6 +45,24 @@ export function CreateEventModal({
   useModalA11y({ open, onClose, containerRef });
 
   if (!open) return null;
+
+  // Helper to call onCreate and close modal only on success
+  const createAndMaybeClose = async (ev: CalendarEvent) => {
+    try {
+      const res = await onCreate(ev as CalendarEvent);
+      // If parent returns a boolean, close only on truthy success
+      if (res === undefined || res === null) {
+        // Parent didn't return a status — assume it handled closing/toast itself
+        return;
+      }
+      if (typeof res === 'boolean') {
+        if (res) onClose();
+      }
+    } catch (err) {
+      // swallow — parent will show toast
+      return;
+    }
+  };
 
   return (
     <div
@@ -118,7 +136,9 @@ export function CreateEventModal({
             initialDate={initialDate}
             calendars={calendars}
             onClose={onClose}
-            onCreate={onCreate}
+            onCreate={(ev) => {
+              void createAndMaybeClose(ev);
+            }}
           />
         )}
         {mode === 'task' && (
@@ -126,7 +146,9 @@ export function CreateEventModal({
             key={`task-${initialDate.toISOString()}`}
             initialDate={initialDate}
             onClose={onClose}
-            onCreate={onCreate}
+            onCreate={(ev) => {
+              void createAndMaybeClose(ev);
+            }}
           />
         )}
         {mode === 'appointment' && (
@@ -134,7 +156,9 @@ export function CreateEventModal({
             key={`appointment-${initialDate.toISOString()}`}
             initialDate={initialDate}
             onClose={onClose}
-            onCreate={onCreate}
+            onCreate={(ev) => {
+              void createAndMaybeClose(ev);
+            }}
           />
         )}
       </div>

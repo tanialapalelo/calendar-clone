@@ -5,10 +5,12 @@ import { parseISO } from 'date-fns';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
 import { createEvent, GuestInput, normalizeRuleOnly } from '@/lib/api/events';
 import { ApiError } from '@/lib/api/client';
+import { useToast } from '@/components/ui/Toast';
 
 export default function NewEventClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
 
   const dateParam = searchParams?.get('date') ?? undefined;
   const initialDate = dateParam ? parseISO(`${dateParam}T00:00:00`) : new Date();
@@ -61,13 +63,17 @@ export default function NewEventClient() {
       });
 
       // Success — go back to the calendar
+      showToast('Event created', 'success');
       router.push('/');
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         router.replace('/login');
-        return;
+        return false;
       }
       console.error('createEvent failed', err);
+      showToast('Failed to create event', 'error');
+      return false;
     }
   };
 

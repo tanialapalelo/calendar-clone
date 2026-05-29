@@ -80,7 +80,7 @@ export default function CalendarPageClient() {
     setCreateOpen(true);
   };
 
-  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useKeyboardShortcuts({
     onToday: () => navigate({ date: new Date() }),
     onPrev: () => {
@@ -137,8 +137,10 @@ export default function CalendarPageClient() {
     try {
       await addEvent(ev);
       showToast('Event created', 'success');
+      return true;
     } catch {
       showToast('Failed to create event', 'error');
+      return false;
     }
   };
 
@@ -190,9 +192,7 @@ export default function CalendarPageClient() {
         initialKind={createKind}
         calendars={calendars}
         onClose={() => setCreateOpen(false)}
-        onCreate={(ev) => {
-          void handleAddEvent(ev);
-        }}
+        onCreate={handleAddEvent}
       />
 
       <EventPopover
