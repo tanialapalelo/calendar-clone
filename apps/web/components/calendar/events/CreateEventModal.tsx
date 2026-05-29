@@ -58,7 +58,7 @@ export function CreateEventModal({
       if (typeof res === 'boolean') {
         if (res) onClose();
       }
-    } catch (err) {
+    } catch {
       // swallow — parent will show toast
       return;
     }

@@ -23,9 +23,7 @@ import {
   statusOptions,
   unitOfTimeOptions,
 } from '@/constants';
-import LocationAutocomplete, {
-  PlaceSuggestion,
-} from '@/components/calendar/events/LocationAutoComplete';
+import LocationAutocomplete, { PlaceSuggestion, } from '@/components/calendar/events/LocationAutoComplete';
 import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
 import ColorPicker from '@/components/calendar/events/ColorPicker';
 import { GuestInput } from '@/lib/api/events';
@@ -289,8 +287,9 @@ export function EventFullscreenForm({
       // fall back to DOM inspection for lists.
       const q = (cmd: string) => {
         try {
-          // @ts-ignore execCommand/queryCommandState still available in DOM
-          return Boolean(document.queryCommandState && document.queryCommandState(cmd));
+          // Safely access queryCommandState with a typed cast (avoid `any`)
+          const docWithQuery = document as Document & { queryCommandState?: (c: string) => boolean };
+          return Boolean(typeof docWithQuery.queryCommandState === 'function' && docWithQuery.queryCommandState(cmd));
         } catch {
           return false;
         }
@@ -300,23 +299,7 @@ export function EventFullscreenForm({
       setItalicActive(q('italic'));
       setUnderlineActive(q('underline'));
 
-      // List detection: try queryCommandState, otherwise inspect ancestor tags
-      const orderedByCmd = q('insertOrderedList');
-      const bulletByCmd = q('insertUnorderedList');
-
-      let orderedByDom = false;
-      let bulletByDom = false;
-      const sel = window.getSelection();
-      let cur: Node | null = sel?.anchorNode ?? null;
-      const root = descRef.current;
-      while (cur && cur !== root) {
-        if (cur.nodeType === 1) {
-          const tag = (cur as HTMLElement).tagName;
-          if (tag === 'OL') orderedByDom = true;
-          if (tag === 'UL') bulletByDom = true;
-        }
-        cur = cur.parentNode;
-      }
+      // List detection: try queryCommandState if available (no-op here, toolbar doesn't show list state)
     } catch {
       // ignore
     }
@@ -1033,7 +1016,7 @@ export default EventFullscreenForm;
 function exec(command: string, value?: string) {
   try {
     document.execCommand(command, false, value ?? undefined);
-  } catch (err) {
+  } catch {
     // noop
   }
 }

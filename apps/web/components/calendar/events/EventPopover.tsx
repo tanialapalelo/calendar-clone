@@ -1,7 +1,7 @@
 'use client';
 
 import { format, parseISO } from 'date-fns';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BellIcon,
   CalendarIcon,
@@ -104,7 +104,7 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
         left: Math.max(8, (vw - Math.min(POPOVER_W, vw - 32)) / 2),
         top: Math.max(8, vh - 360),
         smallScreen: true,
-      } as any;
+      } as { left: number; top: number; smallScreen: true };
     }
 
     const preferredLeft = anchorRect.right + GAP;
@@ -114,7 +114,11 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
     const top = clamp(anchorRect.top, 8, vh - POPOVER_H - 8);
 
-    return { left: Math.max(8, left), top, smallScreen: false } as any;
+    return { left: Math.max(8, left), top, smallScreen: false } as {
+      left: number;
+      top: number;
+      smallScreen: false;
+    };
   }, [anchorRect]);
 
   if (!open || !event || !anchorRect || !position) return null;
@@ -176,9 +180,12 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     if (!event?.guests) return [] as string[];
     if (Array.isArray(event.guests)) {
       return event.guests
-        .map((g) =>
-          typeof g === 'string' ? g : g && typeof g === 'object' ? (g as any).email : String(g),
-        )
+        .map((g) => {
+          if (typeof g === 'string') return g;
+          if (g && typeof g === 'object' && 'email' in g)
+            return String((g as { email?: unknown }).email);
+          return String(g);
+        })
         .filter(Boolean) as string[];
     }
     return [] as string[];
@@ -223,7 +230,9 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             : 'w-[320px]',
         ].join(' ')}
         style={
-          position.smallScreen ? ({} as any) : ({ left: position.left, top: position.top } as any)
+          position.smallScreen
+            ? ({} as CSSProperties)
+            : ({ left: position.left, top: position.top } as CSSProperties)
         }
         role="dialog"
         aria-modal="true"
