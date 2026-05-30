@@ -36,11 +36,18 @@ export class MailerService {
       const tlsRejectUnauthorized =
         process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
 
+      // Enable detailed nodemailer logging when DEBUG_MAILER=1
+      const debugMode = process.env.DEBUG_MAILER === '1';
+
       const baseOpts: Record<string, unknown> = {
         host,
         port,
         secure,
         tls: { rejectUnauthorized: tlsRejectUnauthorized },
+        // In some environments (e.g. Brevo relay on 587) requireTLS ensures STARTTLS is used
+        ...(secure ? {} : { requireTLS: true }),
+        // nodemailer debug/logging flags (not a security risk; helpful for troubleshooting)
+        ...(debugMode ? { logger: true, debug: true } : {}),
       };
 
       const opts: Record<string, unknown> = user
@@ -54,7 +61,9 @@ export class MailerService {
       ).createTransport;
       this.transporter = createTransport(opts) as SmtpTransporter;
       // Verify transporter to surface connection problems early in dev/CI.
-      // If verification fails we fall back to logging behavior below.
+      // If verification fails we will log a warning but keep the transporter so
+      // sendMail can attempt delivery and surface SMTP errors (helps troubleshooting
+      // with remote relays like Brevo).
       if (this.transporter?.verify) {
         // Call verify() and attach handlers; constructor cannot be async so use promise callbacks.
         this.transporter
@@ -77,11 +86,7 @@ export class MailerService {
               /BadCredentials|Invalid login/i.test(errMsg)
             ) {
               this.logger.warn(
-                `SMTP transporter verify failed (${host}:${port}); falling back to logger - authentication error detected. If you're using Gmail please:
-- enable 2-Step Verification on the Google account
-- generate an App Password and set MAIL_PASS to that 16-char password
-- or use port 587 with STARTTLS if 465 is blocked
-See: https://support.google.com/mail/?p=BadCredentials and https://support.google.com/accounts/answer/185833`,
+                `SMTP transporter verify failed (${host}:${port}); authentication error detected. Will keep transporter and attempt sends; check MAIL_USER / MAIL_PASS and Brevo SMTP credentials.`,
               );
             } else if (/self signed certificate|certificate/i.test(errMsg)) {
               this.logger.warn(
@@ -89,11 +94,13 @@ See: https://support.google.com/mail/?p=BadCredentials and https://support.googl
               );
             } else {
               this.logger.warn(
-                `SMTP transporter verify failed (${host}:${port}); falling back to logger`,
+                `SMTP transporter verify failed (${host}:${port}); keeping transporter and will attempt sends`,
                 errMsg,
               );
             }
-            this.transporter = null;
+            // NOTE: do not drop the transporter here; keep it so sendMail attempts to send
+            // and returns concrete SMTP errors which are more useful when diagnosing
+            // failures with external relays like Brevo.
           });
       } else {
         this.logger.debug(
