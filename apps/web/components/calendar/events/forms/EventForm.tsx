@@ -97,7 +97,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     { key: 'invite', label: 'Invite others', defaultChecked: true },
     { key: 'seeGuests', label: 'See guest list', defaultChecked: true },
   ] as const;
-  const [guestPermissions, setGuestPermissions] = useState<string[]>(() =>
+  const [guestPermissions] = useState<string[]>(() =>
     permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key),
   );
 

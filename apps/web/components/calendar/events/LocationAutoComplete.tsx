@@ -128,8 +128,14 @@ export default function LocationAutocomplete(props: {
             setOpen(true);
           }
         })
-        .catch((err) => {
-          if ((err as any)?.name === 'AbortError') return;
+        .catch((err: unknown) => {
+          if (
+            typeof err === 'object' &&
+            err !== null &&
+            'name' in err &&
+            (err as Record<string, unknown>).name === 'AbortError'
+          )
+            return;
           console.error('Location search error', err);
           setSuggestions([]);
         })
@@ -240,7 +246,6 @@ export default function LocationAutocomplete(props: {
       }
       clearRecentSelectTimeout();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

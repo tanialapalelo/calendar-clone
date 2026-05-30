@@ -1285,6 +1285,8 @@ export class EventsService {
             copyErr,
           );
         }
+        // Record successful result for this email
+        results.push({ email, invitationId: created.id });
       } catch (err: unknown) {
         const msg =
           typeof err === 'string'

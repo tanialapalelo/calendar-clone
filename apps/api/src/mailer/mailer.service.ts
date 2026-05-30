@@ -20,6 +20,33 @@ export class MailerService {
     const user = process.env.MAIL_USER ?? undefined;
     const pass = process.env.MAIL_PASS ?? undefined;
 
+    // In test mode, use an in-memory stub transporter to avoid network I/O and
+    // asynchronous nodemailer logs that can race with Jest's teardown.
+    if (process.env.NODE_ENV === 'test') {
+      this.transporter = {
+        sendMail: async (opts: Record<string, unknown>) => {
+          const to = (opts['to'] as unknown) ?? (opts['to'] as unknown[]);
+          const accepted = Array.isArray(to) ? to : [to];
+          const messageId = `<test-${Date.now()}@test>`;
+          return {
+            accepted,
+            rejected: [],
+            response: '250 OK (test)',
+            envelope: {
+              from:
+                process.env.MAIL_ENVELOPE_FROM ??
+                process.env.MAIL_USER ??
+                String(opts['from'] ?? 'test'),
+              to: accepted,
+            },
+            messageId,
+          };
+        },
+      } as SmtpTransporter;
+      this.logger.debug('Using test stub mail transporter');
+      return;
+    }
+
     try {
       // Determine whether to use a secure connection. Default to true for port 465.
       const secureEnv = process.env.MAIL_SECURE;

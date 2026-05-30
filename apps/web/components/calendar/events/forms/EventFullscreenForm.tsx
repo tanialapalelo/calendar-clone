@@ -249,7 +249,9 @@ export function EventFullscreenForm({
     { key: 'invite', label: 'Invite others', defaultChecked: true },
     { key: 'seeGuests', label: 'See guest list', defaultChecked: true },
   ] as const;
-  const [guestPermissions, setGuestPermissions] = useState<string[]>(() =>
+  // Setter is unused today because the guest-permissions UI is currently TODO.
+  // Only destructure the value to avoid an unused-variable warning from the linter.
+  const [guestPermissions] = useState<string[]>(() =>
     permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key),
   );
 
