@@ -134,8 +134,8 @@ export function DayEventsPopover({
 
                 const isBar = ev.allDay || isCrossDayTimedEventOnCalendar(ev);
 
-                const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
-                const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
+                const leftCap = continuesFromPrev ? 'rounded-l-md ' : 'rounded-l-full';
+                const rightCap = continuesToNext ? ' rounded-r-md' : 'rounded-r-full';
 
                 const rv = resolveRsvpVisuals(ev);
                 const { background, borderLeft, titleClass } = rv;

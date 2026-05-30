@@ -298,24 +298,23 @@ export function WeekView(props: {
                         </div>
                       );
                     })}
+                    {/* Now indicator: only render inside the today's column */}
+                    {isSameDay(day, today) && nowTop >= 0 && nowTop <= gridHeight && (
+                      <div
+                        className="pointer-events-none absolute right-0 left-0 z-10"
+                        style={{ top: nowTop }}
+                      >
+                        <div className="relative">
+                          <div className="absolute top-1/2 -left-[5px] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500" />
+                          <div className="border-t-2 border-red-500" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-
-          {/* Now indicator */}
-          {days.some((d) => isSameDay(d, today)) && (
-            <div
-              className="pointer-events-none absolute right-0 z-10"
-              style={{ left: gutterPx, top: nowTop }}
-            >
-              <div className="relative">
-                <div className="absolute top-1/2 -left-[5px] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500" />
-                <div className="border-t-2 border-red-500" />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

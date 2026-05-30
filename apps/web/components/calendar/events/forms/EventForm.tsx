@@ -1,6 +1,6 @@
 'use client';
 
-import { addMinutes, format, parseISO } from 'date-fns';
+import { addDays, addMinutes, format, parseISO } from 'date-fns';
 import { KeyboardEvent, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { CalendarIcon, MapPinIcon, UsersIcon, VideoIcon } from 'lucide-react';
@@ -72,16 +72,35 @@ type Props = {
 export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) {
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
+
+  // If the passed initial date includes a time component (non-midnight), we
+  // assume the user clicked a specific hour and should default to a timed
+  // event rather than an all-day event.
+  const initialHasTime = useMemo(() => {
+    const h = initialStart.getHours();
+    const m = initialStart.getMinutes();
+    const s = initialStart.getSeconds();
+    const ms = initialStart.getMilliseconds();
+    return h !== 0 || m !== 0 || s !== 0 || ms !== 0;
+  }, [initialStart]);
+
   const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
   // Show the same day for the end input (inclusive display). The payload will
-  // still send an exclusive end (start + 1 day) when creating an all-day event.
+  // still send an exclusive end when creating an all-day event.
   const defaultEnd = useMemo(() => startOfDayLocal(initialEnd), [initialEnd]);
 
+  const initialStartInput = initialHasTime
+    ? toLocalDateTimeInputValue(initialStart)
+    : toLocalDateTimeInputValue(defaultStart);
+  const initialEndInput = initialHasTime
+    ? toLocalDateTimeInputValue(initialEnd)
+    : toLocalDateTimeInputValue(defaultEnd);
+
   const [title, setTitle] = useState('');
-  const [start, setStart] = useState(toLocalDateTimeInputValue(defaultStart));
-  const [end, setEnd] = useState(toLocalDateTimeInputValue(defaultEnd));
-  const [showTime, setShowTime] = useState(false);
-  const [allDay, setAllDay] = useState(true);
+  const [start, setStart] = useState(initialStartInput);
+  const [end, setEnd] = useState(initialEndInput);
+  const [showTime, setShowTime] = useState(initialHasTime);
+  const [allDay, setAllDay] = useState(!initialHasTime);
   const [calendarId, setCalendarId] = useState<string>(calendars?.[0]?.id ?? '');
 
   const [guests, setGuests] = useState<GuestEntry[]>([]);
@@ -93,7 +112,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
   // Local submit validation error
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Guest permissions (per-guest set applies to all added guests in this compact form)
+  // Guest permissions (per-guest set applies to all added guests in the compact form)
   const permissionOptions = [
     { key: 'modify', label: 'Modify event', defaultChecked: false },
     { key: 'invite', label: 'Invite others', defaultChecked: true },
@@ -152,17 +171,22 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
     if (allDay) {
       const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
-      // Build UTC-midnight instants for the date-only strings so toISOString() does
-      // not shift the day due to local timezones. This mirrors the server-side
-      // parseDateOnly(dateStr) behavior (which creates a UTC midnight for the
-      // given Y-M-D), preventing off-by-one-day bugs.
-      const parts = startDateStr.split('-').map((p) => Number(p));
-      const startDateUtc = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
-      const endDateUtc = new Date(startDateUtc.getTime() + 24 * 60 * 60 * 1000);
+      const endDateStrDisplay = end.slice(0, 10); // inclusive display date
 
-      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(
-        endDateUtc.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
+      // Build UTC-midnight instants for the date-only strings so toISOString() does
+      // not shift the day due to local timezones. Convert the inclusive display
+      // end date into an exclusive end (end + 1 day) to match server expectations.
+      const startParts = startDateStr.split('-').map((p) => Number(p));
+      const endParts = endDateStrDisplay.split('-').map((p) => Number(p));
+      const startDateUtc = new Date(
+        Date.UTC(startParts[0], startParts[1] - 1, startParts[2], 0, 0, 0, 0),
+      );
+      const endDateUtc = addDays(
+        new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2], 0, 0, 0, 0)),
+        1,
+      );
+
+      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(endDateUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
 
       payload.startDate = startDateStr;
       payload.endDate = endDateStr;

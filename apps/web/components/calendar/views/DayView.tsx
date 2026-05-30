@@ -39,8 +39,9 @@ export function DayView(props: {
   date: Date;
   events: CalendarEvent[];
   onOpenEvent: (id: string, rect: DOMRect) => void;
+  onCreateEvent?: (d: Date) => void;
 }) {
-  const { date, events, onOpenEvent } = props;
+  const { date, events, onOpenEvent, onCreateEvent } = props;
 
   const isMobile = useIsMobile();
   const gutterPx = isMobile ? DAY_VIEW_GUTTER_PX_MOBILE : DAY_VIEW_GUTTER_PX;
@@ -128,6 +129,12 @@ export function DayView(props: {
                 type="button"
                 aria-label={`Create event at ${hourLabel(h) ?? '12 AM'}`}
                 className="cursor-pointer border-b border-[var(--gcal-border,#dadce0)] text-left hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:border-gray-700 dark:hover:bg-gray-800"
+                onClick={() => {
+                  if (!onCreateEvent) return;
+                  const d = new Date(date);
+                  d.setHours(h, 0, 0, 0);
+                  onCreateEvent(d);
+                }}
               />,
             ])}
           </div>

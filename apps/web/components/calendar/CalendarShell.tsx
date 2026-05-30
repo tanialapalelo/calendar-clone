@@ -211,7 +211,12 @@ export function CalendarShell(props: {
             (loading ? (
               <DaySkeleton />
             ) : (
-              <DayView date={date} events={events} onOpenEvent={onOpenEvent} />
+              <DayView
+                date={date}
+                events={events}
+                onOpenEvent={onOpenEvent}
+                onCreateEvent={(d) => onCreateEvent(d)}
+              />
             ))}
         </main>
       </div>

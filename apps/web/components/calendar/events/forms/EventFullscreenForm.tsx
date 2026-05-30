@@ -23,9 +23,7 @@ import {
   statusOptions,
   unitOfTimeOptions,
 } from '@/constants';
-import LocationAutocomplete, {
-  PlaceSuggestion,
-} from '@/components/calendar/events/LocationAutoComplete';
+import LocationAutocomplete, { PlaceSuggestion, } from '@/components/calendar/events/LocationAutoComplete';
 import RecurrencePicker from '@/components/calendar/events/RecurrencePicker';
 import ColorPicker from '@/components/calendar/events/ColorPicker';
 import { GuestInput } from '@/lib/api/events';
@@ -523,17 +521,22 @@ export function EventFullscreenForm({
 
     if (allDay) {
       const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
-      // Build UTC-midnight instants for the date-only strings so toISOString() does
-      // not shift the day due to local timezones. This mirrors the server-side
-      // parseDateOnly(dateStr) behavior which creates a UTC-midnight Date for the
-      // given YYYY-MM-DD string. Avoids off-by-one-day bugs when creating all-day events.
-      const parts = startDateStr.split('-').map((p) => Number(p));
-      const startDateUtc = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
-      const endDateUtc = addDays(startDateUtc, 1);
+      const endDateStrDisplay = end.slice(0, 10); // inclusive display date
 
-      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(
-        endDateUtc.getUTCMonth() + 1,
-      ).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
+      // Build UTC-midnight instants for the date-only strings so toISOString() does
+      // not shift the day due to local timezones. Convert the inclusive display
+      // end date into an exclusive end (end + 1 day) to match server expectations.
+      const startParts = startDateStr.split('-').map((p) => Number(p));
+      const endParts = endDateStrDisplay.split('-').map((p) => Number(p));
+      const startDateUtc = new Date(
+        Date.UTC(startParts[0], startParts[1] - 1, startParts[2], 0, 0, 0, 0),
+      );
+      const endDateUtc = addDays(
+        new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2], 0, 0, 0, 0)),
+        1,
+      );
+
+      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(endDateUtc.getUTCMonth() + 1).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
 
       payload.startDate = startDateStr;
       payload.endDate = endDateStr;

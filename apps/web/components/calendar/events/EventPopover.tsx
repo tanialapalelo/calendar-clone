@@ -12,6 +12,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
+import { useCalendarsApi } from '@/lib/calendars/useCalendarsApi';
 import { useRouter } from 'next/navigation';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
 import type { RecurrenceScope } from '@/lib/api/events';
@@ -36,6 +37,9 @@ function clamp(n: number, min: number, max: number) {
 
 export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDelete }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep hook order stable: call calendars hook unconditionally.
+  const { calendars } = useCalendarsApi();
 
   const initialTitle = event?.title ?? '';
   const initialStart = event ? toLocalDateTimeInputValue(parseISO(event.start)) : '';
@@ -194,6 +198,9 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   const attendeeList = event.attendees ?? [];
   const guestCount = (attendeeList && attendeeList.length) || guestEmails.length || 0;
 
+  // Find calendar info (safe if event is null via optional chaining)
+  const calendarForEvent = calendars.find((c) => c.id === event?.calendarId);
+
   // Notification description helper
   const notificationDesc = (() => {
     const n = event.notifications && event.notifications.length ? event.notifications[0] : null;
@@ -214,8 +221,8 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
   const organizerName =
     attendeeList.find((a) => a.name)?.name ??
     attendeeList[0]?.email ??
-    // TODO: email of owner
-    event.calendarId ??
+    // If no guests/attendees, prefer calendar display name over raw id
+    (guestCount === 0 && calendarForEvent ? calendarForEvent.name : event.calendarId) ??
     undefined;
 
   return (

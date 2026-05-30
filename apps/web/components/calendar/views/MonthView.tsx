@@ -144,7 +144,7 @@ export function MonthView(props: {
                                 className="h-1.5 w-1.5 shrink-0 rounded-full"
                                 style={{ background: ev.color ?? '#039BE5' }}
                               />
-                              <span className="hidden shrink-0 text-gray-600 sm:inline dark:text-gray-200">
+                              <span className="hidden shrink-0 text-white sm:inline">
                                 {format(parseISO(ev.start), 'h:mma').toLowerCase()}
                               </span>
                               <div className="flex items-center gap-1">
