@@ -1575,6 +1575,22 @@ export class EventsService {
       rsvp,
       updatedCount: updateResult.count,
     });
+
+    // Mark the original invitation as delivered when the recipient follows the RSVP link.
+    // This mirrors the expected test behavior: after a recipient uses the token the
+    // invitation status should reflect delivery/interacting with the invitation.
+    try {
+      await this.prisma.invitation.update({
+        where: { id: inv.id },
+        data: { status: 'delivered' },
+      });
+    } catch (e) {
+      console.error(
+        'Failed to update invitation status to delivered on RSVP',
+        e,
+      );
+    }
+
     return { ok: true, updatedCount: updateResult.count };
   }
 }
