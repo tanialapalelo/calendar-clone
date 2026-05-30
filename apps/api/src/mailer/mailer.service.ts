@@ -24,11 +24,44 @@ export class MailerService {
     // asynchronous nodemailer logs that can race with Jest's teardown.
     if (process.env.NODE_ENV === 'test') {
       this.transporter = {
-        sendMail: async (opts: Record<string, unknown>) => {
-          const to = (opts['to'] as unknown) ?? (opts['to'] as unknown[]);
-          const accepted = Array.isArray(to) ? to : [to];
+        // Return a resolved Promise here (avoid an async function with no awaits).
+        sendMail: (opts: Record<string, unknown>) => {
+          const rawTo = opts['to'];
+          const accepted = Array.isArray(rawTo)
+            ? rawTo
+            : rawTo != null
+              ? [rawTo]
+              : [];
           const messageId = `<test-${Date.now()}@test>`;
-          return {
+
+          // Safely stringify `opts.from` — if it's already a string use it, if it's an
+          // object attempt JSON.stringify, otherwise fall back to a reasonable string.
+          const rawFrom = opts['from'];
+          let fromStr: string;
+          if (typeof rawFrom === 'string') {
+            fromStr = rawFrom;
+          } else if (rawFrom && typeof rawFrom === 'object') {
+            try {
+              fromStr = JSON.stringify(rawFrom);
+            } catch {
+              fromStr = 'test';
+            }
+          } else if (rawFrom == null) {
+            fromStr = 'test';
+          } else if (
+            typeof rawFrom === 'number' ||
+            typeof rawFrom === 'boolean' ||
+            typeof rawFrom === 'bigint' ||
+            typeof rawFrom === 'symbol'
+          ) {
+            // Safe: only call String() for non-object primitives
+            fromStr = String(rawFrom);
+          } else {
+            // Anything else (unexpected object-like value) -> fallback
+            fromStr = 'test';
+          }
+
+          return Promise.resolve({
             accepted,
             rejected: [],
             response: '250 OK (test)',
@@ -36,11 +69,11 @@ export class MailerService {
               from:
                 process.env.MAIL_ENVELOPE_FROM ??
                 process.env.MAIL_USER ??
-                String(opts['from'] ?? 'test'),
+                fromStr,
               to: accepted,
             },
             messageId,
-          };
+          });
         },
       } as SmtpTransporter;
       this.logger.debug('Using test stub mail transporter');
