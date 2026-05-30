@@ -238,7 +238,7 @@ export function EventFullscreenForm({
   const [guestInput, setGuestInput] = useState(initialValues.guestInput);
   const [guestError, setGuestError] = useState<string | null>(initialValues.guestError);
 
-  const [location, setLocation] = useState(initialValues.location); // display name
+  const [location, setLocation] = useState(initialValues.location);
   const [locationPlace, setLocationPlace] = useState<PlaceSuggestion | null>(
     initialValues.locationPlace,
   ); // optional full place
@@ -501,7 +501,9 @@ export function EventFullscreenForm({
             )
           : guests.map((g) => (typeof g === 'string' ? g : g.email))
         : undefined,
-      location: locationPlace ? JSON.stringify(locationPlace) : location || undefined,
+      // Store a human-readable location string to keep behavior consistent with the compact EventForm
+      // and to avoid persisting JSON into `location` which ends up in emails.
+      location: locationPlace ? locationPlace.display_name : location || undefined,
       notifications: notifications.length ? notifications : undefined,
       recurrence: recurrence?.rrule ?? null,
       // Prefer the live editor content if available (avoids race where ref/state not synced)

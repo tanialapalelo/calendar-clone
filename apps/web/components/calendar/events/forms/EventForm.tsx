@@ -266,7 +266,7 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
           {!showTime ? (
             <button
               type="button"
-              className="rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
+              className="cursor-pointer rounded-full border px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               onClick={onClickAddTime}
             >
               Add time
@@ -307,12 +307,14 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
             {guests.map((g: GuestEntry, i: number) => (
               <div
                 key={`${typeof g === 'string' ? g : g.email}-${i}`}
-                className="flex items-center justify-between gap-2 px-1 py-1 hover:bg-gray-100"
+                className="flex items-center justify-between gap-2 rounded px-1 py-1 hover:bg-gray-100 dark:hover:bg-[var(--color-gray-700)]"
               >
-                <span className="text-sm text-gray-700">{typeof g === 'string' ? g : g.email}</span>
+                <span className="pl-1 text-sm text-gray-700 dark:text-white">
+                  {typeof g === 'string' ? g : g.email}
+                </span>
                 <button
                   type="button"
-                  className="rounded-full px-2 py-1 text-sm hover:bg-gray-200"
+                  className="cursor-pointer rounded-full px-2 py-1 text-sm hover:bg-gray-200 dark:hover:bg-[var(--color-gray-600)]"
                   onClick={() => setGuests((prev) => prev.filter((_, idx) => idx !== i))}
                 >
                   Remove
