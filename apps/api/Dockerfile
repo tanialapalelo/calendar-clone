@@ -29,7 +29,11 @@ COPY apps/api/prisma ./apps/api/prisma/
 RUN pnpm install --frozen-lockfile --filter=api... --prod
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY apps/api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3001
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "apps/api/dist/main.js"]

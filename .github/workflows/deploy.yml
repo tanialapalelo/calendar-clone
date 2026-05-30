@@ -1,0 +1,78 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web
+        run: pnpm -C apps/web run build
+
+      - name: Build api
+        run: pnpm -C apps/api run build
+
+      - name: Run tests (web)
+        run: pnpm -C apps/web run test || true
+
+      - name: Run tests (api)
+        run: pnpm -C apps/api run test || true
+
+  migrate:
+    name: Run Prisma Migrations
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm --filter=api exec prisma migrate deploy --skip-generate
+
+      - name: Run prisma db seed (if any)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm --filter=api exec prisma db seed || echo "No seed script or seed failed"
+
+      # Optional: provider-specific deploy steps (Vercel/Render) should be handled by the provider's GitHub integration
+      # You can add provider deployment steps here if you use CLI deploys (e.g., vercel action, flyctl, render deploy)
