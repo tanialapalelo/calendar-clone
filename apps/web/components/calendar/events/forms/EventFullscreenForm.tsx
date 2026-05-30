@@ -523,17 +523,24 @@ export function EventFullscreenForm({
 
     if (allDay) {
       const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
-      const startDateObj = parseISO(`${startDateStr}T00:00:00`);
-      const endDateObj = addDays(startDateObj, 1);
+      // Build UTC-midnight instants for the date-only strings so toISOString() does
+      // not shift the day due to local timezones. This mirrors the server-side
+      // parseDateOnly(dateStr) behavior which creates a UTC-midnight Date for the
+      // given YYYY-MM-DD string. Avoids off-by-one-day bugs when creating all-day events.
+      const parts = startDateStr.split('-').map((p) => Number(p));
+      const startDateUtc = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
+      const endDateUtc = addDays(startDateUtc, 1);
 
-      const endDateStr = format(endDateObj, 'yyyy-MM-dd'); // exclusive endDate
+      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(
+        endDateUtc.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
 
       payload.startDate = startDateStr;
       payload.endDate = endDateStr;
 
       // Keep ISO instants for backward compatibility (optional)
-      payload.start = startDateObj.toISOString();
-      payload.end = endDateObj.toISOString();
+      payload.start = startDateUtc.toISOString();
+      payload.end = endDateUtc.toISOString();
     } else {
       const startObj = new Date(start);
       const endObj = new Date(end);

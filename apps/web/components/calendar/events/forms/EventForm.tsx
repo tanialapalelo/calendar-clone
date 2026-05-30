@@ -1,6 +1,6 @@
 'use client';
 
-import { addDays, addMinutes, format, parseISO } from 'date-fns';
+import { addMinutes, format, parseISO } from 'date-fns';
 import { KeyboardEvent, useMemo, useState } from 'react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
 import { CalendarIcon, MapPinIcon, UsersIcon, VideoIcon } from 'lucide-react';
@@ -73,7 +73,9 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
   const initialStart = useMemo(() => new Date(initialDate), [initialDate]);
   const initialEnd = useMemo(() => addMinutes(new Date(initialDate), 60), [initialDate]);
   const defaultStart = useMemo(() => startOfDayLocal(initialStart), [initialStart]);
-  const defaultEnd = useMemo(() => addDays(startOfDayLocal(initialEnd), 1), [initialEnd]);
+  // Show the same day for the end input (inclusive display). The payload will
+  // still send an exclusive end (start + 1 day) when creating an all-day event.
+  const defaultEnd = useMemo(() => startOfDayLocal(initialEnd), [initialEnd]);
 
   const [title, setTitle] = useState('');
   const [start, setStart] = useState(toLocalDateTimeInputValue(defaultStart));
@@ -97,9 +99,8 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     { key: 'invite', label: 'Invite others', defaultChecked: true },
     { key: 'seeGuests', label: 'See guest list', defaultChecked: true },
   ] as const;
-  const [guestPermissions] = useState<string[]>(() =>
-    permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key),
-  );
+  // guestPermissions is a static default set applied when guests are added in the compact form
+  const guestPermissions = permissionOptions.filter((p) => p.defaultChecked).map((p) => p.key);
 
   const router = useRouter();
 
@@ -151,16 +152,23 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
 
     if (allDay) {
       const startDateStr = start.slice(0, 10); // "YYYY-MM-DD"
-      const startDateObj = parseISO(`${startDateStr}T00:00:00`);
-      const endDateObj = addDays(startDateObj, 1);
+      // Build UTC-midnight instants for the date-only strings so toISOString() does
+      // not shift the day due to local timezones. This mirrors the server-side
+      // parseDateOnly(dateStr) behavior (which creates a UTC midnight for the
+      // given Y-M-D), preventing off-by-one-day bugs.
+      const parts = startDateStr.split('-').map((p) => Number(p));
+      const startDateUtc = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0));
+      const endDateUtc = new Date(startDateUtc.getTime() + 24 * 60 * 60 * 1000);
 
-      const endDateStr = format(endDateObj, 'yyyy-MM-dd'); // exclusive endDate
+      const endDateStr = `${endDateUtc.getUTCFullYear()}-${String(
+        endDateUtc.getUTCMonth() + 1,
+      ).padStart(2, '0')}-${String(endDateUtc.getUTCDate()).padStart(2, '0')}`;
 
       payload.startDate = startDateStr;
       payload.endDate = endDateStr;
 
-      payload.start = startDateObj.toISOString();
-      payload.end = endDateObj.toISOString();
+      payload.start = startDateUtc.toISOString();
+      payload.end = endDateUtc.toISOString();
     } else {
       const startObj = new Date(start);
       const endObj = new Date(end);
@@ -205,7 +213,8 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     setAllDay(checked);
     if (checked) {
       const s = startOfDayLocal(new Date(start));
-      const e = addDays(startOfDayLocal(new Date(start)), 1);
+      // keep end display on the same day (inclusive)
+      const e = startOfDayLocal(new Date(start));
       setStart(toLocalDateTimeInputValue(s));
       setEnd(toLocalDateTimeInputValue(e));
       setShowTime(false);
