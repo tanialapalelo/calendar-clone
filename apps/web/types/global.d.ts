@@ -11,7 +11,8 @@ type CalendarEvent = {
   endDate?: string;
   isTask?: boolean;
   isAppointment?: boolean;
-  guests?: string[];
+  // guests can be an array of strings/objects OR an arbitrary metadata object
+  guests?: unknown;
   location?: string;
   description?: string;
   notifications?: NotificationItem[];
@@ -21,6 +22,12 @@ type CalendarEvent = {
   recurringEventId?: string | null;
   originalStartAt?: string | null;
   isRecurringInstance?: boolean;
+  attendees?: { email: string; name?: string | null; rsvp: string; permissions?: unknown }[];
+  userRsvp?: string;
+  meetingUrl?: string;
+  meetingProvider?: string;
+  meetingData?: unknown;
+  addMeeting?: boolean;
   color: string;
 };
 

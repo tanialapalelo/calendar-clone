@@ -56,6 +56,14 @@ export default function LoginPage() {
           Continue with Google
         </Link>
 
+        {/* Demo button — useful for interviewers to try the app without OAuth */}
+        <a
+          href={`${api.replace(/\/$/, '')}/v1/auth/demo`}
+          className="mt-3 flex w-full items-center justify-center gap-3 rounded-full bg-[#0B57D0] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#044dc2]"
+        >
+          Try demo account
+        </a>
+
         <p className="mt-6 text-center text-xs text-gray-400">
           By signing in, you agree to our terms of service.
         </p>

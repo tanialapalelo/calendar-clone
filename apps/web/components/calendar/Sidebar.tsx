@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckIcon, PlusIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon } from 'lucide-react';
+import { CheckIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ApiCalendar } from '@/lib/calendars/useCalendarsApi';
 import { CALENDAR_COLORS, getCalendarColor } from '@/lib/calendars/useCalendarsApi';
@@ -43,7 +43,7 @@ function CalendarContextMenu(props: {
       </button>
 
       {open && (
-        <div className="absolute top-6 right-0 z-50 w-40 rounded-xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute top-6 right-0 z-50 w-[calc(100vw-2rem)] max-w-xs rounded-xl border border-gray-200 bg-white py-1 shadow-xl sm:w-40 dark:border-gray-700 dark:bg-gray-800">
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -86,7 +86,7 @@ function RenameCalendarModal(props: {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
-      <div className="w-80 rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
         <h2 className="mb-4 text-sm font-semibold text-gray-800 dark:text-gray-100">
           Edit calendar
         </h2>
@@ -148,7 +148,7 @@ function NewCalendarModal(props: {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40">
-      <div className="w-80 rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800">
         <h2 className="mb-4 text-sm font-semibold text-gray-800 dark:text-gray-100">
           New calendar
         </h2>

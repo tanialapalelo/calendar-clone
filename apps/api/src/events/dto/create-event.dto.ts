@@ -1,11 +1,11 @@
 import {
+  IsArray,
   IsBoolean,
   IsISO8601,
   IsOptional,
   IsString,
   Matches,
   MinLength,
-  IsArray,
 } from 'class-validator';
 
 export class CreateEventDto {
@@ -77,9 +77,12 @@ export class CreateEventDto {
   @IsString()
   recurrenceTimeZone?: string;
 
+  // Guests can be an array of email strings or objects { email, permissions }
   @IsOptional()
   @IsArray()
-  guests?: string[];
+  // Note: more specific per-item validation is done in the service where
+  // runtime shapes are easier to validate. Keep DTO flexible for API clients.
+  guests?: Array<string | { email: string; permissions?: unknown }>;
 
   @IsOptional()
   @IsArray()
@@ -92,4 +95,25 @@ export class CreateEventDto {
   @IsOptional()
   @IsString()
   busyStatus?: string;
+
+  // Meeting-related (MVP: Jitsi)
+  @IsOptional()
+  @IsBoolean()
+  addMeeting?: boolean; // if true, backend will generate a Jitsi URL on save
+
+  @IsOptional()
+  @IsString()
+  meetingProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  meetingUrl?: string; // optional client-supplied URL (backend will accept but may generate)
+
+  @IsOptional()
+  meetingData?: Record<string, unknown>;
+
+  // allow forcing regeneration of meeting URL (transient client-side flag)
+  @IsOptional()
+  @IsBoolean()
+  regenerateMeeting?: boolean;
 }

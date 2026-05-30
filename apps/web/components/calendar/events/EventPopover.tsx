@@ -1,9 +1,18 @@
 'use client';
 
 import { format, parseISO } from 'date-fns';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  BellIcon,
+  CalendarIcon,
+  PencilIcon,
+  Trash2Icon,
+  UsersIcon,
+  VideoIcon,
+  XIcon,
+} from 'lucide-react';
 import { toLocalDateTimeInputValue } from '@/lib/date';
+import { useCalendarsApi } from '@/lib/calendars/useCalendarsApi';
 import { useRouter } from 'next/navigation';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
 import type { RecurrenceScope } from '@/lib/api/events';
@@ -28,6 +37,9 @@ function clamp(n: number, min: number, max: number) {
 
 export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDelete }: Props) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep hook order stable: call calendars hook unconditionally.
+  const { calendars } = useCalendarsApi();
 
   const initialTitle = event?.title ?? '';
   const initialStart = event ? toLocalDateTimeInputValue(parseISO(event.start)) : '';
@@ -89,6 +101,16 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
+    // If the viewport is narrow, we won't anchor the popover - we'll show a centered modal-like sheet
+    const smallScreen = vw < 520;
+    if (smallScreen) {
+      return {
+        left: Math.max(8, (vw - Math.min(POPOVER_W, vw - 32)) / 2),
+        top: Math.max(8, vh - 360),
+        smallScreen: true,
+      } as { left: number; top: number; smallScreen: true };
+    }
+
     const preferredLeft = anchorRect.right + GAP;
     const canFitRight = preferredLeft + POPOVER_W <= vw - 8;
 
@@ -96,7 +118,11 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
 
     const top = clamp(anchorRect.top, 8, vh - POPOVER_H - 8);
 
-    return { left: Math.max(8, left), top };
+    return { left: Math.max(8, left), top, smallScreen: false } as {
+      left: number;
+      top: number;
+      smallScreen: false;
+    };
   }, [anchorRect]);
 
   if (!open || !event || !anchorRect || !position) return null;
@@ -153,12 +179,68 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
         'HH:mm',
       )}`;
 
+  // Helpers to extract guest/attendee info safely
+  const guestEmails = (() => {
+    if (!event?.guests) return [] as string[];
+    if (Array.isArray(event.guests)) {
+      return event.guests
+        .map((g) => {
+          if (typeof g === 'string') return g;
+          if (g && typeof g === 'object' && 'email' in g)
+            return String((g as { email?: unknown }).email);
+          return String(g);
+        })
+        .filter(Boolean) as string[];
+    }
+    return [] as string[];
+  })();
+
+  const attendeeList = event.attendees ?? [];
+  const guestCount = (attendeeList && attendeeList.length) || guestEmails.length || 0;
+
+  // Find calendar info (safe if event is null via optional chaining)
+  const calendarForEvent = calendars.find((c) => c.id === event?.calendarId);
+
+  // Notification description helper
+  const notificationDesc = (() => {
+    const n = event.notifications && event.notifications.length ? event.notifications[0] : null;
+    if (!n) return null;
+    // If it's 1 day before, show 'The day before at 5pm' style
+    if (n.unit === 'days' && n.amount === 1) {
+      try {
+        const start = parseISO(event.start);
+        return `The day before at ${format(start, 'h:mma').toLowerCase()}`;
+      } catch {
+        return '1 day before';
+      }
+    }
+    return `${n.amount} ${n.unit} before`;
+  })();
+
+  // Organizer: prefer first attendee with a name, else show calendarId if present
+  const organizerName =
+    attendeeList.find((a) => a.name)?.name ??
+    attendeeList[0]?.email ??
+    // If no guests/attendees, prefer calendar display name over raw id
+    (guestCount === 0 && calendarForEvent ? calendarForEvent.name : event.calendarId) ??
+    undefined;
+
   return (
     <div className="fixed inset-0 z-[60]">
       <div
         ref={popoverRef}
-        className="fixed w-[320px] rounded-3xl border border-gray-200 bg-white shadow-xl"
-        style={{ left: position.left, top: position.top }}
+        className={[
+          'fixed rounded-3xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800',
+          // Bottom-sheet style for small screens: full-width with side margin, rounded top, scrollable
+          position.smallScreen
+            ? 'top-auto right-4 bottom-4 left-4 max-h-[70vh] w-auto max-w-[95vw] overflow-auto rounded-t-2xl'
+            : 'w-[320px]',
+        ].join(' ')}
+        style={
+          position.smallScreen
+            ? ({} as CSSProperties)
+            : ({ left: position.left, top: position.top } as CSSProperties)
+        }
         role="dialog"
         aria-modal="true"
       >
@@ -196,11 +278,62 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
             <XIcon size={16} />
           </button>
         </div>
-        <div className="items-start justify-between gap-3 border-b border-gray-100 px-4 py-2">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-gray-900">{event.title}</div>
-            <div className="mt-0.5 text-xs text-gray-500">{formattedDate}</div>
+        <div className="items-start justify-between gap-3 px-4 py-2">
+          <div className="flex min-w-0 items-start gap-3">
+            <div
+              className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm"
+              style={{ background: event.color ?? 'var(--gcal-blue)' }}
+            />
+            <div>
+              <div className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {event.title}
+              </div>
+              <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-300">{formattedDate}</div>
+            </div>
           </div>
+
+          {!editing && event.meetingUrl && (
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <VideoIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <a
+                  href={event.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-green-600 px-3 py-2 text-xs font-semibold text-white"
+                >
+                  Join meeting
+                </a>
+              </div>
+            </div>
+          )}
+
+          {guestCount > 0 && (
+            <div className="flex min-w-0 items-start gap-3">
+              <UsersIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{guestCount} guests</span>
+              </div>
+            </div>
+          )}
+
+          {notificationDesc && (
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <BellIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{notificationDesc}</span>
+              </div>
+            </div>
+          )}
+
+          {organizerName && (
+            <div className="my-2 flex min-w-0 items-start gap-3">
+              <CalendarIcon size={16} className="mt-1 h-3.5 w-3.5 shrink-0 rounded-sm" />
+              <div className="flex items-center gap-2 text-sm">
+                <span>{organizerName}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {editing && (
@@ -236,21 +369,35 @@ export function EventPopover({ open, anchorRect, event, onClose, onUpdate, onDel
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                type="button"
-                className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                onClick={() => setEditing(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-                onClick={submitEdit}
-              >
-                Save
-              </button>
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="flex items-center gap-2">
+                {event?.meetingUrl && (
+                  <a
+                    href={event.meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="gcal-btn bg-green-600 px-3 py-2 text-sm"
+                  >
+                    Join meeting
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+                  onClick={submitEdit}
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         )}

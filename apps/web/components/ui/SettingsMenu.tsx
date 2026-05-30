@@ -1,16 +1,16 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  CheckIcon,
+  DownloadIcon,
+  MonitorIcon,
+  MoonIcon,
   SettingsIcon,
   SunIcon,
-  MoonIcon,
-  MonitorIcon,
-  DownloadIcon,
   UploadIcon,
-  CheckIcon,
 } from 'lucide-react';
-import { useTheme, type ThemeMode } from '@/lib/theme/useTheme';
+import { type ThemeMode, useTheme } from '@/lib/theme/useTheme';
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
   { value: 'light', label: 'Light', icon: <SunIcon size={15} /> },
@@ -52,7 +52,7 @@ export function SettingsMenu(props: {
       </button>
 
       {open && (
-        <div className="absolute top-10 right-0 z-50 w-56 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute top-10 right-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-56 dark:border-gray-700 dark:bg-gray-800">
           {/* Appearance section */}
           <div className="px-3 pt-1 pb-1">
             <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">

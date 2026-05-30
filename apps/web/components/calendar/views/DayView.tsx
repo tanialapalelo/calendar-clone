@@ -15,6 +15,7 @@ import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
 import { eventsForDay } from '@/lib/events/day';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 
 function getGmtOffsetLabel(d: Date) {
   const parts = new Intl.DateTimeFormat(undefined, {
@@ -38,8 +39,9 @@ export function DayView(props: {
   date: Date;
   events: CalendarEvent[];
   onOpenEvent: (id: string, rect: DOMRect) => void;
+  onCreateEvent?: (d: Date) => void;
 }) {
-  const { date, events, onOpenEvent } = props;
+  const { date, events, onOpenEvent, onCreateEvent } = props;
 
   const isMobile = useIsMobile();
   const gutterPx = isMobile ? DAY_VIEW_GUTTER_PX_MOBILE : DAY_VIEW_GUTTER_PX;
@@ -127,6 +129,12 @@ export function DayView(props: {
                 type="button"
                 aria-label={`Create event at ${hourLabel(h) ?? '12 AM'}`}
                 className="cursor-pointer border-b border-[var(--gcal-border,#dadce0)] text-left hover:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:border-gray-700 dark:hover:bg-gray-800"
+                onClick={() => {
+                  if (!onCreateEvent) return;
+                  const d = new Date(date);
+                  d.setHours(h, 0, 0, 0);
+                  onCreateEvent(d);
+                }}
               />,
             ])}
           </div>
@@ -173,7 +181,10 @@ export function DayView(props: {
 
                 const leftPct = (p.col / p.colCount) * 100;
                 const widthPct = (1 / p.colCount) * 100;
-                const background = p.event.color ?? '#039BE5';
+
+                // Resolve visuals via centralized helper
+                const rv = resolveRsvpVisuals(p.event);
+                const { background, borderLeft, titleClass, textColorClass } = rv;
 
                 const KindIcon = p.event.isTask
                   ? CircleIcon
@@ -200,13 +211,14 @@ export function DayView(props: {
                   >
                     <div
                       className={[
-                        'relative h-full overflow-hidden px-2 py-1 text-left text-xs text-white',
+                        'relative h-full overflow-hidden px-2 py-1 text-left text-xs',
                         continuesFromPrev ? 'rounded-t-none' : 'rounded-t-md',
                         continuesToNext ? 'rounded-b-none' : 'rounded-b-md',
+                        textColorClass,
                       ].join(' ')}
-                      style={{ background }}
+                      style={{ background, borderLeft }}
                     >
-                      <div className="truncate font-semibold">{p.event.title}</div>
+                      <div className={`truncate font-semibold ${titleClass}`}>{p.event.title}</div>
                       {!allDay && !crossDay && (
                         <div className="truncate text-[11px] opacity-90">
                           {format(parseISO(p.event.start), 'h:mma').toLowerCase()} –{' '}

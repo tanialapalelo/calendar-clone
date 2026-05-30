@@ -3,7 +3,7 @@
 import { useCurrentUser } from '@/lib/auth/useCurrentUser';
 import { API_URL } from '@/lib/api/client';
 import { LogOutIcon, UserIcon } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 export function UserMenu() {
@@ -28,12 +28,20 @@ export function UserMenu() {
 
   if (state.status === 'unauthenticated') {
     return (
-      <a
-        href={`${API_URL}/v1/auth/google/start`}
-        className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
-      >
-        Sign in
-      </a>
+      <div className="flex items-center gap-2">
+        <a
+          href={`${API_URL}/v1/auth/google/start`}
+          className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
+        >
+          Sign in
+        </a>
+        <a
+          href={`${API_URL}/v1/auth/demo`}
+          className="rounded-full bg-[#0B57D0] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#044dc2] sm:text-sm"
+        >
+          Demo
+        </a>
+      </div>
     );
   }
 
@@ -71,7 +79,7 @@ export function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute top-10 right-0 z-50 w-64 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl">
+        <div className="absolute top-10 right-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-64 dark:bg-gray-700">
           {/* User info */}
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0B57D0] text-sm font-semibold text-white">
@@ -89,10 +97,8 @@ export function UserMenu() {
               )}
             </div>
             <div className="min-w-0">
-              {user.name && (
-                <p className="truncate text-sm font-semibold text-gray-900">{user.name}</p>
-              )}
-              <p className="truncate text-xs text-gray-500">{user.email}</p>
+              {user.name && <p className="truncate text-sm font-semibold">{user.name}</p>}
+              <p className="truncate text-xs">{user.email}</p>
             </div>
           </div>
 
@@ -101,7 +107,7 @@ export function UserMenu() {
           {/* Logout */}
           <button
             type="button"
-            className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="flex w-full items-center gap-2 px-4 py-2 text-sm"
             onClick={async () => {
               await fetch(`${API_URL}/v1/auth/logout`, {
                 method: 'POST',

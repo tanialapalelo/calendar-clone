@@ -12,6 +12,7 @@ import {
 } from '@/constants';
 import { endOfDayExclusive, startOfDayDefaultHour } from '@/lib/date';
 import { eventsForDay } from '@/lib/events/day';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 import { layoutOverlappingEvents } from '@/lib/events/overlap-layout';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
 
@@ -155,19 +156,32 @@ export function WeekView(props: {
                   key={day.toISOString()}
                   className="min-h-[28px] border-l border-[var(--gcal-border,#dadce0)] px-0.5 py-0.5 dark:border-gray-700"
                 >
-                  {dayAllDay.map((ev) => (
-                    <div
-                      key={ev.id}
-                      className="mb-0.5 cursor-pointer truncate rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-                      style={{ background: ev.color ?? '#039BE5' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenEvent(ev.id, e.currentTarget.getBoundingClientRect());
-                      }}
-                    >
-                      {ev.title}
-                    </div>
-                  ))}
+                  {dayAllDay.map((ev) => {
+                    // RSVP + color resolution for all-day pills
+                    const evTyped = ev as {
+                      attendees?: Array<{ email?: string; rsvp?: string }>;
+                      userRsvp?: string;
+                    };
+                    const attendee = evTyped.attendees?.find((a) => !!a.email);
+                    const rsvp = evTyped.userRsvp ?? attendee?.rsvp;
+                    const isDeclined = rsvp === 'declined';
+                    const rv = resolveRsvpVisuals(ev);
+                    const { background: bg, borderLeft } = rv;
+
+                    return (
+                      <div
+                        key={ev.id}
+                        className={`mb-0.5 cursor-pointer truncate rounded-full px-2 py-0.5 text-[11px] font-medium ${isDeclined ? 'text-[#0B57D0]' : 'text-white'}`}
+                        style={{ background: bg, borderLeft }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenEvent(ev.id, e.currentTarget.getBoundingClientRect());
+                        }}
+                      >
+                        <span className={isDeclined ? 'line-through' : ''}>{ev.title}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
@@ -245,6 +259,11 @@ export function WeekView(props: {
                       const leftPct = (p.col / p.colCount) * 100;
                       const widthPct = (1 / p.colCount) * 100;
 
+                      // RSVP visual state and invitation lighter color
+                      // Prefer userRsvp mapping, fall back to attendee.rsvp
+                      const rv = resolveRsvpVisuals(p.event);
+                      const { background: bg, borderLeft } = rv;
+
                       return (
                         <div
                           key={p.event.id}
@@ -262,13 +281,16 @@ export function WeekView(props: {
                         >
                           <div
                             className={[
-                              'h-full overflow-hidden px-1.5 py-0.5 text-[11px] text-white',
+                              'h-full overflow-hidden px-1.5 py-0.5 text-[11px]',
                               continuesFromPrev ? 'rounded-t-none rounded-b-md' : 'rounded-t-md',
                               continuesToNext ? 'rounded-b-none' : 'rounded-b-md',
+                              rv.textColorClass,
                             ].join(' ')}
-                            style={{ background: p.event.color ?? '#039BE5' }}
+                            style={{ background: bg, borderLeft }}
                           >
-                            <div className="truncate font-semibold">{p.event.title}</div>
+                            <div className={`truncate font-semibold ${rv.titleClass}`}>
+                              {p.event.title}
+                            </div>
                             <div className="hidden truncate text-[10px] opacity-90 sm:block">
                               {format(parseISO(p.event.start), 'h:mma').toLowerCase()}
                             </div>
@@ -276,24 +298,23 @@ export function WeekView(props: {
                         </div>
                       );
                     })}
+                    {/* Now indicator: only render inside the today's column */}
+                    {isSameDay(day, today) && nowTop >= 0 && nowTop <= gridHeight && (
+                      <div
+                        className="pointer-events-none absolute right-0 left-0 z-10"
+                        style={{ top: nowTop }}
+                      >
+                        <div className="relative">
+                          <div className="absolute top-1/2 -left-[5px] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500" />
+                          <div className="border-t-2 border-red-500" />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-
-          {/* Now indicator */}
-          {days.some((d) => isSameDay(d, today)) && (
-            <div
-              className="pointer-events-none absolute right-0 z-10"
-              style={{ left: gutterPx, top: nowTop }}
-            >
-              <div className="relative">
-                <div className="absolute top-1/2 -left-[5px] h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500" />
-                <div className="border-t-2 border-red-500" />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

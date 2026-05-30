@@ -7,9 +7,11 @@ import {
 import { addDays, addMilliseconds } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { Prisma } from '@prisma/client';
+import { randomBytes, randomUUID } from 'crypto';
 
 import { CalendarsService } from '../calendars/calendars.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailerService } from '../mailer/mailer.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import {
@@ -42,7 +44,21 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly calendars: CalendarsService,
+    private readonly mailer: MailerService,
   ) {}
+
+  // Helper: compute a lighter/transparent color from a hex input.
+  // Returns an rgba() string when hex is provided, otherwise undefined.
+  private computeLighterColor(hex?: string | null, alpha = 0.6) {
+    if (!hex) return undefined;
+    // accept #RRGGBB or RRGGBB
+    const m = hex.replace('#', '').trim();
+    if (!/^[0-9a-fA-F]{6}$/.test(m)) return undefined;
+    const r = parseInt(m.slice(0, 2), 16);
+    const g = parseInt(m.slice(2, 4), 16);
+    const b = parseInt(m.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
 
   // ─────────────────────────────────────────────────────────────────────
   // READ
@@ -237,7 +253,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(endDateCol!), tz)
       : endAtInput;
 
-    return this.prisma.event.create({
+    const created = await this.prisma.event.create({
       data: {
         calendarId,
         title: dto.title,
@@ -261,6 +277,40 @@ export class EventsService {
       },
       select: EVENT_SELECT,
     });
+
+    // If client requested a meeting (or supplied meetingProvider 'jitsi'), generate a Jitsi URL and persist it.
+    try {
+      await this._maybeGenerateAndPersistMeeting(userId, created.id, dto);
+    } catch (meetErr) {
+      // Non-fatal; log and continue returning created event. Frontend can refresh to see meeting.
+      console.error('Failed to generate meeting for event', meetErr);
+    }
+
+    // If the creator supplied a list of guests at event creation, ensure
+    // attendees + invitations are created. Do not fail the event creation
+    // if invitation sending fails (non-fatal). This re-uses createInvitations
+    // which will upsert attendees and attempt to send email.
+    if (Array.isArray(dto.guests) && dto.guests.length > 0) {
+      try {
+        // dto.guests is string[] of emails
+        // Attach invitations on behalf of the current user (owner)
+        await this.createInvitations(userId, created.id, dto.guests);
+      } catch (inviteErr) {
+        // Non-fatal; surface to logs for debugging
+
+        console.error(
+          'createForUser: failed to create/send invitations',
+          inviteErr,
+        );
+      }
+    }
+
+    // Re-fetch the event with meeting fields included and return
+    const refreshed = await this.prisma.event.findUnique({
+      where: { id: created.id },
+      select: EVENT_SELECT,
+    });
+    return refreshed;
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -429,6 +479,30 @@ export class EventsService {
       });
     }
 
+    // Meeting support for single-occurrence exceptions: if client requested
+    // a meeting for this occurrence (or supplied meeting fields) persist them
+    // in the exception row so the occurrence materializes with meeting info.
+    const wantsMeetingForException =
+      !!dto.addMeeting || dto.meetingProvider === 'jitsi' || !!dto.meetingUrl;
+    if (wantsMeetingForException) {
+      if (dto.meetingUrl) {
+        Object.assign(exceptionData, {
+          meetingProvider: dto.meetingProvider ?? 'jitsi',
+          meetingUrl: dto.meetingUrl,
+          meetingData: dto.meetingData as Prisma.InputJsonValue | undefined,
+        });
+      } else {
+        // Generate a Jitsi room for the exception occurrence
+        const room = `event-${randomUUID()}`;
+        const url = `https://meet.jit.si/${room}`;
+        Object.assign(exceptionData, {
+          meetingProvider: 'jitsi',
+          meetingUrl: url,
+          meetingData: { room } as Prisma.InputJsonValue,
+        });
+      }
+    }
+
     await this.prisma.eventRecurrenceException.upsert({
       where: {
         eventId_originalStartAt: {
@@ -449,7 +523,9 @@ export class EventsService {
   }
 
   private async updateFollowing(
-    existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>,
+    existing: Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }> & {
+      calendar?: { ownerId?: string | null } | null;
+    },
     inst: { masterId: string; originalStartAt: Date },
     dto: UpdateEventDto,
   ) {
@@ -594,7 +670,25 @@ export class EventsService {
       select: EVENT_SELECT,
     });
 
-    return created;
+    // Possibly generate meeting for the newly created following instance
+    try {
+      // existing.calendar may be undefined in some code paths; re-fetch ownerId to be safe
+      const calRow = await this.prisma.calendar.findUnique({
+        where: { id: existing.calendarId },
+        select: { ownerId: true },
+      });
+      const ownerId = calRow?.ownerId ?? '';
+      await this._maybeGenerateAndPersistMeeting(ownerId, created.id, dto);
+    } catch (err: unknown) {
+      console.error('Failed to generate meeting for following instance', err);
+    }
+
+    // Re-fetch to include any meeting fields that may have been persisted
+    const refreshed = await this.prisma.event.findUnique({
+      where: { id: created.id },
+      select: EVENT_SELECT,
+    });
+    return refreshed ?? created;
   }
 
   private updateAll(
@@ -692,7 +786,7 @@ export class EventsService {
       ? fromZonedTime(naiveFromDateColumn(nextEndDateCol!), tz)
       : nextEndAtInput;
 
-    return this.prisma.event.update({
+    const updatePromise = this.prisma.event.update({
       where: { id: existing.id },
       data: {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
@@ -726,7 +820,105 @@ export class EventsService {
       },
       select: EVENT_SELECT,
     });
+
+    // After update completes, possibly generate meeting if requested. We return the updated event promise but also chain meeting generation side-effect.
+    return (async () => {
+      const updated = await updatePromise;
+      try {
+        // existing.calendar.ownerId isn't available here; re-fetch owner for permission checks
+        const cal = await this.prisma.calendar.findUnique({
+          where: { id: existing.calendarId },
+          select: { ownerId: true },
+        });
+        await this._maybeGenerateAndPersistMeeting(
+          cal?.ownerId ?? '',
+          updated.id,
+          dto,
+        );
+      } catch (err) {
+        console.error('Failed to generate meeting for updated event', err);
+      }
+
+      // Re-fetch updated event so any meeting fields are included in the response
+      const refreshed = await this.prisma.event.findUnique({
+        where: { id: updated.id },
+        select: EVENT_SELECT,
+      });
+      return refreshed ?? updated;
+    })();
   }
+
+  // Helper: generate a Jitsi meeting URL and persist to the event if requested by DTO
+  private async _maybeGenerateAndPersistMeeting(
+    userId: string,
+    eventId: string,
+    dto: CreateEventDto | UpdateEventDto,
+  ) {
+    // Determine whether the client requested meeting creation or supplied a provider
+    const wantsMeeting =
+      !!dto.addMeeting || dto.meetingProvider === 'jitsi' || !!dto.meetingUrl;
+    if (!wantsMeeting) return;
+
+    // Fetch event with minimal fields to check existing meetingUrl and calendar owner
+    const ev = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: {
+        id: true,
+        meetingUrl: true,
+        calendar: { select: { ownerId: true } },
+      },
+    });
+    if (!ev) throw new NotFoundException('Event not found');
+
+    // Enforce that only owner or attendees can create/regenerate meetings for private events
+    // (Callers of this helper should have already enforced owner for create; here we defensively check)
+    const calOwnerId = ev.calendar?.ownerId ?? null;
+    if (calOwnerId && userId !== calOwnerId) {
+      // Check if user is an attendee with permission to modify
+      const attendee = await this.prisma.eventAttendee.findUnique({
+        where: { eventId_email: { eventId, email: userId } },
+        select: { id: true },
+      });
+      if (!attendee) throw new ForbiddenException('Forbidden');
+    }
+
+    // Idempotent: if meetingUrl already exists and DTO didn't explicitly provide a meetingUrl or request regeneration, do nothing
+    const explicitUrlProvided = !!dto.meetingUrl;
+    const requestedRegenerate = dto.regenerateMeeting === true;
+    if (ev.meetingUrl && !explicitUrlProvided && !requestedRegenerate) return;
+
+    // If client provided a meetingUrl, persist it directly
+    if (explicitUrlProvided) {
+      await this.prisma.event.update({
+        where: { id: eventId },
+        data: {
+          meetingProvider: dto.meetingProvider ?? 'jitsi',
+          meetingUrl: dto.meetingUrl,
+          meetingData: dto.meetingData as Prisma.InputJsonValue | undefined,
+        },
+      });
+      return;
+    }
+
+    // Generate a Jitsi room and URL: use event-{uuid}
+    const room = `event-${randomUUID()}`;
+    const url = `https://meet.jit.si/${room}`;
+
+    const meetingData = { room };
+
+    await this.prisma.event.update({
+      where: { id: eventId },
+      data: {
+        meetingProvider: 'jitsi',
+        meetingUrl: url,
+        meetingData: meetingData as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // DELETE
+  // ─────────────────────────────────────────────────────────────────────
 
   async deleteForUser(
     userId: string,
@@ -852,4 +1044,553 @@ export class EventsService {
 
   // Re-export for backward compat if anything imports it from this file:
   static normalizeRuleOnly = normalizeRuleOnly;
+
+  // INVITATIONS: create invitations and send emails (stubbed)
+  async createInvitations(
+    userId: string,
+    eventId: string,
+    emails: Array<string | { email: string; permissions?: unknown }>,
+    expiresDays = 7,
+  ) {
+    // Ensure event exists and user is owner
+    const ev = await this.prisma.event.findFirst({
+      where: { id: eventId },
+      select: {
+        id: true,
+        calendar: {
+          select: {
+            ownerId: true,
+            owner: { select: { email: true, name: true } },
+          },
+        },
+        title: true,
+        description: true,
+        location: true,
+        startAt: true,
+        endAt: true,
+        allDay: true,
+        startDate: true,
+        endDate: true,
+        timeZone: true,
+        color: true,
+        visibility: true,
+        busyStatus: true,
+        // include meeting fields so invitation copies can carry the join link
+        meetingProvider: true,
+        meetingUrl: true,
+        meetingData: true,
+      },
+    });
+    if (!ev) throw new NotFoundException('Event not found');
+    if (ev.calendar?.ownerId !== userId)
+      throw new ForbiddenException('Forbidden');
+
+    type GuestInput =
+      | string
+      | { email: string; permissions?: Prisma.InputJsonValue };
+    const results: { email: string; invitationId?: string; error?: string }[] =
+      [];
+    for (const raw of emails as GuestInput[]) {
+      // allow either string email or { email, permissions }
+      const email = typeof raw === 'string' ? raw : raw.email;
+      const permissions = typeof raw === 'string' ? undefined : raw.permissions;
+      try {
+        const token = randomBytes(24).toString('hex');
+        const expiresAt = new Date(
+          Date.now() + expiresDays * 24 * 60 * 60 * 1000,
+        );
+        const created = await this.prisma.invitation.create({
+          data: {
+            event: { connect: { id: eventId } },
+            email,
+            token,
+            expiresAt,
+          },
+        });
+        // ensure attendee row exists (persist permissions if provided)
+        const createData: Prisma.EventAttendeeCreateInput = {
+          event: { connect: { id: eventId } },
+          email,
+          rsvp: 'needsAction',
+          permissions: permissions,
+        } as Prisma.EventAttendeeCreateInput;
+        const updateData: Prisma.EventAttendeeUpdateInput = {
+          rsvp: 'needsAction',
+          permissions: permissions,
+        } as Prisma.EventAttendeeUpdateInput;
+        await this.prisma.eventAttendee.upsert({
+          where: { eventId_email: { eventId, email } },
+          create: createData,
+          update: updateData,
+        });
+
+        // Build a meeting-request ICS so mail clients recognize this as an invite
+        const uid = `${ev.id}-${token}`;
+        const dtStamp =
+          new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const dtStart =
+          ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        const dtEnd =
+          ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+        // Organizer: prefer calendar owner email, fall back to MAIL_FROM env
+        let organizerEmail =
+          ev.calendar?.owner?.email ?? process.env.MAIL_FROM ?? undefined;
+        const organizerCN = ev.calendar?.owner?.name ?? undefined;
+        if (organizerEmail && organizerEmail.includes('<')) {
+          const m = organizerEmail.match(/<([^>]+)>/);
+          if (m) organizerEmail = m[1];
+        }
+        const organizerLine = organizerEmail
+          ? organizerCN
+            ? `ORGANIZER;CN=${organizerCN}:mailto:${organizerEmail}`
+            : `ORGANIZER:mailto:${organizerEmail}`
+          : null;
+        const attendeeLine = `ATTENDEE;RSVP=TRUE:mailto:${email}`;
+
+        const icsLines = [
+          'BEGIN:VCALENDAR',
+          'METHOD:REQUEST',
+          'VERSION:2.0',
+          'PRODID:-//calendar-clone//EN',
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `DTSTAMP:${dtStamp}`,
+          `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
+          ev.description
+            ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
+            : null,
+          ev.location ? `LOCATION:${String(ev.location)}` : null,
+          organizerLine,
+          attendeeLine,
+          'SEQUENCE:0',
+          'STATUS:CONFIRMED',
+          `DTSTART:${dtStart}`,
+          `DTEND:${dtEnd}`,
+          'END:VEVENT',
+          'END:VCALENDAR',
+        ]
+          .filter(Boolean)
+          .join('\r\n');
+
+        // send invitation email (mailer returns boolean success)
+        const sent = await this.mailer.sendInvitation(
+          {
+            id: ev.id,
+            title: ev.title,
+            startAt: ev.startAt,
+            endAt: ev.endAt,
+            location: ev.location,
+            description: ev.description,
+          },
+          email,
+          token,
+          icsLines,
+        );
+
+        // record send result on invitation row so callers/CI can inspect
+        try {
+          if (sent) {
+            await this.prisma.invitation.update({
+              where: { id: created.id },
+              data: { sentAt: new Date(), status: 'sent' },
+            });
+          } else {
+            await this.prisma.invitation.update({
+              where: { id: created.id },
+              data: { status: 'bounced' },
+            });
+          }
+        } catch (updateErr) {
+          // Non-fatal: we tried to persist delivery status but don't fail the whole flow
+
+          console.error('Failed to update invitation send status', updateErr);
+        }
+
+        // Also create a copy of the event in the recipient's default calendar
+        // (if they're a registered user). Attach invitation metadata in the
+        // event.guests field so the frontend can detect recipient copies and
+        // apply special visuals (lighter background / stripes / strikethrough).
+        try {
+          const user = await this.prisma.user.findUnique({
+            where: { email },
+            select: { id: true, email: true },
+          });
+          if (user) {
+            const cal = await this.calendars.ensureDefaultCalendar(user.id);
+            // avoid creating obvious duplicates: same title + same startAt
+            const exists = await this.prisma.event.findFirst({
+              where: {
+                calendarId: cal.id,
+                title: ev.title,
+                startAt: ev.startAt,
+              },
+              select: { id: true },
+            });
+            if (!exists) {
+              // compute lighter color background for UI (frontend expects a
+              // lighter background color). Store it in guests.invitationMeta so
+              // the web client can detect recipient copies.
+              const lighter = this.computeLighterColor(ev.color ?? undefined);
+              // We'll store an object in guests to indicate invitation metadata
+              type InvitationMeta = {
+                invitedEmail?: string;
+                permissions?: Prisma.InputJsonValue | undefined;
+                lighterColor?: string | null;
+                rsvp?: string | undefined;
+              };
+              const invitationMeta: InvitationMeta = {
+                invitedEmail: email,
+                permissions,
+                lighterColor: lighter,
+              };
+              const createdCopy = await this.prisma.event.create({
+                data: {
+                  calendarId: cal.id,
+                  title: ev.title,
+                  description: ev.description,
+                  location: ev.location,
+                  allDay: ev.allDay,
+                  startAt: ev.startAt,
+                  endAt: ev.endAt,
+                  startDate: ev.startDate ?? null,
+                  endDate: ev.endDate ?? null,
+                  timeZone: ev.timeZone ?? undefined,
+                  // keep original color for border/stripe, store lighter in guests metadata for UI
+                  color: ev.color ?? undefined,
+                  visibility: ev.visibility ?? undefined,
+                  busyStatus: ev.busyStatus ?? undefined,
+                  // copy meeting fields so recipient copies also expose the join link
+                  meetingProvider: ev.meetingProvider ?? undefined,
+                  meetingUrl: ev.meetingUrl ?? undefined,
+                  meetingData: ev.meetingData ?? undefined,
+                  // store invitation metadata so UI can show lighter bg/stripe
+                  guests: invitationMeta as Prisma.InputJsonValue,
+                },
+                select: { id: true },
+              });
+
+              // create attendee for the new event and mark needsAction
+              await this.prisma.eventAttendee.create({
+                data: {
+                  event: { connect: { id: createdCopy.id } },
+                  email,
+                  rsvp: 'needsAction',
+                },
+              });
+            }
+          }
+        } catch (copyErr) {
+          console.error(
+            'Failed to create recipient calendar copy for invitation',
+            copyErr,
+          );
+        }
+        // Record successful result for this email
+        results.push({ email, invitationId: created.id });
+      } catch (err: unknown) {
+        const msg =
+          typeof err === 'string'
+            ? err
+            : err instanceof Error
+              ? err.message
+              : JSON.stringify(err);
+        results.push({ email, error: msg });
+      }
+    }
+    return results;
+  }
+
+  // Return ICS content for an invitation token
+  async getIcsForToken(token: string) {
+    const inv = await this.prisma.invitation.findUnique({
+      where: { token },
+      select: {
+        id: true,
+        token: true,
+        email: true,
+        event: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            location: true,
+            startAt: true,
+            endAt: true,
+          },
+        },
+      },
+    });
+    if (!inv || !inv.event) throw new NotFoundException('Invitation not found');
+
+    const ev = inv.event;
+    const uid = `${ev.id}-${inv.token}`;
+    const dtStamp =
+      new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+    const dtStart =
+      ev.startAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+    const dtEnd =
+      ev.endAt.toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+
+    // Organizer: prefer MAIL_FROM or fall back to calendar owner (if available via join)
+    const rawMailFrom = process.env.MAIL_FROM ?? undefined;
+    let organizerEmail: string | undefined = undefined;
+    let organizerCN: string | undefined = undefined;
+    if (rawMailFrom) {
+      const m = rawMailFrom.match(/<([^>]+)>/);
+      if (m) organizerEmail = m[1];
+      else if (rawMailFrom.includes('@')) organizerEmail = rawMailFrom;
+      const nameMatch = rawMailFrom.match(/^(.*?)\s*</);
+      if (nameMatch && nameMatch[1].trim()) organizerCN = nameMatch[1].trim();
+    }
+
+    const organizerLine = organizerEmail
+      ? organizerCN
+        ? `ORGANIZER;CN=${organizerCN}:mailto:${organizerEmail}`
+        : `ORGANIZER:mailto:${organizerEmail}`
+      : null;
+
+    const attendeeLine = `ATTENDEE;RSVP=TRUE:mailto:${inv.email}`;
+
+    const icsLines = [
+      'BEGIN:VCALENDAR',
+      'METHOD:REQUEST',
+      'VERSION:2.0',
+      'PRODID:-//calendar-clone//EN',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${dtStamp}`,
+      `SUMMARY:${(ev.title ?? 'Event').replace(/\r?\n/g, ' ')}`,
+      ev.description
+        ? `DESCRIPTION:${String(ev.description).replace(/\r?\n/g, '\\n')}`
+        : null,
+      ev.location ? `LOCATION:${String(ev.location)}` : null,
+      organizerLine,
+      attendeeLine,
+      'SEQUENCE:0',
+      'STATUS:CONFIRMED',
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ]
+      .filter(Boolean)
+      .join('\r\n');
+    return icsLines;
+  }
+
+  async rsvpByToken(
+    token: string,
+    rsvp: 'accepted' | 'declined' | 'tentative',
+  ) {
+    const inv = await this.prisma.invitation.findUnique({
+      where: { token },
+      select: { id: true, eventId: true, email: true, expiresAt: true },
+    });
+    if (!inv) throw new NotFoundException('Invitation not found');
+    if (inv.expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Invitation expired');
+    }
+
+    // update attendee
+    const updateResult = await this.prisma.eventAttendee.updateMany({
+      where: { eventId: inv.eventId, email: inv.email },
+      data: { rsvp },
+    });
+    // Also update any attendee rows in recipient copies (events in the
+    // recipient's own calendar) so their local copy reflects the RSVP.
+    try {
+      const masterEv = await this.prisma.event.findUnique({
+        where: { id: inv.eventId },
+        select: {
+          title: true,
+          startAt: true,
+          endAt: true,
+          id: true,
+          color: true,
+        },
+      });
+      if (masterEv) {
+        // find candidate copies in recipient calendars (match by owner email + same title + startAt)
+        const copies = await this.prisma.event.findMany({
+          where: {
+            title: masterEv.title,
+            startAt: masterEv.startAt,
+            calendar: { owner: { email: inv.email } },
+          },
+          select: { id: true, guests: true },
+        });
+
+        // Update attendee rows for those copies (if any) so the recipient's
+        // local copy has its attendee row updated to the chosen RSVP.
+        try {
+          const copyIds = copies.map((c) => c.id).filter(Boolean);
+          if (copyIds.length > 0) {
+            await this.prisma.eventAttendee.updateMany({
+              where: { eventId: { in: copyIds }, email: inv.email },
+              data: { rsvp },
+            });
+          }
+        } catch (innerUpdate) {
+          console.error(
+            'Failed to update attendee rows on recipient copies',
+            innerUpdate,
+          );
+        }
+
+        for (const c of copies) {
+          try {
+            const existingRaw = c.guests as unknown;
+            const lighter = this.computeLighterColor(
+              masterEv.color ?? undefined,
+            );
+            const base: Record<string, unknown> =
+              existingRaw && typeof existingRaw === 'object'
+                ? { ...(existingRaw as Record<string, unknown>) }
+                : {};
+            if (!('lighterColor' in base) && lighter)
+              base['lighterColor'] = lighter;
+            base['rsvp'] = rsvp;
+            base['invitedEmail'] =
+              (base['invitedEmail'] as string | undefined) ?? inv.email;
+            const nextMeta: Record<string, unknown> = base;
+            await this.prisma.event.update({
+              where: { id: c.id },
+              data: { guests: nextMeta as Prisma.InputJsonValue },
+            });
+          } catch (inner) {
+            console.error(
+              'Failed to write RSVP into recipient copy guests JSON',
+              inner,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.error(
+        'Failed to update recipient copies guests JSON for RSVP',
+        e,
+      );
+    }
+
+    // If attendee accepted and the recipient is a registered user, create an
+    // event copy in their default calendar so it appears in their calendar UI.
+    if (rsvp === 'accepted') {
+      try {
+        const ev = await this.prisma.event.findUnique({
+          where: { id: inv.eventId },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            location: true,
+            startAt: true,
+            endAt: true,
+            allDay: true,
+            startDate: true,
+            endDate: true,
+            timeZone: true,
+            color: true,
+            visibility: true,
+            busyStatus: true,
+            // include meeting fields so accepted recipients receive the join link on their copy
+            meetingProvider: true,
+            meetingUrl: true,
+            meetingData: true,
+          },
+        });
+        if (ev) {
+          const user = await this.prisma.user.findUnique({
+            where: { email: inv.email },
+            select: { id: true, email: true },
+          });
+          if (user) {
+            const cal = await this.calendars.ensureDefaultCalendar(user.id);
+            // avoid creating obvious duplicates: same title + same startAt
+            const exists = await this.prisma.event.findFirst({
+              where: {
+                calendarId: cal.id,
+                title: ev.title,
+                startAt: ev.startAt,
+              },
+              select: { id: true },
+            });
+            if (!exists) {
+              const lighter = this.computeLighterColor(ev.color ?? undefined);
+              type InvitationMeta2 = {
+                invitedEmail?: string;
+                lighterColor?: string | null;
+                rsvp?: string | undefined;
+              };
+              const invitationMeta: InvitationMeta2 = {
+                invitedEmail: inv.email,
+                lighterColor: lighter,
+              };
+              const created = await this.prisma.event.create({
+                data: {
+                  calendarId: cal.id,
+                  title: ev.title,
+                  description: ev.description,
+                  location: ev.location,
+                  allDay: ev.allDay,
+                  startAt: ev.startAt,
+                  endAt: ev.endAt,
+                  startDate: ev.startDate ?? null,
+                  endDate: ev.endDate ?? null,
+                  timeZone: ev.timeZone ?? undefined,
+                  color: ev.color ?? undefined,
+                  visibility: ev.visibility ?? undefined,
+                  busyStatus: ev.busyStatus ?? undefined,
+                  // copy meeting fields so accepted recipients also see the join link
+                  meetingProvider: ev.meetingProvider ?? undefined,
+                  meetingUrl: ev.meetingUrl ?? undefined,
+                  meetingData: ev.meetingData ?? undefined,
+                  // store invitation metadata so UI can show lighter bg/stripe
+                  guests: invitationMeta as Prisma.InputJsonValue,
+                },
+                select: { id: true },
+              });
+
+              // create attendee for the new event and mark accepted
+              await this.prisma.eventAttendee.create({
+                data: {
+                  event: { connect: { id: created.id } },
+                  email: inv.email,
+                  rsvp,
+                },
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // Non-fatal: if anything goes wrong creating the recipient copy we still
+        // want to treat RSVP as successful. Log for debugging.
+        console.error('Failed to create event copy for recipient on RSVP', err);
+      }
+    }
+
+    console.info('RSVP recorded', {
+      token,
+      eventId: inv.eventId,
+      email: inv.email,
+      rsvp,
+      updatedCount: updateResult.count,
+    });
+
+    // Mark the original invitation as delivered when the recipient follows the RSVP link.
+    // This mirrors the expected test behavior: after a recipient uses the token the
+    // invitation status should reflect delivery/interacting with the invitation.
+    try {
+      await this.prisma.invitation.update({
+        where: { id: inv.id },
+        data: { status: 'delivered' },
+      });
+    } catch (e) {
+      console.error(
+        'Failed to update invitation status to delivered on RSVP',
+        e,
+      );
+    }
+
+    return { ok: true, updatedCount: updateResult.count };
+  }
 }

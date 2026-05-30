@@ -81,6 +81,10 @@ export class CalendarsService {
   // ── Utility ──────────────────────────────────────────────────────────
 
   async ensureDefaultCalendar(userId: string) {
+    // Make sure the user actually exists — avoid a Prisma P2003 foreign-key error
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
     const existing = await this.prisma.calendar.findFirst({
       where: { ownerId: userId },
       orderBy: { createdAt: 'asc' },

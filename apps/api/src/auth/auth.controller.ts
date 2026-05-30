@@ -90,4 +90,24 @@ export class AuthController {
   me(@Req() req: Request & { user?: AuthUser }) {
     return { ok: true, user: req.user };
   }
+
+  @Get('demo')
+  async demoLogin(@Res() res: Response) {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).send('Not found');
+    }
+
+    const { jwt } = await this.auth.createDemoToken();
+    const cookieName = process.env.COOKIE_NAME ?? 'access_token';
+    res.cookie(cookieName, jwt, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+    return res.redirect(webOrigin);
+  }
 }

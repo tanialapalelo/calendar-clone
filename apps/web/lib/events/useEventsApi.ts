@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  normalizeRuleOnly,
   apiEventToCalendarEvent,
   createEvent,
-  listEvents,
-  updateEvent,
   deleteEvent,
+  type GuestInput,
+  listEvents,
+  normalizeGuestsToStrings,
+  normalizeRuleOnly,
   type RecurrenceScope,
+  updateEvent,
 } from '@/lib/api/events';
+import { useCurrentUser } from '@/lib/auth/useCurrentUser';
 import { ApiError } from '@/lib/api/client';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +42,7 @@ function getInstanceId(event: CalendarEvent): string | null {
 // ---------------------------------------------------------------------------
 
 export function useEventsApi(range: { from: Date; to: Date }) {
+  const currentUser = useCurrentUser();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [unauthorized, setUnauthorized] = useState(false);
@@ -48,7 +52,8 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     try {
       const data = await listEvents(range);
       setUnauthorized(false);
-      setEvents(data.map(apiEventToCalendarEvent));
+      const email = currentUser.status === 'authenticated' ? currentUser.user.email : undefined;
+      setEvents(data.map((e) => apiEventToCalendarEvent(e, email)));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setUnauthorized(true);
@@ -61,11 +66,36 @@ export function useEventsApi(range: { from: Date; to: Date }) {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, currentUser]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Helper: coerce various runtime shapes into the GuestInput[] expected by
+  // the API helpers. Accepts arrays of strings, objects with `email`, or
+  // returns undefined when nothing sensible can be derived.
+  const coerceToGuestInputArray = (g: unknown): GuestInput[] | undefined => {
+    if (!g) return undefined;
+    if (!Array.isArray(g)) return undefined;
+    const out: GuestInput[] = [];
+    for (const it of g) {
+      if (typeof it === 'string') {
+        out.push(it);
+        continue;
+      }
+      if (it && typeof it === 'object') {
+        const obj = it as Record<string, unknown>;
+        if (typeof obj.email === 'string') {
+          const permissions = Array.isArray(obj.permissions)
+            ? (obj.permissions as unknown[]).map(String)
+            : undefined;
+          out.push({ email: String(obj.email), permissions });
+        }
+      }
+    }
+    return out.length ? out : undefined;
+  };
 
   const addEvent = useCallback(
     async (evt: CalendarEvent) => {
@@ -75,7 +105,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           title: evt.title,
           startAt: evt.start,
           endAt: evt.end,
-          allDay: !!evt.allDay,
+          allDay: evt.allDay,
           startDate: evt.allDay ? evt.start.slice(0, 10) : undefined,
           endDate: evt.allDay ? evt.end.slice(0, 10) : undefined,
           description: evt.description,
@@ -85,10 +115,16 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
           timeZone: tz,
           recurrenceTimeZone: tz,
-          guests: evt.guests,
+          // allow guests to be either string[] or { email, permissions[] }[]; pass through normalized to string[]
+          guests: normalizeGuestsToStrings(coerceToGuestInputArray(evt.guests)) ?? undefined,
           notifications: evt.notifications,
           visibility: evt.visibility,
           busyStatus: evt.busyStatus,
+          // Meeting-related fields (allow frontend to request generation or supply a URL)
+          addMeeting: evt.addMeeting ?? undefined,
+          meetingProvider: evt.meetingProvider ?? undefined,
+          meetingUrl: evt.meetingUrl ?? undefined,
+          meetingData: evt.meetingData ?? undefined,
         });
         await refresh();
       } catch (err) {
@@ -116,17 +152,23 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             title: next.title,
             startAt: next.start,
             endAt: next.end,
-            allDay: !!next.allDay,
+            allDay: next.allDay,
             startDate: next.allDay ? next.start.slice(0, 10) : undefined,
             endDate: next.allDay ? next.end.slice(0, 10) : undefined,
             description: next.description ?? '',
             location: next.location ?? '',
             color: next.color,
             recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
-            guests: next.guests,
+            // allow guests with permissions (frontend passes objects) or plain strings
+            guests: normalizeGuestsToStrings(coerceToGuestInputArray(next.guests)) ?? undefined,
             notifications: next.notifications,
             visibility: next.visibility,
             busyStatus: next.busyStatus,
+            // propagate meeting flags if present
+            addMeeting: next.addMeeting ?? undefined,
+            meetingProvider: next.meetingProvider ?? undefined,
+            meetingUrl: next.meetingUrl ?? undefined,
+            meetingData: next.meetingData ?? undefined,
           },
           scope,
         );

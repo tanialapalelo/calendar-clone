@@ -330,6 +330,8 @@ Services:
 
 ## Milestones
 
+The completed milestones are listed below. Further planned milestones have been moved to `docs/TODO.md` so they can be tackled separately and tracked as individual tasks.
+
 ### ✅ Milestone 1 — UI prototype
 - Calendar UI: month / week / day / year views
 - Sidebar with mini-calendar + calendar visibility toggles
@@ -377,34 +379,6 @@ Services:
 - CodeQL weekly security scan (`security-extended`)
 - Dependabot with grouped weekly minor/patch updates
 - Required status checks on `main`
-
-### 🚧 Milestone 8 — Observability (next)
-- Structured logging (Pino + `nestjs-pino`) with request IDs
-- Sentry FE + BE for error tracking
-- `/v1/healthz` (liveness) and `/v1/readyz` (readiness)
-- Prometheus metrics at `/v1/metrics`
-- Web Vitals dispatched from the browser
-
-### 🔜 Milestone 9 — Hardening
-- Refresh token rotation
-- Tiered rate limiting (auth / search / default)
-- Soft delete + audit log
-- Full-text search via Postgres `tsvector`
-- Split `EventsService` into 3 narrower services
-
-### 🔜 Milestone 10 — Real-user features
-- Email invites with `.ics` attachment (Resend)
-- BullMQ + Redis worker for scheduled reminders + Web Push
-- Attendees + RSVP flow
-- Jitsi meeting links embedded in event detail
-- Drag-to-create / move / resize events
-
-### 🔜 Milestone 11 — Portfolio polish
-- ADRs in `docs/adr/`
-- Public demo URL with seeded data
-- Architecture diagram + screencast in README
-
----
 
 ## License
 

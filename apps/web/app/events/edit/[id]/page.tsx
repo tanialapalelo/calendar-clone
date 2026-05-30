@@ -4,16 +4,18 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { EventFullscreenForm } from '@/components/calendar/events/forms/EventFullscreenForm';
 import { EventPageShell } from '@/components/calendar/events/EventPageShell';
+import type { GuestInput, RecurrenceScope } from '@/lib/api/events';
 import {
   apiEventToCalendarEvent,
   deleteEvent,
   getEvent,
+  normalizeGuestsToStrings,
   normalizeRuleOnly,
   updateEvent,
 } from '@/lib/api/events';
 import { ApiError } from '@/lib/api/client';
 import { RecurrenceScopeModal } from '@/components/calendar/events/RecurrenceScopeModal';
-import type { RecurrenceScope } from '@/lib/api/events';
+import { useToast } from '@/components/ui/Toast';
 
 function getInstanceId(event: CalendarEvent): string | null {
   if (event.id.includes('@')) return event.id;
@@ -34,6 +36,7 @@ export default function EditEventPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
 
   const id = String(params?.id ?? '');
   const occ = searchParams.get('occ');
@@ -92,17 +95,26 @@ export default function EditEventPage() {
           location: updated.location ?? '',
           color: updated.color ?? null,
           recurrenceRule: normalizeRuleOnly(updated.recurrence ?? null),
-          guests: updated.guests ?? [],
+          guests: normalizeGuestsToStrings(updated.guests as unknown as Array<GuestInput>) ?? [],
           notifications: updated.notifications ?? [],
           visibility: updated.visibility ?? 'default',
           busyStatus: updated.busyStatus ?? 'busy',
+          // Meeting-related fields - allow edit page to request generation or provide explicit URL
+          addMeeting: updated.addMeeting ?? undefined,
+          meetingProvider: updated.meetingProvider ?? undefined,
+          meetingUrl: updated.meetingUrl ?? undefined,
+          meetingData: updated.meetingData ?? undefined,
         },
         scope,
       );
+      showToast('Event updated', 'success');
       router.push('/');
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) router.replace('/login');
       else console.error('updateEvent failed', err);
+      showToast('Failed to update event', 'error');
+      return false;
     }
   };
 
@@ -122,10 +134,14 @@ export default function EditEventPage() {
 
     try {
       await deleteEvent(String(targetId), scope);
+      showToast('Event deleted', 'success');
       router.push('/');
+      return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) router.replace('/login');
       else console.error('deleteEvent failed', err);
+      showToast('Failed to delete event', 'error');
+      return false;
     }
   };
 

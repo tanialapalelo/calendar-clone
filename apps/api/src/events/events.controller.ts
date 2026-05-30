@@ -4,13 +4,16 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtCookieGuard } from '../auth/jwt-cookie.guard';
 import { EventsService } from './events.service';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -106,5 +109,40 @@ export class EventsController {
   ) {
     const userId = req.user!.sub;
     return this.events.deleteForUser(userId, id, parseScope(scope));
+  }
+
+  @Post(':id/invitations')
+  @UseGuards(JwtCookieGuard)
+  async createInvitations(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Body('emails')
+    emails: Array<string | { email: string; permissions?: unknown }>,
+  ) {
+    const userId = req.user!.sub;
+    return this.events.createInvitations(userId, id, emails);
+  }
+}
+
+@Controller('invitations')
+export class InvitationsController {
+  constructor(private readonly events: EventsService) {}
+
+  @Post(':token/rsvp')
+  @HttpCode(200)
+  async rsvp(
+    @Param('token') token: string,
+    @Body('rsvp') rsvp: 'accepted' | 'declined' | 'tentative',
+  ) {
+    return this.events.rsvpByToken(token, rsvp);
+  }
+
+  @Get(':token/ics')
+  async getIcs(@Param('token') token: string, @Res() res: Response) {
+    // Serve a simple ICS file for the invitation token
+    const ics = await this.events.getIcsForToken(token);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="invite.ics"`);
+    res.send(ics);
   }
 }

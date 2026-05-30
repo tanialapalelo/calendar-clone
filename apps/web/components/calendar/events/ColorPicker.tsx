@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, CSSProperties, useEffect } from 'react';
+import { CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { PALETTE as DEFAULT_PALETTE } from '@/constants';
 import { CheckIcon, ChevronDownIcon } from 'lucide-react';
 
@@ -115,7 +115,7 @@ export default function ColorPicker({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={toggle}
-        className="inline-flex items-center gap-2 rounded-md bg-gray-100 p-3 hover:bg-gray-200"
+        className="inline-flex items-center gap-2 rounded-md bg-gray-100 p-2 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
       >
         <span
           aria-hidden
@@ -127,7 +127,7 @@ export default function ColorPicker({
 
       {open && (
         <div ref={panelRef} style={popupStyle} role="menu" aria-label="Color palette">
-          <div className="rounded-lg bg-white p-3 shadow-lg ring-1 ring-black/5">
+          <div className="rounded-lg bg-white p-3 shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:shadow-black/20 dark:ring-white/10">
             <div className="grid grid-cols-2 gap-3">
               {palette.map((hex) => {
                 const isSelected = selected === hex.toLowerCase();

@@ -26,7 +26,26 @@ export class CalendarsController {
   @Get()
   async list(@Req() req: RequestWithUser) {
     const userId = req.user!.sub;
-    await this.calendars.ensureDefaultCalendar(userId);
+    try {
+      // Ensure default calendar exists for the user. If the user record is missing
+      // (possible with stale auth cookie), surface a safe empty list instead of
+      // throwing an internal/top-level error we display to users.
+      await this.calendars.ensureDefaultCalendar(userId);
+    } catch (err: unknown) {
+      // If the user truly doesn't exist return an empty list so the UI can handle
+      // unauthenticated state gracefully. Re-throw other unexpected errors.
+      // (NotFoundException uses message 'User not found')
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'message' in err &&
+        (err as { message?: unknown }).message === 'User not found'
+      ) {
+        return [];
+      }
+      throw err;
+    }
+
     return this.calendars.listForUser(userId);
   }
 

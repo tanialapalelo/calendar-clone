@@ -3,17 +3,17 @@
 import { addDays, format, startOfWeek } from 'date-fns';
 import { ViewSwitcher } from './ViewSwitcher';
 import {
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   MenuIcon,
   SearchIcon,
-  ChevronDownIcon,
 } from 'lucide-react';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { SettingsMenu } from '@/components/ui/SettingsMenu';
 import { apiFetch } from '@/lib/api/client';
-import { apiEventToCalendarEvent, type ApiEvent } from '@/lib/api/events';
+import { type ApiEvent, apiEventToCalendarEvent } from '@/lib/api/events';
 import { DatePickerPopover } from '@/components/calendar/DatePickerPopover';
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -35,13 +35,13 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
   const debouncedQuery = useDebounce(query, 300);
 
   useEffect(() => {
-  if (!debouncedQuery.trim()) return;
+    if (!debouncedQuery.trim()) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching is a legitimate external-system sync; loading flag must reflect the in-flight request
     setLoading(true);
     const qs = new URLSearchParams({ q: debouncedQuery });
     apiFetch<ApiEvent[]>(`/v1/events/search?${qs.toString()}`)
       .then((data) => {
-        setResults(data.map(apiEventToCalendarEvent));
+        setResults(data.map((d) => apiEventToCalendarEvent(d)));
         setOpen(true);
       })
       .catch(() => setResults([]))
@@ -93,7 +93,7 @@ function SearchBar(props: { onOpenEvent: (id: string, rect: DOMRect) => void }) 
       </div>
 
       {open && (
-        <div className="absolute top-10 left-0 z-50 w-80 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute top-10 left-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-80 dark:border-gray-700 dark:bg-gray-800">
           {loading && <p className="px-4 py-3 text-sm text-gray-400">Searching…</p>}
           {!loading && results.length === 0 && (
             <p className="px-4 py-3 text-sm text-gray-400">No results found</p>

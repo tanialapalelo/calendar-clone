@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { XIcon } from 'lucide-react';
 import { compareEventsInDayBucket, isCrossDayTimedEventOnCalendar } from '@/lib/events/day';
 import { getEventRangeMs } from '@/lib/events/range';
+import { resolveRsvpVisuals } from '@/components/calendar/events/rsvpVisuals';
 
 type Props = {
   open: boolean;
@@ -96,25 +97,25 @@ export function DayEventsPopover({
     <div className="fixed inset-0 z-[55]">
       <div
         ref={popoverRef}
-        className="fixed w-[250px] rounded-3xl bg-white shadow-xl dark:bg-[var(--gcal-bg-hover,#f1f3f4)] dark:text-gray-300"
-        style={{ left: position.left, top: position.top }}
+        className={[
+          'fixed rounded-xl bg-[#f8fafd] p-1 text-gray-900 shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-100/5',
+          'w-[calc(100vw-2rem)] max-w-xs sm:w-[250px]',
+        ].join(' ')}
+        style={{ left: '50%', transform: 'translateX(-50%)', top: position.top }}
         role="dialog"
         aria-modal="true"
       >
         <div className="max-h-fit overflow-auto px-2 py-2">
           <div className="flex w-full items-center justify-between px-3 pb-2">
-            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-gray-400">
+            <div className="mx-auto flex w-fit flex-col items-center justify-center text-gray-700 dark:text-white">
               <span className="uppercase">{format(date, 'EEE')}</span>
               <span
-                className={[
-                  'px-3 py-1.5 font-bold',
-                  isSameDay(today, date) ? 'rounded-full bg-[#0B57D0] text-white' : '',
-                ].join(' ')}
+                className={`px-3 py-1.5 font-bold ${isSameDay(today, date) ? 'rounded-full bg-[var(--gcal-blue)] text-white' : ''}`}
               >
                 {format(date, 'd')}
               </span>
             </div>
-            <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-gray-100">
+            <button type="button" onClick={onClose} className="rounded-full p-1 hover:bg-gray-700">
               <XIcon size={16} />
             </button>
           </div>
@@ -133,14 +134,14 @@ export function DayEventsPopover({
 
                 const isBar = ev.allDay || isCrossDayTimedEventOnCalendar(ev);
 
-                const leftCap = continuesFromPrev ? 'rounded-l-full ' : 'rounded-l-md';
-                const rightCap = continuesToNext ? ' rounded-r-full' : 'rounded-r-md';
+                const leftCap = continuesFromPrev ? 'rounded-l-md ' : 'rounded-l-full';
+                const rightCap = continuesToNext ? ' rounded-r-md' : 'rounded-r-full';
 
-                const eventColor = ev.color || '#0090d6';
+                const rv = resolveRsvpVisuals(ev);
+                const { background, borderLeft, titleClass } = rv;
                 const containerClass = isBar
-                  ? `text-white hover:opacity-80 ${leftCap} ${rightCap}`
+                  ? `${leftCap} ${rightCap} ${rv.textColorClass} gcal-pill`
                   : 'rounded-md hover:bg-gray-100 text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700';
-
                 const openId = ev.id;
 
                 // Only show time for non-bar (timed single-day) events
@@ -155,19 +156,19 @@ export function DayEventsPopover({
                         const rect = clickEvt.currentTarget.getBoundingClientRect();
                         onPickEvent(openId, rect);
                       }}
-                      style={{ background: !isBar ? '' : eventColor }}
+                      style={{ background: !isBar ? '' : background, borderLeft }}
                     >
                       <div className="flex items-center gap-2 truncate text-xs font-medium">
                         {!isBar && (
                           <>
                             <span
                               className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{ background: ev.color ?? '#039BE5' }}
+                              style={{ background: ev.color ?? 'var(--gcal-blue)' }}
                             />
                             <span>{format(evStart, 'hh:mm a')}</span>
                           </>
                         )}
-                        {ev.title}
+                        <span className={`${titleClass}`}>{ev.title}</span>
                       </div>
                     </button>
                   </li>

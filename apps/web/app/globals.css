@@ -13,7 +13,7 @@
   --gcal-blue-dark: #0b57d0;
   --gcal-text: #3c4043;
   --gcal-text-muted: #70757a;
-  --gcal-bg-hover: #f1f3f4;
+  --gcal-bg-hover: #d1d5dc;
   --gcal-today: #1a73e8;
 }
 
@@ -31,9 +31,4 @@
   --gcal-text-muted: #9aa0a6;
   --gcal-bg-hover: #2a2b2f;
   --gcal-bg-app: #1f1f1f;
-}
-
-html, body {
-  background-color: var(--gcal-bg-app);
-  color: var(--gcal-text);
 }

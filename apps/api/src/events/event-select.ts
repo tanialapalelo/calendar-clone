@@ -20,8 +20,15 @@ export const EVENT_SELECT = {
   notifications: true,
   visibility: true,
   busyStatus: true,
+  // meeting fields
+  meetingProvider: true,
+  meetingUrl: true,
+  meetingData: true,
   createdAt: true,
   updatedAt: true,
+  attendees: {
+    select: { email: true, name: true, rsvp: true, permissions: true },
+  },
 } satisfies Prisma.EventSelect;
 
 export type EventRow = Prisma.EventGetPayload<{ select: typeof EVENT_SELECT }>;
@@ -44,6 +51,10 @@ export const EXCEPTION_SELECT = {
   notifications: true,
   visibility: true,
   busyStatus: true,
+  // meeting override support
+  meetingProvider: true,
+  meetingUrl: true,
+  meetingData: true,
 } satisfies Prisma.EventRecurrenceExceptionSelect;
 
 export type ExceptionRow = Prisma.EventRecurrenceExceptionGetPayload<{
@@ -74,7 +85,19 @@ export type EventInstance = {
   recurrenceRule?: string | null;
   recurrenceTimeZone?: string | null;
 
+  // meeting fields
+  meetingProvider?: string | null;
+  meetingUrl?: string | null;
+  meetingData?: unknown;
+
   recurringEventId: string | null;
   originalStartAt: string | null; // ISO UTC
   isRecurringInstance: boolean;
+
+  attendees?: {
+    email: string;
+    name?: string | null;
+    rsvp: string;
+    permissions?: unknown;
+  }[];
 };
