@@ -48,6 +48,9 @@ jobs:
     env:
       # API test DB — matches the .env.test.example shape
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/calendar_clone_test?schema=public
+      # Direct DB URL required by prisma.schema's `directUrl = env("DIRECT_URL")`.
+      # In CI we connect directly to the Postgres service, so reuse DATABASE_URL.
+      DIRECT_URL: ${{ env.DATABASE_URL }}
       JWT_SECRET: test-secret-for-ci-do-not-use-in-prod
       COOKIE_NAME: access_token
       # Turbo telemetry off in CI — privacy + faster startup
