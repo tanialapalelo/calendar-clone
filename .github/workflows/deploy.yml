@@ -5,10 +5,12 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Set to "true" to apply migrations. Default false = dry-run / pre-check only.'
+        required: false
+        default: 'false'
 
 permissions:
   contents: read
@@ -17,9 +19,9 @@ permissions:
 
 jobs:
   migrate:
-    name: Run Prisma Migrations (main only)
+    name: Run Prisma Migrations (manual)
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,17 +40,38 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      - name: "Pre-check: versions + prisma migrate status"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "node: $(node -v)"
+          echo "pnpm (cli): $(pnpm -v || echo 'pnpm not found')"
+          pnpm --version || true
+          echo "prisma (cli):"
+          pnpm -C apps/api exec prisma --version || true
+          if [ -n "$DATABASE_URL" ]; then
+            DB_HOST=$(echo "$DATABASE_URL" | sed -E 's#.*@([^:/]+).*#\1#') || true
+            echo "DB host: ${DB_HOST}"
+          else
+            echo "DATABASE_URL not set"
+          fi
+          echo "Running: prisma migrate status (dry-run)"
+          pnpm -C apps/api exec prisma migrate status --schema=prisma/schema.prisma || true
+
       - name: Prisma generate (ensure client exists)
+        if: ${{ github.event.inputs.apply == 'true' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter=api exec prisma generate
 
       - name: Run prisma migrate deploy
+        if: ${{ github.event.inputs.apply == 'true' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter=api exec prisma migrate deploy
 
       - name: Run prisma db seed (if any)
+        if: ${{ github.event.inputs.apply == 'true' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter=api exec prisma db seed || echo "No seed script or seed failed"
