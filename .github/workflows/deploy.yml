@@ -1,5 +1,9 @@
 name: CI / Deploy
 
+# Force JavaScript actions to run on Node 24 now to avoid deprecation warnings
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 on:
   push:
     branches:
@@ -12,37 +16,9 @@ permissions:
   packages: write
 
 jobs:
-  build-and-test:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.1
-
-      - name: Install deps
-        run: pnpm install --frozen-lockfile
-
-      - name: Run tests (web)
-        run: pnpm -C apps/web run test || true
-
-      - name: Run tests (api)
-        run: pnpm -C apps/api run test || true
-
   migrate:
-    name: Run Prisma Migrations
+    name: Run Prisma Migrations (main only)
     runs-on: ubuntu-latest
-    needs: build-and-test
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout
@@ -51,7 +27,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install pnpm
@@ -62,15 +38,20 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      - name: Prisma generate (ensure client exists)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm --filter=api exec prisma generate
+
       - name: Run prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: pnpm --filter=api exec prisma migrate deploy --skip-generate
+        run: pnpm --filter=api exec prisma migrate deploy
 
       - name: Run prisma db seed (if any)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: pnpm --filter=api exec prisma db seed || echo "No seed script or seed failed"
 
-      # Optional: provider-specific deploy steps (Vercel/Render) should be handled by the provider's GitHub integration
-      # You can add provider deployment steps here if you use CLI deploys (e.g., vercel action, flyctl, render deploy)
+      # Note: app deployments (Render/Vercel) should be handled by their integrations/auto-deploys.
+      # This job only runs DB migrations to avoid duplicate builds and speed up CI

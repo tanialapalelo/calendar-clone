@@ -9,6 +9,10 @@
 
 name: CI
 
+# Force JavaScript actions to run on Node 24 now to avoid deprecation warnings
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 on:
   pull_request:
     branches: [main]
@@ -56,7 +60,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install pnpm
@@ -76,6 +80,8 @@ jobs:
             ${{ runner.os }}-turbo-
 
       - name: Prisma generate
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
         run: pnpm -C apps/api exec prisma generate
 
       - name: Lint
@@ -91,6 +97,8 @@ jobs:
         run: pnpm -C apps/web test
 
       - name: Prisma migrate (test DB)
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
         run: pnpm -C apps/api exec prisma migrate deploy
 
       - name: Unit tests (api)
