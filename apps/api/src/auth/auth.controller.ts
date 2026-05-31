@@ -30,7 +30,10 @@ export class AuthController {
     // Persist it in an httpOnly cookie scoped tightly to the callback path
     res.cookie(STATE_COOKIE, state, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
+        | 'lax'
+        | 'strict'
+        | 'none',
       secure: process.env.NODE_ENV === 'production',
       path: '/v1/auth/google/callback',
       maxAge: STATE_TTL_MS,
@@ -61,17 +64,28 @@ export class AuthController {
     }
 
     // One-shot: clear the state cookie so it can't be replayed
-    res.clearCookie(STATE_COOKIE, { path: '/v1/auth/google/callback' });
+    res.clearCookie(STATE_COOKIE, {
+      httpOnly: true,
+      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
+        | 'lax'
+        | 'strict'
+        | 'none',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/v1/auth/google/callback',
+    });
 
     const { jwt } = await this.auth.handleGoogleCallback(code);
 
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
     res.cookie(cookieName, jwt, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
+        | 'lax'
+        | 'strict'
+        | 'none',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
     const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
@@ -81,7 +95,15 @@ export class AuthController {
   @Post('logout')
   logout(@Res() res: Response) {
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    res.clearCookie(cookieName, { path: '/' });
+    res.clearCookie(cookieName, {
+      httpOnly: true,
+      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
+        | 'lax'
+        | 'strict'
+        | 'none',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+    });
     return res.json({ ok: true });
   }
 
@@ -101,7 +123,10 @@ export class AuthController {
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
     res.cookie(cookieName, jwt, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
+        | 'lax'
+        | 'strict'
+        | 'none',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       maxAge: 1000 * 60 * 60 * 24 * 7,

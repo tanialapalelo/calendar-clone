@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
+    "vercel-build": "pnpm install --frozen-lockfile && pnpm -C apps/web run build",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "format:write": "prettier . --write",
