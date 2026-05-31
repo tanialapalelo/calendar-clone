@@ -115,12 +115,25 @@ export class AuthController {
 
   @Get('demo')
   async demoLogin(@Res() res: Response) {
-    if (process.env.NODE_ENV === 'production') {
+    // By default the demo endpoint is disabled in production builds for safety.
+    // To explicitly enable demo on a deployed environment set ALLOW_DEMO=true (or 1).
+    const allowDemo =
+      (process.env.ALLOW_DEMO ?? '').toLowerCase() === 'true' ||
+      process.env.ALLOW_DEMO === '1';
+
+    if (process.env.NODE_ENV === 'production' && !allowDemo) {
       return res.status(404).send('Not found');
     }
 
     const { jwt } = await this.auth.createDemoToken();
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
+    // Prevent caching of the demo redirect/response to avoid 304 from caches/proxies
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    );
+    res.setHeader('Pragma', 'no-cache');
+
     res.cookie(cookieName, jwt, {
       httpOnly: true,
       sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
