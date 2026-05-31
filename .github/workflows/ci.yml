@@ -61,12 +61,28 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.17.1
+
+      - name: Ensure pnpm available (verify + corepack fallback)
+        run: |
+          set -e
+          if command -v pnpm >/dev/null 2>&1; then
+            echo "pnpm already available: $(pnpm -v)"
+          else
+            echo "pnpm not found; trying corepack fallback..."
+            corepack enable || true
+            corepack prepare pnpm@10.17.1 --activate || true
+            if command -v pnpm >/dev/null 2>&1; then
+              echo "pnpm now available: $(pnpm -v)"
+            else
+              echo "ERROR: pnpm still not found after fallback" >&2
+              exit 1
+            fi
+          fi
 
       - name: Install deps
         run: pnpm install --frozen-lockfile
