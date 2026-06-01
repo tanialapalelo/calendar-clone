@@ -1,5 +1,6 @@
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? 'http://localhost:3001';
+// Empty string → relative URLs → Next.js rewrites proxy /v1/* to the API server,
+// keeping cookies first-party on the frontend domain.
+export const API_URL = '';
 
 // ---------------------------------------------------------------------------
 // ApiError — thrown by apiFetch on non-2xx responses.
