@@ -45,7 +45,16 @@ export default function CalendarPageClient() {
   } = useCalendarsApi();
 
   // ── Events data + CRUD ─────────────────────────────────────────────────────
-  const { events, addEvent, updateEvent, removeEvent, unauthorized, loading } = useEventsApi(range);
+  const {
+    events,
+    addEvent,
+    importEvents,
+    updateEvent,
+    removeEvent,
+    unauthorized,
+    loading,
+    mutating,
+  } = useEventsApi(range);
 
   // ── Filter events by visible calendars ─────────────────────────────────────
   const visibleEvents = useMemo(() => {
@@ -117,19 +126,21 @@ export default function CalendarPageClient() {
   };
 
   const handleImportCalendar = async (file: File) => {
-    const text = await file.text();
-    const imported = importEventsFromICS(text);
-    let failed = 0;
-    for (const ev of imported) {
-      try {
-        await addEvent(ev);
-      } catch {
-        failed++;
+    try {
+      const text = await file.text();
+      const imported = importEventsFromICS(text);
+      if (imported.length === 0) {
+        showToast('No events found in file', 'info');
+        return;
       }
+      // importEvents creates all events then does a single refresh — no per-event skeleton flash
+      const failed = await importEvents(imported);
+      if (failed > 0) showToast(`${failed} of ${imported.length} event(s) failed to import`, 'error');
+      else showToast(`Imported ${imported.length} event(s)`, 'success');
+    } catch (err) {
+      console.error('[handleImportCalendar]', err);
+      showToast('Failed to import calendar file', 'error');
     }
-    if (failed > 0) showToast(`${failed} event(s) failed to import`, 'error');
-    else if (imported.length > 0) showToast(`Imported ${imported.length} event(s)`, 'success');
-    else showToast('No events found in file', 'info');
   };
 
   // ── CRUD wrappers with toast feedback ─────────────────────────────────────
@@ -165,6 +176,10 @@ export default function CalendarPageClient() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
+      {/* Thin progress bar so users know a CRUD op is in flight */}
+      {mutating && (
+        <div className="fixed top-0 left-0 z-[100] h-0.5 w-full animate-pulse bg-[#0B57D0]" />
+      )}
       <CalendarShell
         view={view}
         date={date}

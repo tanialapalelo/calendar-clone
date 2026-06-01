@@ -74,7 +74,7 @@ export function ViewSwitcher({ view, onChange }: Props) {
       {open && (
         <div
           role="menu"
-          className="absolute top-full right-0 z-40 mt-2 w-[calc(100vw-2rem)] max-w-xs overflow-hidden rounded-xl border border-[var(--gcal-border,#dadce0)] bg-white py-1 shadow-xl sm:w-44 dark:border-gray-700 dark:bg-gray-800"
+          className="absolute top-full right-0 z-40 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--gcal-border,#dadce0)] bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
         >
           {viewOptions.map((option) => {
             const active = view === option.value;

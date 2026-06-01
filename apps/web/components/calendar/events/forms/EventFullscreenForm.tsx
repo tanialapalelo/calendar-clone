@@ -9,6 +9,7 @@ import {
   BriefcaseBusinessIcon,
   CalendarIcon,
   ItalicIcon,
+  Loader2Icon,
   MapPinIcon,
   NotebookPenIcon,
   UnderlineIcon,
@@ -58,9 +59,9 @@ type Props = {
   event?: CalendarEvent;
   initialDate: Date;
   onClose: () => void;
-  onCreate?: (event: CalendarEvent) => void;
-  onSave?: (event: CalendarEvent) => void;
-  onDelete?: (id: string) => void;
+  onCreate?: (event: CalendarEvent) => void | Promise<unknown>;
+  onSave?: (event: CalendarEvent) => void | Promise<unknown>;
+  onDelete?: (id: string) => void | Promise<unknown>;
 };
 
 export function EventFullscreenForm({
@@ -216,11 +217,21 @@ export function EventFullscreenForm({
     };
   }, [event, initialDate]);
   const { calendars } = useCalendarsApi();
+  const [saving, setSaving] = useState(false);
+  const defaultCalendarSet = useRef(false);
   const [title, setTitle] = useState(initialValues.title);
   const [start, setStart] = useState(initialValues.start);
   const [end, setEnd] = useState(initialValues.end);
   const [allDay, setAllDay] = useState(initialValues.allDay);
   const [calendarId, setCalendarId] = useState<string>(initialValues.calendarId ?? '');
+
+  // Default to first available calendar once calendars load (only if not already set)
+  useEffect(() => {
+    if (!defaultCalendarSet.current && !calendarId && calendars.length > 0) {
+      defaultCalendarSet.current = true;
+      setCalendarId(calendars[0].id);
+    }
+  }, [calendars, calendarId]);
   // initialize addMeeting from the computed initialValues (handles edit case with meetingUrl)
   const [addMeeting, setAddMeeting] = useState(initialValues.addMeeting);
 
@@ -483,8 +494,9 @@ export function EventFullscreenForm({
     return true;
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!validateBeforeSubmit()) return;
+    setSaving(true);
 
     const payload: CalendarEvent = {
       id: crypto.randomUUID(),
@@ -559,8 +571,15 @@ export function EventFullscreenForm({
     payload.meetingData =
       (event as { meetingData?: unknown } | undefined)?.meetingData ?? undefined;
 
-    if (event) onSave?.({ ...payload, id: event.id });
-    else onCreate?.(payload);
+    try {
+      if (event) await onSave?.({ ...payload, id: event.id });
+      else await onCreate?.(payload);
+    } catch (err) {
+      console.error('[EventFullscreenForm] submit error', err);
+      setSubmitError('Failed to save event. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const recurrencePickerStartDate = (() => {
@@ -578,18 +597,18 @@ export function EventFullscreenForm({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <div className="flex w-full items-center gap-4 px-4 py-3 sm:w-2/3 sm:px-6 dark:border-gray-700">
+      <div className="flex w-full items-center gap-2 px-4 py-3 sm:w-2/3 sm:gap-4 sm:px-6 dark:border-gray-700">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+          className="shrink-0 rounded-full p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
           aria-label="Close"
         >
           <XIcon size={20} />
         </button>
 
         <input
-          className="flex-1 border-b bg-transparent text-xl text-gray-900 placeholder-gray-400 focus:border-[#0B57D0] focus:outline-none dark:text-gray-100"
+          className="min-w-0 flex-1 border-b bg-transparent text-xl text-gray-900 placeholder-gray-400 focus:border-[#0B57D0] focus:outline-none dark:text-gray-100"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Add title"
@@ -598,24 +617,27 @@ export function EventFullscreenForm({
 
         <button
           type="button"
-          onClick={submit}
-          className="rounded-full bg-[#0B57D0] px-5 py-2 text-sm font-semibold text-white hover:bg-[#044dc2] disabled:opacity-50"
+          onClick={() => void submit()}
+          disabled={saving}
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#0B57D0] px-4 py-2 text-sm font-semibold text-white hover:bg-[#044dc2] disabled:opacity-60 sm:px-5"
         >
+          {saving ? <Loader2Icon size={14} className="animate-spin" /> : null}
           Save
         </button>
 
         {event && (
           <button
             type="button"
-            onClick={() => onDelete?.(event.id)}
-            className="rounded-full bg-red-500 px-5 py-2 text-sm font-semibold text-white hover:bg-red-600 dark:hover:bg-red-900/20"
+            onClick={() => void onDelete?.(event.id)}
+            disabled={saving}
+            className="flex shrink-0 items-center gap-1.5 rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60 sm:px-5"
           >
-            Delete event
+            Delete
           </button>
         )}
       </div>
 
-      <div className="flex flex-1 overflow-auto px-6">
+      <div className="flex flex-1 flex-col overflow-auto px-6 sm:flex-row">
         <div className="flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-1 py-2">
             {/* Start date */}
@@ -856,25 +878,26 @@ export function EventFullscreenForm({
                 </div>
 
                 {/* Meeting option */}
-                <div className="flex items-center gap-4 px-2 py-1">
-                  <div className="w-5 shrink-0">
-                    <VideoIcon size={20} className="text-gray-500" />
+                <div className="flex flex-col gap-2 px-2 py-1">
+                  {/* Row 1: icon + checkbox */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-5 shrink-0">
+                      <VideoIcon size={20} className="text-gray-500" />
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={addMeeting}
+                        onChange={(e) => setAddMeeting(e.target.checked)}
+                        className="h-4 w-4 rounded accent-[#0B57D0]"
+                      />
+                      <span>Add meeting (Jitsi)</span>
+                    </label>
                   </div>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={addMeeting}
-                      onChange={(e) => setAddMeeting(e.target.checked)}
-                      className="h-4 w-4 rounded accent-[#0B57D0]"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Add meeting (Jitsi)
-                    </span>
-                  </label>
 
-                  {/* Provider + URL fields when addMeeting is enabled */}
+                  {/* Row 2: provider + URL (when addMeeting is on) */}
                   {addMeeting && (
-                    <div className="ml-4 flex items-center gap-2">
+                    <div className="ml-9 flex flex-wrap items-center gap-2">
                       <select
                         value={meetingProvider ?? 'jitsi'}
                         onChange={(e) => setMeetingProvider(e.target.value)}
@@ -889,21 +912,24 @@ export function EventFullscreenForm({
                         placeholder="Optional meeting URL"
                         value={meetingUrl}
                         onChange={(e) => setMeetingUrl(e.target.value)}
-                        className="rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                        className="min-w-0 flex-1 rounded-md bg-gray-100 px-2 py-1.5 text-sm hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                       />
                     </div>
                   )}
 
-                  {/* Also show join link in details if present */}
+                  {/* Row 3: Join meeting link */}
                   {event && apiAny?.meetingUrl && (
-                    <a
-                      href={String(apiAny.meetingUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-2 rounded-full bg-green-600 px-3 py-2 text-sm font-semibold text-white"
-                    >
-                      Join meeting
-                    </a>
+                    <div className="ml-9">
+                      <a
+                        href={String(apiAny.meetingUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700"
+                      >
+                        <VideoIcon size={14} />
+                        Join meeting
+                      </a>
+                    </div>
                   )}
                 </div>
 
@@ -968,7 +994,7 @@ export function EventFullscreenForm({
           {submitError && <p className="text-sm text-red-600">{submitError}</p>}
         </div>
 
-        <div className="w-full shrink-0 px-4 py-6 sm:w-2/5 sm:px-8 sm:py-32">
+        <div className="w-full shrink-0 border-t px-4 py-4 sm:w-2/5 sm:border-t-0 sm:px-8 sm:py-32 dark:border-gray-700">
           <h3 className="mb-3 w-fit border-b-2 border-[#0B57D0] text-sm font-semibold text-[#0B57D0] dark:text-gray-300">
             Guests
           </h3>

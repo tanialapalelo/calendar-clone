@@ -80,6 +80,18 @@ export class MailerService {
       return;
     }
 
+    // Warn clearly at startup if required env vars are missing — visible in Render logs.
+    if (
+      !process.env.MAIL_HOST ||
+      !process.env.MAIL_USER ||
+      !process.env.MAIL_PASS
+    ) {
+      this.logger.warn(
+        'SMTP env vars missing (MAIL_HOST / MAIL_USER / MAIL_PASS). ' +
+          'Emails will NOT be sent. Set these in Render → Environment.',
+      );
+    }
+
     try {
       // Determine whether to use a secure connection. Default to true for port 465.
       const secureEnv = process.env.MAIL_SECURE;
@@ -190,6 +202,8 @@ export class MailerService {
     token: string,
     ics?: string,
   ): Promise<boolean> {
+    const host = process.env.MAIL_HOST ?? 'localhost';
+    const port = process.env.MAIL_PORT ? Number(process.env.MAIL_PORT) : 1025;
     const frontend = process.env.FRONTEND_URL ?? 'http://localhost:3000';
     // Use API_URL to build ICS download link (the API serves /v1/invitations/:token/ics).
     // Fallback: if API_URL is not set, try FRONTEND_URL + '/v1' (useful in simple dev setups),
@@ -261,7 +275,9 @@ export class MailerService {
             : typeof err === 'string'
               ? err
               : JSON.stringify(err);
-        this.logger.warn('Mailer send failed, falling back to logger', errMsg);
+        this.logger.error(
+          `Mailer SMTP send failed (${host}:${port}): ${errMsg}`,
+        );
       }
     }
 

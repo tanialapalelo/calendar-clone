@@ -203,7 +203,6 @@ export function EventForm({ initialDate, calendars, onClose, onCreate }: Props) 
     // transient flag to request meeting generation
     payload.addMeeting = addMeeting || undefined;
 
-    console.log(JSON.stringify(payload));
     onCreate(payload);
   };
 

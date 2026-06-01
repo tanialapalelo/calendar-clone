@@ -10,6 +10,15 @@ function escapeICalText(value: string): string {
     .replace(/\n/g, '\\n');
 }
 
+/** Reverse of escapeICalText — applied to values read from imported ICS files. */
+function unescapeICalText(value: string): string {
+  return value
+    .replace(/\\n/gi, '\n')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\');
+}
+
 function foldICalLine(line: string): string {
   if (line.length <= 75) return line;
   const parts: string[] = [];
@@ -92,13 +101,15 @@ export function exportEventsToICS(events: CalendarEvent[]): string {
 // Very minimal ICS parser: supports DTSTART/DTEND, SUMMARY, UID, RRULE, DESCRIPTION, LOCATION, X-COLOR.
 export function importEventsFromICS(ics: string): CalendarEvent[] {
   const events: CalendarEvent[] = [];
-  const lines = ics.split(/\r?\n/);
+  // Handle all line-ending styles: CRLF (RFC5545/Windows), LF (Unix), bare CR (old Mac).
+  // \r\n must be tested before \r so it's consumed as a unit.
+  const lines = ics.split(/\r\n|\r|\n/);
 
   const unfolded: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines) {
     if (!line) continue;
     if (/^[ \t]/.test(line) && unfolded.length) {
+      // RFC 5545 line folding: continuation line starts with SPACE or TAB
       unfolded[unfolded.length - 1] += line.slice(1);
     } else {
       unfolded.push(line);
@@ -117,7 +128,8 @@ export function importEventsFromICS(ics: string): CalendarEvent[] {
         const id = current.id ?? crypto.randomUUID();
         events.push({
           id,
-          title: current.title ?? '',
+          // Fall back to 'Untitled' so the API's @MinLength(1) validation doesn't reject it
+          title: current.title?.trim() || 'Untitled',
           start: current.start!,
           end: current.end!,
           allDay: current.allDay ?? false,
@@ -138,23 +150,22 @@ export function importEventsFromICS(ics: string): CalendarEvent[] {
     const value = raw.slice(idx + 1);
 
     if (prop === 'UID') {
-      current.id = value;
+      current.id = value.trim();
     } else if (prop.startsWith('SUMMARY')) {
-      current.title = value;
+      current.title = unescapeICalText(value);
     } else if (prop.startsWith('DESCRIPTION')) {
-      current.description = value;
+      current.description = unescapeICalText(value);
     } else if (prop.startsWith('LOCATION')) {
-      current.location = value;
+      current.location = unescapeICalText(value);
     } else if (prop === 'X-COLOR') {
       current.color = value;
     } else if (prop.startsWith('DTSTART')) {
       if (prop.indexOf('VALUE=DATE') !== -1) {
-        // all-day date only YYYYMMDD
+        // All-day: build a UTC midnight ISO string from YYYYMMDD to avoid local-tz drift
         const y = Number(value.slice(0, 4));
         const m = Number(value.slice(4, 6)) - 1;
         const d = Number(value.slice(6, 8));
-        const dStart = new Date(y, m, d, 0, 0, 0, 0);
-        current.start = format(dStart, "yyyy-MM-dd'T'00:00:00");
+        current.start = new Date(Date.UTC(y, m, d, 0, 0, 0)).toISOString();
         current.allDay = true;
       } else {
         // date-time; parse as UTC then to ISO
@@ -174,8 +185,7 @@ export function importEventsFromICS(ics: string): CalendarEvent[] {
         const y = Number(value.slice(0, 4));
         const m = Number(value.slice(4, 6)) - 1;
         const d = Number(value.slice(6, 8));
-        const dEnd = new Date(y, m, d, 0, 0, 0, 0);
-        current.end = format(dEnd, "yyyy-MM-dd'T'00:00:00");
+        current.end = new Date(Date.UTC(y, m, d, 0, 0, 0)).toISOString();
       } else {
         const iso = value.replace(/Z$/, '');
         const y = Number(iso.slice(0, 4));
