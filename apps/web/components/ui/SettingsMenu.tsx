@@ -51,8 +51,23 @@ export function SettingsMenu(props: {
         <SettingsIcon size={18} className="text-gray-600 dark:text-gray-300" />
       </button>
 
+      {/* File input rendered unconditionally so it stays in DOM when user picks a file.
+          If it lived inside {open && ...}, closing the dropdown would unmount it before
+          the onChange fires (React 17+ detached-element events don't reach the root). */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".ics,text/calendar"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && onImportCalendar) onImportCalendar(file);
+          e.target.value = '';
+        }}
+      />
+
       {open && (
-        <div className="absolute top-10 right-0 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-gray-200 bg-white py-2 shadow-xl sm:w-56 dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute top-10 right-0 z-50 w-56 rounded-2xl border border-gray-200 bg-white py-2 shadow-xl dark:border-gray-700 dark:bg-gray-800">
           {/* Appearance section */}
           <div className="px-3 pt-1 pb-1">
             <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
@@ -65,7 +80,7 @@ export function SettingsMenu(props: {
                   type="button"
                   onClick={() => setTheme(opt.value)}
                   className={[
-                    'flex flex-1 flex-col items-center gap-1 rounded-xl border py-2 text-[11px] font-medium transition-colors',
+                    'relative flex flex-1 flex-col items-center gap-1 rounded-xl border py-2 text-[11px] font-medium transition-colors',
                     theme === opt.value
                       ? 'border-[#0B57D0] bg-blue-50 text-[#0B57D0] dark:bg-blue-900/30 dark:text-blue-300'
                       : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700',
@@ -108,18 +123,6 @@ export function SettingsMenu(props: {
             <UploadIcon size={15} className="text-gray-400" />
             Import calendar (.ics)
           </button>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".ics,text/calendar"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file && onImportCalendar) onImportCalendar(file);
-              e.target.value = '';
-            }}
-          />
         </div>
       )}
     </div>
