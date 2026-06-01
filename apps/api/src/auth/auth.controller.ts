@@ -35,6 +35,7 @@ export class AuthController {
         | 'strict'
         | 'none',
       secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
       path: '/v1/auth/google/callback',
       maxAge: STATE_TTL_MS,
     });
@@ -71,6 +72,7 @@ export class AuthController {
         | 'strict'
         | 'none',
       secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
       path: '/v1/auth/google/callback',
     });
 
@@ -84,6 +86,7 @@ export class AuthController {
         | 'strict'
         | 'none',
       secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
       path: '/',
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
@@ -102,6 +105,7 @@ export class AuthController {
         | 'strict'
         | 'none',
       secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
       path: '/',
     });
     return res.json({ ok: true });
@@ -141,6 +145,7 @@ export class AuthController {
         | 'strict'
         | 'none',
       secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
       path: '/',
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
