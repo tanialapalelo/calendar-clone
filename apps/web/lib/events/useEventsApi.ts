@@ -45,10 +45,12 @@ export function useEventsApi(range: { from: Date; to: Date }) {
   const currentUser = useCurrentUser();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mutating, setMutating] = useState(false);
   const [unauthorized, setUnauthorized] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  // silent=true skips the skeleton (used after CRUD so the grid doesn't flash)
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const data = await listEvents(range);
       setUnauthorized(false);
@@ -59,12 +61,11 @@ export function useEventsApi(range: { from: Date; to: Date }) {
         setUnauthorized(true);
         setEvents([]);
       } else {
-        // Non-auth error (network, 5xx) — keep existing events, log for debugging
         console.error('[useEventsApi] listEvents failed:', err);
         setUnauthorized(false);
       }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [range, currentUser]);
 
@@ -98,8 +99,9 @@ export function useEventsApi(range: { from: Date; to: Date }) {
   };
 
   const addEvent = useCallback(
-    async (evt: CalendarEvent) => {
+    async (evt: CalendarEvent, opts?: { silent?: boolean }) => {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!opts?.silent) setMutating(true);
       try {
         await createEvent({
           title: evt.title,
@@ -115,28 +117,51 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           recurrenceRule: normalizeRuleOnly(evt.recurrence ?? null),
           timeZone: tz,
           recurrenceTimeZone: tz,
-          // allow guests to be either string[] or { email, permissions[] }[]; pass through normalized to string[]
           guests: normalizeGuestsToStrings(coerceToGuestInputArray(evt.guests)) ?? undefined,
           notifications: evt.notifications,
           visibility: evt.visibility,
           busyStatus: evt.busyStatus,
-          // Meeting-related fields (allow frontend to request generation or supply a URL)
           addMeeting: evt.addMeeting ?? undefined,
           meetingProvider: evt.meetingProvider ?? undefined,
           meetingUrl: evt.meetingUrl ?? undefined,
           meetingData: evt.meetingData ?? undefined,
         });
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) setUnauthorized(true);
         throw err;
+      } finally {
+        if (!opts?.silent) setMutating(false);
       }
     },
     [refresh],
   );
 
+  // Import a batch of events without flashing the skeleton on every item.
+  const importEvents = useCallback(
+    async (evts: CalendarEvent[]): Promise<number> => {
+      setMutating(true);
+      let failed = 0;
+      try {
+        for (const evt of evts) {
+          try {
+            await addEvent(evt, { silent: true });
+          } catch {
+            failed++;
+          }
+        }
+        await refresh({ silent: true });
+      } finally {
+        setMutating(false);
+      }
+      return failed;
+    },
+    [addEvent, refresh],
+  );
+
   const updateEventById = useCallback(
     async (next: CalendarEvent, scope?: RecurrenceScope) => {
+      setMutating(true);
       const isInstance = !!next.isRecurringInstance && !!next.recurringEventId;
       const masterId = next.recurringEventId ?? getMasterIdFromInstanceId(next.id) ?? next.id;
       const instanceId = getInstanceId(next) ?? next.id;
@@ -159,12 +184,10 @@ export function useEventsApi(range: { from: Date; to: Date }) {
             location: next.location ?? '',
             color: next.color,
             recurrenceRule: normalizeRuleOnly(next.recurrence ?? null),
-            // allow guests with permissions (frontend passes objects) or plain strings
             guests: normalizeGuestsToStrings(coerceToGuestInputArray(next.guests)) ?? undefined,
             notifications: next.notifications,
             visibility: next.visibility,
             busyStatus: next.busyStatus,
-            // propagate meeting flags if present
             addMeeting: next.addMeeting ?? undefined,
             meetingProvider: next.meetingProvider ?? undefined,
             meetingUrl: next.meetingUrl ?? undefined,
@@ -172,10 +195,12 @@ export function useEventsApi(range: { from: Date; to: Date }) {
           },
           scope,
         );
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) setUnauthorized(true);
         throw err;
+      } finally {
+        setMutating(false);
       }
     },
     [refresh],
@@ -183,6 +208,7 @@ export function useEventsApi(range: { from: Date; to: Date }) {
 
   const removeEventById = useCallback(
     async (next: CalendarEvent | string, scope?: RecurrenceScope) => {
+      setMutating(true);
       const isInstance =
         typeof next !== 'string' && !!next.isRecurringInstance && !!next.recurringEventId;
 
@@ -204,26 +230,29 @@ export function useEventsApi(range: { from: Date; to: Date }) {
 
       try {
         await deleteEvent(String(targetId), scope);
-        await refresh();
+        await refresh({ silent: true });
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) setUnauthorized(true);
         throw err;
+      } finally {
+        setMutating(false);
       }
     },
     [refresh],
   );
 
-  // useMemo so consumers get a stable object reference when nothing changed
   return useMemo(
     () => ({
       events,
       loading,
+      mutating,
       unauthorized,
       refresh,
       addEvent,
+      importEvents,
       updateEvent: updateEventById,
       removeEvent: removeEventById,
     }),
-    [events, loading, unauthorized, refresh, addEvent, updateEventById, removeEventById],
+    [events, loading, mutating, unauthorized, refresh, addEvent, importEvents, updateEventById, removeEventById],
   );
 }
