@@ -10,7 +10,7 @@ function isUserWithEmail(user: unknown): user is { email?: string } {
   return !!user && typeof user === 'object' && 'email' in user;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL = '';
 
 // temporary widget for testing auth flow
 export function AuthWidget() {
