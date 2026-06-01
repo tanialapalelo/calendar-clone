@@ -36,15 +36,14 @@ export default function LocationAutocomplete(props: {
   const controllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
-  // Track whether the user interacted (focus or typed) to decide when to open
   const userInteractedRef = useRef(false);
-  // Suppress results/opening for a short time after a user selects a suggestion
   const suppressRef = useRef(false);
-  // Track that we recently selected so we don't auto-open until next interaction
   const recentlySelectedRef = useRef(false);
   const recentSelectTimeoutRef = useRef<number | null>(null);
-  // Block opening suggestions until a timestamp (ms). Used to prevent immediate reopen after select.
   const blockOpenUntilRef = useRef<number>(0);
+  // Tracks the exact display_name that was last selected — prevents re-fetching
+  // the same value when the parent echoes it back via the `value` prop.
+  const selectedValueRef = useRef<string>('');
 
   // Sync input when parent programmatically changes value
   useEffect(() => {
@@ -57,6 +56,15 @@ export default function LocationAutocomplete(props: {
 
   // Debounced search
   useEffect(() => {
+    // If the input matches the value we just selected, don't re-trigger a search.
+    // This prevents the suggestion list from reappearing when the parent echoes
+    // the selected display_name back as the `value` prop.
+    if (input === selectedValueRef.current && selectedValueRef.current !== '') {
+      setSuggestions([]);
+      setLoading(false);
+      return;
+    }
+
     if ((input ?? '').trim().length < minLength) {
       // No fetch needed; UI just shows nothing.
       if (controllerRef.current) {
@@ -188,7 +196,9 @@ export default function LocationAutocomplete(props: {
       timeoutRef.current = null;
     }
 
-    // Set input and propagate
+    // Set input and propagate; lock the selected value so the search effect
+    // won't re-fetch when the parent echoes it back via the `value` prop.
+    selectedValueRef.current = place.display_name;
     setInput(place.display_name);
     onChange(place.display_name);
     setOpen(false);
@@ -256,11 +266,11 @@ export default function LocationAutocomplete(props: {
         placeholder={placeholder}
         onChange={(e) => {
           const v = e.target.value;
+          // If user types something different from the selected value, allow searching again
+          if (v !== selectedValueRef.current) selectedValueRef.current = '';
           setInput(v);
           onChange(v);
-          // mark that the user typed so the dropdown may open when suggestions arrive
           userInteractedRef.current = true;
-          // any manual typing should clear recentlySelected to allow opening
           recentlySelectedRef.current = false;
           clearRecentSelectTimeout();
           if (v.trim().length < minLength) {
