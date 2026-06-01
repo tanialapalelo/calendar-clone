@@ -88,10 +88,6 @@ export class AuthService {
   /** Create or fetch a seeded demo user and issue a JWT for them.
    * Only intended for non-production demo deployments. */
   async createDemoToken() {
-    if (process.env.NODE_ENV === 'production') {
-      throw new UnauthorizedException('Demo login disabled in production');
-    }
-
     const email = 'demo@calendar-clone.local';
     const name = 'Demo User';
 
