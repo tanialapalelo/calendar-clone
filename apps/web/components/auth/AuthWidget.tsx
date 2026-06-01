@@ -11,6 +11,7 @@ function isUserWithEmail(user: unknown): user is { email?: string } {
 }
 
 const API_URL = '';
+const AUTH_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 
 // temporary widget for testing auth flow
 export function AuthWidget() {
@@ -42,7 +43,7 @@ export function AuthWidget() {
 
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-      <a href={`${API_URL}/v1/auth/google/start`}>Sign in with Google</a>
+      <a href={`${AUTH_URL}/v1/auth/google/start`}>Sign in with Google</a>
 
       <button type="button" onClick={loadMe}>
         Who am I?

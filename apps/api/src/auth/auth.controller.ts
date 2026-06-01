@@ -22,12 +22,11 @@ const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  // Helper to determine SameSite policy. If COOKIE_SAME_SITE is explicitly
-  // provided we use it. If not provided, default to 'none' so that cookies set
-  // during cross-site OAuth flows (Google redirects) are accepted by browsers.
-  // NOTE: SameSite=None requires Secure to be true in modern browsers.
+  // Default to 'lax': the final access_token cookie is set by the Next.js
+  // frontend (same-origin), so cross-site SameSite=None is no longer needed.
+  // Lax also avoids the browser requirement that SameSite=None must have Secure.
   private cookieSameSite(): 'lax' | 'strict' | 'none' {
-    return (process.env.COOKIE_SAME_SITE ?? 'none') as
+    return (process.env.COOKIE_SAME_SITE ?? 'lax') as
       | 'lax'
       | 'strict'
       | 'none';
@@ -89,15 +88,13 @@ export class AuthController {
 
     const { jwt } = await this.auth.handleGoogleCallback(code);
 
-    const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    res.cookie(
-      cookieName,
-      jwt,
-      this.cookieBaseOptions('/', 1000 * 60 * 60 * 24 * 7),
-    );
-
+    // Redirect to the Next.js callback route which sets the cookie on the
+    // frontend domain. This avoids the cross-domain cookie problem where
+    // Render (api domain) sets a cookie that Vercel (frontend domain) can't read.
     const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
-    return res.redirect(webOrigin);
+    return res.redirect(
+      `${webOrigin}/api/auth/callback?token=${encodeURIComponent(jwt)}`,
+    );
   }
 
   @Post('logout')
@@ -126,21 +123,18 @@ export class AuthController {
     }
 
     const { jwt } = await this.auth.createDemoToken();
-    const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    // Prevent caching of the demo redirect/response to avoid 304 from caches/proxies
+
     res.setHeader(
       'Cache-Control',
       'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
     );
     res.setHeader('Pragma', 'no-cache');
 
-    res.cookie(
-      cookieName,
-      jwt,
-      this.cookieBaseOptions('/', 1000 * 60 * 60 * 24 * 7),
-    );
-
+    // Redirect to the Next.js callback route which sets the cookie on the
+    // frontend domain. Same cross-domain fix as the Google OAuth callback.
     const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
-    return res.redirect(webOrigin);
+    return res.redirect(
+      `${webOrigin}/api/auth/callback?token=${encodeURIComponent(jwt)}`,
+    );
   }
 }

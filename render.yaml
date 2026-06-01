@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: calendar-api
+    runtime: node
+    # Install all workspace deps from the monorepo root, then build the API.
+    # Running install from root is required for pnpm workspace resolution.
+    buildCommand: pnpm install --frozen-lockfile && pnpm -C apps/api run build && pnpm -C apps/api exec prisma migrate deploy
+    startCommand: pnpm -C apps/api run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      # Set these in the Render dashboard (mark as secret):
+      # DATABASE_URL, DIRECT_URL, JWT_SECRET, GOOGLE_CLIENT_ID,
+      # GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, WEB_ORIGIN,
+      # ALLOW_DEMO, COOKIE_NAME

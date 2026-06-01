@@ -2,6 +2,11 @@
 // keeping cookies first-party on the frontend domain.
 export const API_URL = '';
 
+// Direct URL to the API, used only for auth navigation links (demo, Google sign-in).
+// These must bypass the Next.js proxy so that OAuth state cookies are scoped to
+// the API domain (Render), not the frontend domain (Vercel).
+export const AUTH_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+
 // ---------------------------------------------------------------------------
 // ApiError — thrown by apiFetch on non-2xx responses.
 // Carry the HTTP status so callers can branch on 401 vs 4xx vs 5xx.
