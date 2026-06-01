@@ -22,23 +22,40 @@ const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  // Helper to determine SameSite policy. If COOKIE_SAME_SITE is explicitly
+  // provided we use it. If not provided, default to 'none' so that cookies set
+  // during cross-site OAuth flows (Google redirects) are accepted by browsers.
+  // NOTE: SameSite=None requires Secure to be true in modern browsers.
+  private cookieSameSite(): 'lax' | 'strict' | 'none' {
+    return (process.env.COOKIE_SAME_SITE ?? 'none') as
+      | 'lax'
+      | 'strict'
+      | 'none';
+  }
+
+  private cookieBaseOptions(path = '/', maxAge?: number) {
+    const opts: Record<string, unknown> = {
+      httpOnly: true,
+      sameSite: this.cookieSameSite(),
+      secure: process.env.NODE_ENV === 'production',
+      domain: process.env.COOKIE_DOMAIN ?? undefined,
+      path,
+    };
+    if (typeof maxAge === 'number') opts.maxAge = maxAge;
+    return opts;
+  }
+
   @Get('google/start')
   googleStart(@Res() res: Response) {
     // Cryptographically random, URL-safe state
     const state = randomBytes(32).toString('base64url');
 
     // Persist it in an httpOnly cookie scoped tightly to the callback path
-    res.cookie(STATE_COOKIE, state, {
-      httpOnly: true,
-      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
-        | 'lax'
-        | 'strict'
-        | 'none',
-      secure: process.env.NODE_ENV === 'production',
-      domain: process.env.COOKIE_DOMAIN ?? undefined,
-      path: '/v1/auth/google/callback',
-      maxAge: STATE_TTL_MS,
-    });
+    res.cookie(
+      STATE_COOKIE,
+      state,
+      this.cookieBaseOptions('/v1/auth/google/callback', STATE_TTL_MS),
+    );
 
     const url = this.auth.getGoogleAuthUrl(state);
     return res.redirect(url);
@@ -65,31 +82,19 @@ export class AuthController {
     }
 
     // One-shot: clear the state cookie so it can't be replayed
-    res.clearCookie(STATE_COOKIE, {
-      httpOnly: true,
-      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
-        | 'lax'
-        | 'strict'
-        | 'none',
-      secure: process.env.NODE_ENV === 'production',
-      domain: process.env.COOKIE_DOMAIN ?? undefined,
-      path: '/v1/auth/google/callback',
-    });
+    res.clearCookie(
+      STATE_COOKIE,
+      this.cookieBaseOptions('/v1/auth/google/callback'),
+    );
 
     const { jwt } = await this.auth.handleGoogleCallback(code);
 
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    res.cookie(cookieName, jwt, {
-      httpOnly: true,
-      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
-        | 'lax'
-        | 'strict'
-        | 'none',
-      secure: process.env.NODE_ENV === 'production',
-      domain: process.env.COOKIE_DOMAIN ?? undefined,
-      path: '/',
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-    });
+    res.cookie(
+      cookieName,
+      jwt,
+      this.cookieBaseOptions('/', 1000 * 60 * 60 * 24 * 7),
+    );
 
     const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
     return res.redirect(webOrigin);
@@ -98,16 +103,7 @@ export class AuthController {
   @Post('logout')
   logout(@Res() res: Response) {
     const cookieName = process.env.COOKIE_NAME ?? 'access_token';
-    res.clearCookie(cookieName, {
-      httpOnly: true,
-      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
-        | 'lax'
-        | 'strict'
-        | 'none',
-      secure: process.env.NODE_ENV === 'production',
-      domain: process.env.COOKIE_DOMAIN ?? undefined,
-      path: '/',
-    });
+    res.clearCookie(cookieName, this.cookieBaseOptions('/'));
     return res.json({ ok: true });
   }
 
@@ -138,17 +134,11 @@ export class AuthController {
     );
     res.setHeader('Pragma', 'no-cache');
 
-    res.cookie(cookieName, jwt, {
-      httpOnly: true,
-      sameSite: (process.env.COOKIE_SAME_SITE ?? 'lax') as
-        | 'lax'
-        | 'strict'
-        | 'none',
-      secure: process.env.NODE_ENV === 'production',
-      domain: process.env.COOKIE_DOMAIN ?? undefined,
-      path: '/',
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-    });
+    res.cookie(
+      cookieName,
+      jwt,
+      this.cookieBaseOptions('/', 1000 * 60 * 60 * 24 * 7),
+    );
 
     const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
     return res.redirect(webOrigin);

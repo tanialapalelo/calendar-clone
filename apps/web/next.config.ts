@@ -11,6 +11,18 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' }, // Google profile pictures
     ],
   },
+
+  // Proxy API calls under the web origin so cookies are first-party.
+  // In production on Vercel this will make requests to /v1/* go to your API
+  // (set NEXT_PUBLIC_API_URL to your Render API e.g. https://api.example.com).
+  async rewrites() {
+    return [
+      {
+        source: '/v1/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/v1/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
