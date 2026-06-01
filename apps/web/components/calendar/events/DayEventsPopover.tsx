@@ -99,7 +99,7 @@ export function DayEventsPopover({
         ref={popoverRef}
         className={[
           'fixed rounded-xl bg-[#f8fafd] p-1 text-gray-900 shadow-2xl ring-1 ring-gray-900/5 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-100/5',
-          'w-[calc(100vw-2rem)] max-w-xs sm:w-[250px]',
+          'w-[calc(100vw-2rem)] max-w-[260px] sm:w-[250px]',
         ].join(' ')}
         style={{ left: '50%', transform: 'translateX(-50%)', top: position.top }}
         role="dialog"
