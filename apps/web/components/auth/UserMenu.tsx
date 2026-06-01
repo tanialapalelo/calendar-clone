@@ -1,7 +1,7 @@
 'use client';
 
 import { useCurrentUser } from '@/lib/auth/useCurrentUser';
-import { API_URL } from '@/lib/api/client';
+import { API_URL, AUTH_URL } from '@/lib/api/client';
 import { LogOutIcon, UserIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -30,13 +30,13 @@ export function UserMenu() {
     return (
       <div className="flex items-center gap-2">
         <a
-          href={`${API_URL}/v1/auth/google/start`}
+          href={`${AUTH_URL}/v1/auth/google/start`}
           className="rounded-full border border-[#0B57D0] px-3 py-1.5 text-xs font-medium text-[#0B57D0] hover:bg-blue-50 sm:text-sm"
         >
           Sign in
         </a>
         <a
-          href={`${API_URL}/v1/auth/demo`}
+          href={`${AUTH_URL}/v1/auth/demo`}
           className="rounded-full bg-[#0B57D0] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#044dc2] sm:text-sm"
         >
           Demo

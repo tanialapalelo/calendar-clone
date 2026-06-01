@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { AUTH_URL } from '@/lib/api/client';
 
 export default function LoginPage() {
-  const href = `/v1/auth/google/start`;
+  const href = `${AUTH_URL}/v1/auth/google/start`;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F8FAFD] px-4">
@@ -56,7 +57,7 @@ export default function LoginPage() {
 
         {/* Demo button — useful for interviewers to try the app without OAuth */}
         <a
-          href="/v1/auth/demo"
+          href={`${AUTH_URL}/v1/auth/demo`}
           className="mt-3 flex w-full items-center justify-center gap-3 rounded-full bg-[#0B57D0] px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#044dc2]"
         >
           Try demo account
