@@ -14,17 +14,14 @@ export class MailerService {
   private transporter: SmtpTransporter | null = null;
 
   constructor() {
-    // Configure transporter lazily when first used. Respect env vars for prod SMTP.
     const host = process.env.MAIL_HOST ?? 'localhost';
     const port = process.env.MAIL_PORT ? Number(process.env.MAIL_PORT) : 1025;
     const user = process.env.MAIL_USER ?? undefined;
     const pass = process.env.MAIL_PASS ?? undefined;
 
-    // In test mode, use an in-memory stub transporter to avoid network I/O and
-    // asynchronous nodemailer logs that can race with Jest's teardown.
+    // In test mode, use an in-memory stub transporter to avoid network I/O.
     if (process.env.NODE_ENV === 'test') {
       this.transporter = {
-        // Return a resolved Promise here (avoid an async function with no awaits).
         sendMail: (opts: Record<string, unknown>) => {
           const rawTo = opts['to'];
           const accepted = Array.isArray(rawTo)
@@ -33,43 +30,28 @@ export class MailerService {
               ? [rawTo]
               : [];
           const messageId = `<test-${Date.now()}@test>`;
-
-          // Safely stringify `opts.from` — if it's already a string use it, if it's an
-          // object attempt JSON.stringify, otherwise fall back to a reasonable string.
           const rawFrom = opts['from'];
           let fromStr: string;
           if (typeof rawFrom === 'string') {
             fromStr = rawFrom;
           } else if (rawFrom && typeof rawFrom === 'object') {
-            try {
-              fromStr = JSON.stringify(rawFrom);
-            } catch {
-              fromStr = 'test';
-            }
+            try { fromStr = JSON.stringify(rawFrom); } catch { fromStr = 'test'; }
           } else if (rawFrom == null) {
             fromStr = 'test';
           } else if (
-            typeof rawFrom === 'number' ||
-            typeof rawFrom === 'boolean' ||
-            typeof rawFrom === 'bigint' ||
-            typeof rawFrom === 'symbol'
+            typeof rawFrom === 'number' || typeof rawFrom === 'boolean' ||
+            typeof rawFrom === 'bigint' || typeof rawFrom === 'symbol'
           ) {
-            // Safe: only call String() for non-object primitives
             fromStr = String(rawFrom);
           } else {
-            // Anything else (unexpected object-like value) -> fallback
             fromStr = 'test';
           }
-
           return Promise.resolve({
             accepted,
             rejected: [],
             response: '250 OK (test)',
             envelope: {
-              from:
-                process.env.MAIL_ENVELOPE_FROM ??
-                process.env.MAIL_USER ??
-                fromStr,
+              from: process.env.MAIL_ENVELOPE_FROM ?? process.env.MAIL_USER ?? fromStr,
               to: accepted,
             },
             messageId,
@@ -80,35 +62,32 @@ export class MailerService {
       return;
     }
 
-    // Warn clearly at startup if required env vars are missing — visible in Render logs.
-    if (
-      !process.env.MAIL_HOST ||
-      !process.env.MAIL_USER ||
-      !process.env.MAIL_PASS
-    ) {
+    // If BREVO_API_KEY is set, the HTTP API path is used — no SMTP transporter needed.
+    // Most cloud platforms (Render, Vercel, Railway) block outbound SMTP ports at the
+    // network level, so SMTP will always time-out in those environments.
+    if (process.env.BREVO_API_KEY) {
+      this.logger.log('Brevo HTTP API key detected — SMTP transporter skipped');
+      return;
+    }
+
+    // Warn clearly at startup so the issue is visible in Render/production logs.
+    if (!process.env.MAIL_HOST || !process.env.MAIL_USER || !process.env.MAIL_PASS) {
       this.logger.warn(
-        'SMTP env vars missing (MAIL_HOST / MAIL_USER / MAIL_PASS). ' +
-          'Emails will NOT be sent. Set these in Render → Environment.',
+        'No BREVO_API_KEY and no SMTP env vars (MAIL_HOST/MAIL_USER/MAIL_PASS). ' +
+          'Emails will NOT be sent. ' +
+          'Set BREVO_API_KEY in Render → Environment (recommended) or configure SMTP vars.',
       );
     }
 
     try {
-      // Determine whether to use a secure connection. Default to true for port 465.
       const secureEnv = process.env.MAIL_SECURE;
       const secure =
         typeof secureEnv !== 'undefined'
           ? secureEnv === '1' || secureEnv === 'true'
           : port === 465;
 
-      // Optional service name (e.g. 'gmail') can be provided via MAIL_SERVICE,
-      // which nodemailer will map to provider defaults.
       const service = process.env.MAIL_SERVICE ?? undefined;
-
-      // TLS options: allow opting out of strict cert validation for some environments
-      const tlsRejectUnauthorized =
-        process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
-
-      // Enable detailed nodemailer logging when DEBUG_MAILER=1
+      const tlsRejectUnauthorized = process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
       const debugMode = process.env.DEBUG_MAILER === '1';
 
       const baseOpts: Record<string, unknown> = {
@@ -116,9 +95,7 @@ export class MailerService {
         port,
         secure,
         tls: { rejectUnauthorized: tlsRejectUnauthorized },
-        // In some environments (e.g. Brevo relay on 587) requireTLS ensures STARTTLS is used
         ...(secure ? {} : { requireTLS: true }),
-        // nodemailer debug/logging flags (not a security risk; helpful for troubleshooting)
         ...(debugMode ? { logger: true, debug: true } : {}),
       };
 
@@ -132,70 +109,104 @@ export class MailerService {
         }
       ).createTransport;
       this.transporter = createTransport(opts) as SmtpTransporter;
-      // Verify transporter to surface connection problems early in dev/CI.
-      // If verification fails we will log a warning but keep the transporter so
-      // sendMail can attempt delivery and surface SMTP errors (helps troubleshooting
-      // with remote relays like Brevo).
+
       if (this.transporter?.verify) {
-        // Call verify() and attach handlers; constructor cannot be async so use promise callbacks.
         this.transporter
           .verify()
           .then(() => {
-            this.logger.debug(
-              `SMTP transporter configured (${host}:${port}, secure=${secure})`,
-            );
+            this.logger.log(`SMTP transporter ready (${host}:${port}, secure=${secure})`);
           })
           .catch((err: unknown) => {
             const errMsg =
-              err instanceof Error
-                ? err.message
-                : typeof err === 'string'
-                  ? err
-                  : JSON.stringify(err);
-            // Helpful guidance for common Gmail authentication errors
-            if (
-              errMsg.includes('535') ||
-              /BadCredentials|Invalid login/i.test(errMsg)
-            ) {
+              err instanceof Error ? err.message
+                : typeof err === 'string' ? err
+                : JSON.stringify(err);
+            if (errMsg.includes('535') || /BadCredentials|Invalid login/i.test(errMsg)) {
               this.logger.warn(
-                `SMTP transporter verify failed (${host}:${port}); authentication error detected. Will keep transporter and attempt sends; check MAIL_USER / MAIL_PASS and Brevo SMTP credentials.`,
+                `SMTP verify failed (${host}:${port}): auth error — check MAIL_USER / MAIL_PASS`,
               );
-            } else if (/self signed certificate|certificate/i.test(errMsg)) {
+            } else if (/timeout/i.test(errMsg)) {
               this.logger.warn(
-                `SMTP transporter verify failed (${host}:${port}); TLS/certificate issue: ${errMsg}. You can temporarily set MAIL_TLS_REJECT_UNAUTHORIZED=0 for dev, but do not use that in production.`,
+                `SMTP verify timed out (${host}:${port}). ` +
+                  'Cloud platforms (Render, Vercel) block outbound SMTP ports at the network level. ' +
+                  'Set BREVO_API_KEY to use the Brevo HTTP API instead (port 443, never blocked).',
               );
             } else {
-              this.logger.warn(
-                `SMTP transporter verify failed (${host}:${port}); keeping transporter and will attempt sends`,
-                errMsg,
-              );
+              this.logger.warn(`SMTP verify failed (${host}:${port}): ${errMsg}`);
             }
-            // NOTE: do not drop the transporter here; keep it so sendMail attempts to send
-            // and returns concrete SMTP errors which are more useful when diagnosing
-            // failures with external relays like Brevo.
           });
       } else {
-        this.logger.debug(
-          `SMTP transporter configured (${host}:${port}, secure=${secure})`,
-        );
+        this.logger.debug(`SMTP transporter configured (${host}:${port}, secure=${secure})`);
       }
     } catch (err: unknown) {
-      // Leave transporter null; sendInvitation will fallback to logging.
       const errMsg =
-        err instanceof Error
-          ? err.message
-          : typeof err === 'string'
-            ? err
-            : JSON.stringify(err);
-      this.logger.debug(
-        'Failed to create transporter, will log mails instead',
-        errMsg,
-      );
+        err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+      this.logger.debug('Failed to create SMTP transporter, will log mails instead', errMsg);
       this.transporter = null;
     }
   }
 
-  // Send an invitation email with an RSVP link. In dev use MailHog (localhost:1025).
+  // ─────────────────────────────────────────────────────────────────────────
+  // Brevo HTTP API (preferred in production — unaffected by SMTP port blocks)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  private async sendViaBrevoApi(params: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+    ics?: string;
+  }): Promise<boolean> {
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) return false;
+
+    const fromEmail =
+      process.env.MAIL_FROM ?? process.env.MAIL_USER ?? 'no-reply@example.com';
+    // Brevo requires sender.name to be set; derive it from the "Name <email>" format if present.
+    const fromMatch = fromEmail.match(/^"?([^"<]+)"?\s*<([^>]+)>$/);
+    const sender = fromMatch
+      ? { name: fromMatch[1].trim(), email: fromMatch[2].trim() }
+      : { name: 'Calendar', email: fromEmail };
+
+    const body: Record<string, unknown> = {
+      sender,
+      to: [{ email: params.to }],
+      subject: params.subject,
+      htmlContent: params.html,
+      textContent: params.text,
+    };
+
+    if (params.ics) {
+      body['attachment'] = [
+        {
+          content: Buffer.from(params.ics).toString('base64'),
+          name: 'invite.ics',
+        },
+      ];
+    }
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      this.logger.error(`Brevo API send failed (${res.status}): ${txt}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Public method
+  // ─────────────────────────────────────────────────────────────────────────
+
   async sendInvitation(
     ev: Partial<Event>,
     toEmail: string,
@@ -205,83 +216,70 @@ export class MailerService {
     const host = process.env.MAIL_HOST ?? 'localhost';
     const port = process.env.MAIL_PORT ? Number(process.env.MAIL_PORT) : 1025;
     const frontend = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    // Use API_URL to build ICS download link (the API serves /v1/invitations/:token/ics).
-    // Fallback: if API_URL is not set, try FRONTEND_URL + '/v1' (useful in simple dev setups),
-    // but it's recommended to set API_URL to your API origin in production.
     const apiBase = process.env.API_URL ?? `${frontend.replace(/\/$/, '')}/v1`;
-    const rsvpUrl = `${frontend.replace(/\/$/, '')}/invitations/${encodeURIComponent(
-      token,
-    )}`;
+
+    const rsvpUrl = `${frontend.replace(/\/$/, '')}/invitations/${encodeURIComponent(token)}`;
     const icsUrl = `${apiBase.replace(/\/$/, '')}/invitations/${encodeURIComponent(token)}/ics`;
     const subject = `Invitation: ${ev.title ?? 'Event'}`;
-    const text = `You're invited to ${ev.title ?? 'an event'}\n\nAccept: ${rsvpUrl}?rsvp=accepted\nTentative: ${rsvpUrl}?rsvp=tentative\nDecline: ${rsvpUrl}?rsvp=declined\n\nIf your mail client doesn't automatically add the calendar, you can download it here: ${icsUrl}`;
-    const html = `<p>You're invited to <strong>${ev.title ?? 'an event'}</strong>.</p>
-    <p><a href="${rsvpUrl}?rsvp=accepted">Accept</a> | <a href="${rsvpUrl}?rsvp=tentative">Tentative</a> | <a href="${rsvpUrl}?rsvp=declined">Decline</a></p>
-    <p>If your mail client doesn't automatically add the calendar, <a href="${icsUrl}">download the .ics</a>.</p>`;
 
-    // If we have a transporter configured, prefer SMTP sending
+    const text =
+      `You're invited to ${ev.title ?? 'an event'}\n\n` +
+      `Accept: ${rsvpUrl}?rsvp=accepted\n` +
+      `Tentative: ${rsvpUrl}?rsvp=tentative\n` +
+      `Decline: ${rsvpUrl}?rsvp=declined\n\n` +
+      `Download calendar file: ${icsUrl}`;
+
+    const html =
+      `<p>You're invited to <strong>${ev.title ?? 'an event'}</strong>.</p>` +
+      `<p>` +
+      `<a href="${rsvpUrl}?rsvp=accepted">Accept</a> | ` +
+      `<a href="${rsvpUrl}?rsvp=tentative">Tentative</a> | ` +
+      `<a href="${rsvpUrl}?rsvp=declined">Decline</a>` +
+      `</p>` +
+      `<p>If your mail client doesn't add the event automatically, ` +
+      `<a href="${icsUrl}">download the .ics file</a>.</p>`;
+
+    // 1. Brevo HTTP API — preferred in production (not blocked by cloud platforms)
+    if (process.env.BREVO_API_KEY) {
+      const sent = await this.sendViaBrevoApi({ to: toEmail, subject, html, text, ics });
+      if (sent) {
+        this.logger.log(`[MAILER] invitation sent via Brevo API to ${toEmail}`);
+        return true;
+      }
+      // Fall through to SMTP if Brevo API call itself failed (e.g. invalid key)
+    }
+
+    // 2. SMTP — works in local dev (MailHog) but blocked on most cloud platforms
     if (this.transporter) {
       try {
         const fromAddr =
-          process.env.MAIL_FROM ??
-          process.env.MAIL_USER ??
-          'no-reply@example.com';
+          process.env.MAIL_FROM ?? process.env.MAIL_USER ?? 'no-reply@example.com';
         await this.transporter.sendMail({
           from: fromAddr,
           to: toEmail,
           subject,
           text,
           html,
-          // include calendar as alternative so mail clients parse meeting request
           alternatives: ics
-            ? [
-                {
-                  content: ics,
-                  contentType: 'text/calendar; method=REQUEST; charset=utf-8',
-                  contentTransferEncoding: '7bit',
-                },
-              ]
+            ? [{ content: ics, contentType: 'text/calendar; method=REQUEST; charset=utf-8', contentTransferEncoding: '7bit' }]
             : undefined,
           attachments: ics
-            ? [
-                {
-                  content: ics,
-                  filename: 'invite.ics',
-                  contentType: 'text/calendar; charset=utf-8',
-                  contentDisposition: 'inline',
-                  contentTransferEncoding: '7bit',
-                },
-              ]
+            ? [{ content: ics, filename: 'invite.ics', contentType: 'text/calendar; charset=utf-8', contentDisposition: 'inline', contentTransferEncoding: '7bit' }]
             : undefined,
-          // calendar-specific headers that help some clients
           headers: ics
-            ? {
-                'Content-class': 'urn:content-classes:calendarmessage',
-                'X-Entity-Ref-ID': 'invite.ics',
-              }
+            ? { 'Content-class': 'urn:content-classes:calendarmessage' }
             : undefined,
         });
-        if (process.env.DEBUG_MAILER === '1')
-          this.logger.debug('[MAILER] sent invitation', {
-            to: toEmail,
-            eventId: ev.id,
-            token,
-          });
+        this.logger.log(`[MAILER] invitation sent via SMTP to ${toEmail}`);
         return true;
       } catch (err: unknown) {
         const errMsg =
-          err instanceof Error
-            ? err.message
-            : typeof err === 'string'
-              ? err
-              : JSON.stringify(err);
-        this.logger.error(
-          `Mailer SMTP send failed (${host}:${port}): ${errMsg}`,
-        );
+          err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+        this.logger.error(`Mailer SMTP send failed (${host}:${port}): ${errMsg}`);
       }
     }
 
-    // If Postmark token present, try Postmark HTTP API (no extra dependency)
+    // 3. Postmark HTTP API fallback
     const postmarkToken =
       process.env.POSTMARK_API_TOKEN ?? process.env.POSTMARK_SERVER_TOKEN;
     if (postmarkToken) {
@@ -295,52 +293,29 @@ export class MailerService {
         };
         if (ics) {
           body['Attachments'] = [
-            {
-              Name: 'invite.ics',
-              Content: Buffer.from(ics).toString('base64'),
-              ContentType: 'text/calendar; charset=utf-8',
-            },
+            { Name: 'invite.ics', Content: Buffer.from(ics).toString('base64'), ContentType: 'text/calendar; charset=utf-8' },
           ];
         }
-
         const res = await fetch('https://api.postmarkapp.com/email', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Postmark-Server-Token': postmarkToken,
-          },
+          headers: { 'Content-Type': 'application/json', 'X-Postmark-Server-Token': postmarkToken },
           body: JSON.stringify(body),
         });
-
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
-          this.logger.warn('Postmark send failed', {
-            status: res.status,
-            body: txt,
-          });
+          this.logger.warn(`Postmark send failed (${res.status}): ${txt}`);
           return false;
         }
-
-        if (process.env.DEBUG_MAILER === '1')
-          this.logger.debug('[MAILER][postmark] sent invitation', {
-            to: toEmail,
-            eventId: ev.id,
-            token,
-          });
+        this.logger.log(`[MAILER] invitation sent via Postmark to ${toEmail}`);
         return true;
       } catch (err: unknown) {
         const errMsg =
-          err instanceof Error
-            ? err.message
-            : typeof err === 'string'
-              ? err
-              : JSON.stringify(err);
-        this.logger.warn('Postmark send failed', errMsg);
-        // fallthrough to logging
+          err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+        this.logger.warn(`Postmark send failed: ${errMsg}`);
       }
     }
 
-    // Fallback: log the email (use debug-level to avoid noisy CI logs)
+    // 4. Nothing configured — log for debugging
     this.logger.debug('[MAILER STUB] sendInvitation', {
       to: toEmail,
       eventId: ev.id,
