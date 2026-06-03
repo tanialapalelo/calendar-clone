@@ -16,6 +16,7 @@ import { useCalendarNavigation } from '@/lib/hooks/useCalendarNavigation';
 import { usePopoverState } from '@/lib/hooks/usePopoverState';
 import { useToast } from '@/components/ui/Toast';
 import { useKeyboardShortcuts } from '@/lib/hooks/useKeyboardShortcuts';
+import { useSlowConnection } from '@/lib/hooks/useSlowConnection';
 
 // ---------------------------------------------------------------------------
 // CalendarPageClient
@@ -55,6 +56,9 @@ export default function CalendarPageClient() {
     loading,
     mutating,
   } = useEventsApi(range);
+
+  // True after 6 s of initial loading — signals a likely Render cold-start.
+  const isApiSlow = useSlowConnection(loading);
 
   // ── Filter events by visible calendars ─────────────────────────────────────
   const visibleEvents = useMemo(() => {
@@ -179,6 +183,28 @@ export default function CalendarPageClient() {
       {/* Thin progress bar so users know a CRUD op is in flight */}
       {mutating && (
         <div className="fixed top-0 left-0 z-[100] h-0.5 w-full animate-pulse bg-[#0B57D0]" />
+      )}
+
+      {/* Warm-up banner: shown when the API takes > 6 s to respond.
+          Render free tier cold-starts take 30–90 s. Without this, users
+          see a silent skeleton and may assume the app is broken. */}
+      {isApiSlow && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-1/2 z-[90] -translate-x-1/2 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 shadow-lg dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+        >
+          <svg
+            className="h-4 w-4 animate-spin shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+          </svg>
+          <span>API is starting up — this takes up to 60 s on the free tier. Hang tight!</span>
+        </div>
       )}
       <CalendarShell
         view={view}
