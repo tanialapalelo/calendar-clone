@@ -1,3 +1,5 @@
+// Sentry MUST be the first import so it can instrument Node internals.
+import './instrument';
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -5,9 +7,14 @@ import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Disable NestJS default logger during bootstrap so we don't get duplicate output.
+  // The Pino logger (registered in AppModule) replaces it after the app is created.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
 
   // Security headers (allow Swagger UI inline scripts in dev)
   app.use(
@@ -24,6 +31,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Consistent error envelope + request ID correlation across all routes
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   app.setGlobalPrefix('v1');
 
