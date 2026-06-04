@@ -1,35 +1,56 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-import { ApiError } from '@/lib/api/client';
+import { apiFetch, ApiError } from '@/lib/api/client';
 import { useCurrentUser } from './useCurrentUser';
 
-// Mock apiFetch so tests never hit the network.
-// The mock is reset in beforeEach so each test starts clean.
 vi.mock('@/lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api/client')>();
-  return {
-    ...actual,
-    apiFetch: vi.fn(),
-  };
+  return { ...actual, apiFetch: vi.fn() };
 });
 
-// TODO(human): import the mocked apiFetch and write the three test scenarios below.
-// Hint: import { apiFetch } from '@/lib/api/client' at the top, then cast it:
-//   const mockFetch = apiFetch as ReturnType<typeof vi.fn>;
-// In beforeEach: mockFetch.mockReset();
+const mockFetch = apiFetch as ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  mockFetch.mockReset();
+});
 
 describe('useCurrentUser', () => {
-  // TODO(human): implement the three test cases:
-  //
-  // 1. starts in "loading" state synchronously (no await needed, just check initial render)
-  //
-  // 2. transitions to "authenticated" with the user object when apiFetch resolves
-  //    with { ok: true, user: { sub: '1', email: 'test@example.com' } }
-  //
-  // 3. transitions to "unauthenticated" when apiFetch rejects with ApiError(401)
-  //    (use: new ApiError(401, 'Unauthorized'))
-  //
-  // Bonus: add a 4th test for network errors (reject with a generic Error) — should
-  // also result in "unauthenticated" (the hook intentionally falls back to unauthed)
+  it('starts in loading state synchronously before any fetch completes', () => {
+    // Never resolves — keeps the hook in loading state
+    mockFetch.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useCurrentUser());
+
+    expect(result.current.status).toBe('loading');
+  });
+
+  it('transitions to authenticated when /v1/auth/me returns a user', async () => {
+    const user = { sub: 'user-1', email: 'test@example.com', name: 'Test User' };
+    mockFetch.mockResolvedValue({ ok: true, user });
+
+    const { result } = renderHook(() => useCurrentUser());
+
+    await waitFor(() => expect(result.current.status).toBe('authenticated'));
+    if (result.current.status === 'authenticated') {
+      expect(result.current.user.email).toBe('test@example.com');
+      expect(result.current.user.sub).toBe('user-1');
+    }
+  });
+
+  it('transitions to unauthenticated when API returns 401', async () => {
+    mockFetch.mockRejectedValue(new ApiError(401, 'Unauthorized'));
+
+    const { result } = renderHook(() => useCurrentUser());
+
+    await waitFor(() => expect(result.current.status).toBe('unauthenticated'));
+  });
+
+  it('falls back to unauthenticated on any non-401 error (network failure, 5xx)', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const { result } = renderHook(() => useCurrentUser());
+
+    await waitFor(() => expect(result.current.status).toBe('unauthenticated'));
+  });
 });

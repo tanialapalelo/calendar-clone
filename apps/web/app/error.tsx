@@ -7,8 +7,7 @@ import { useEffect } from 'react';
  *
  * Renders when any component below in the route segment throws during render
  * or in an effect / event handler that wasn't caught locally.
- *
- * In production this is where we'd ship the error to Sentry (M3.3).
+ * Ships the error to Sentry when NEXT_PUBLIC_SENTRY_DSN is configured.
  */
 export default function GlobalError({
   error,
@@ -18,8 +17,10 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // TODO(M3.3): Sentry.captureException(error)
-    console.error('[GlobalError]', error);
+    // Dynamic import keeps Sentry out of the initial bundle when not configured.
+    import('@sentry/nextjs')
+      .then(({ captureException }) => captureException(error))
+      .catch(() => console.error('[GlobalError]', error));
   }, [error]);
 
   return (
