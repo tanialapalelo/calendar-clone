@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as Sentry from '@sentry/node';
+import { STATUS_CODES } from 'http';
 
 /**
  * Catches every exception (HTTP and non-HTTP) and returns a consistent
@@ -42,7 +43,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
     // Resolve the human-readable error name from the status code
-    const error = HttpStatus[statusCode] ?? 'Internal Server Error';
+    const error = STATUS_CODES[statusCode] ?? 'Internal Server Error';
 
     // Extract the message from NestJS HttpException or fall back to a safe default.
     // HttpException.getResponse() can return a string or an object with a `message` field.
