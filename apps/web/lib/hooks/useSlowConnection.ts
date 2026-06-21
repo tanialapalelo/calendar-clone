@@ -16,11 +16,16 @@ export function useSlowConnection(loading: boolean, thresholdMs = 6_000): boolea
 
   useEffect(() => {
     if (!loading) {
-      setIsSlow(false);
       return;
     }
     const timer = setTimeout(() => setIsSlow(true), thresholdMs);
-    return () => clearTimeout(timer);
+    // Runs on the next loading->false transition (or unmount) — clearing the
+    // pending timer and resetting state from the same place, rather than an
+    // unconditional setState call in the effect's setup body.
+    return () => {
+      clearTimeout(timer);
+      setIsSlow(false);
+    };
   }, [loading, thresholdMs]);
 
   return isSlow;
