@@ -20,4 +20,17 @@ describe('Health (e2e)', () => {
   it('GET /v1/db-health', async () => {
     await request(app.getHttpServer()).get('/v1/db-health').expect(200);
   });
+
+  it('GET /v1/debug-sentry returns the standard error envelope', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/v1/debug-sentry')
+      .expect(500);
+
+    expect(res.body).toMatchObject({
+      statusCode: 500,
+      error: 'Internal Server Error',
+    });
+    expect(typeof res.body.requestId).toBe('string');
+    expect(res.body.requestId.length).toBeGreaterThan(0);
+  });
 });

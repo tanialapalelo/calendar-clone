@@ -26,4 +26,11 @@ export class AppController {
     >`SELECT 1 as ok`;
     return { ok: true, db: result?.[0]?.ok === 1 };
   }
+
+  @Get('debug-sentry')
+  debugSentry(): never {
+    // Permanent diagnostic route: deliberately throws so AllExceptionsFilter
+    // reports a real event to Sentry. Safe to hit repeatedly in any environment.
+    throw new Error('Sentry test error — safe to ignore');
+  }
 }
