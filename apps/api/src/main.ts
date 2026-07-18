@@ -2,6 +2,7 @@
 import './instrument';
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { ValidationPipe } from '@nestjs/common';
@@ -13,8 +14,16 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   // Disable NestJS default logger during bootstrap so we don't get duplicate output.
   // The Pino logger (registered in AppModule) replaces it after the app is created.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
   app.useLogger(app.get(Logger));
+
+  // Render puts exactly one proxy hop in front of the app; trust it so
+  // req.ip resolves to the real client IP (not Render's proxy) — needed
+  // for the throttler's per-IP rate limit to work per-client instead of
+  // treating all traffic as a single IP.
+  app.set('trust proxy', 1);
 
   // Security headers (allow Swagger UI inline scripts in dev)
   app.use(
