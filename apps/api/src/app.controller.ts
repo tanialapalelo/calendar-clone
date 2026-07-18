@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -14,6 +15,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @SkipThrottle()
   @Get('health')
   health() {
     return { ok: true };
