@@ -24,13 +24,19 @@ describe('RemindersService', () => {
   };
 
   let service: RemindersService;
-  let prisma: { event: { findMany: jest.Mock }; eventReminderDelivery: { create: jest.Mock; deleteMany: jest.Mock } };
+  let prisma: {
+    event: { findMany: jest.Mock };
+    eventReminderDelivery: { create: jest.Mock; deleteMany: jest.Mock };
+  };
   let mailer: { sendReminder: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       event: { findMany: jest.fn().mockResolvedValue([dueEvent]) },
-      eventReminderDelivery: { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) },
+      eventReminderDelivery: {
+        create: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({}),
+      },
     };
     mailer = { sendReminder: jest.fn().mockResolvedValue(true) };
 
@@ -58,7 +64,9 @@ describe('RemindersService', () => {
   });
 
   it('skips sending when the delivery is already claimed (duplicate tick)', async () => {
-    prisma.eventReminderDelivery.create.mockRejectedValueOnce(uniqueConstraintError());
+    prisma.eventReminderDelivery.create.mockRejectedValueOnce(
+      uniqueConstraintError(),
+    );
     await service.tick(now);
     expect(mailer.sendReminder).not.toHaveBeenCalled();
   });

@@ -47,7 +47,9 @@ describe('Reminders (e2e)', () => {
         startAt,
         endAt: new Date('2026-07-19T13:00:00.000Z'),
         allDay: false,
-        notifications: [{ id: 'n1', method: 'email', amount: 30, unit: 'minutes' }],
+        notifications: [
+          { id: 'n1', method: 'email', amount: 30, unit: 'minutes' },
+        ],
       },
     });
 
@@ -77,7 +79,9 @@ describe('Reminders (e2e)', () => {
         startAt: new Date('2026-07-19T12:30:00.000Z'),
         endAt: new Date('2026-07-19T13:00:00.000Z'),
         allDay: false,
-        notifications: [{ id: 'n2', method: 'email', amount: 5, unit: 'minutes' }],
+        notifications: [
+          { id: 'n2', method: 'email', amount: 5, unit: 'minutes' },
+        ],
       },
     });
 

@@ -43,7 +43,9 @@ export function computeDueReminders(
     if (!isNotificationItem(raw) || raw.method !== 'email') continue;
 
     const anchorTime = raw.anchor === 'end' ? event.endAt : event.startAt;
-    const dueAt = new Date(anchorTime.getTime() - raw.amount * UNIT_MS[raw.unit]);
+    const dueAt = new Date(
+      anchorTime.getTime() - raw.amount * UNIT_MS[raw.unit],
+    );
     if (dueAt.getTime() <= now.getTime()) {
       due.push(raw);
     }

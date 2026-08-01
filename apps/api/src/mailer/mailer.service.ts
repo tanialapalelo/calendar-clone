@@ -35,12 +35,18 @@ export class MailerService {
           if (typeof rawFrom === 'string') {
             fromStr = rawFrom;
           } else if (rawFrom && typeof rawFrom === 'object') {
-            try { fromStr = JSON.stringify(rawFrom); } catch { fromStr = 'test'; }
+            try {
+              fromStr = JSON.stringify(rawFrom);
+            } catch {
+              fromStr = 'test';
+            }
           } else if (rawFrom == null) {
             fromStr = 'test';
           } else if (
-            typeof rawFrom === 'number' || typeof rawFrom === 'boolean' ||
-            typeof rawFrom === 'bigint' || typeof rawFrom === 'symbol'
+            typeof rawFrom === 'number' ||
+            typeof rawFrom === 'boolean' ||
+            typeof rawFrom === 'bigint' ||
+            typeof rawFrom === 'symbol'
           ) {
             fromStr = String(rawFrom);
           } else {
@@ -51,7 +57,10 @@ export class MailerService {
             rejected: [],
             response: '250 OK (test)',
             envelope: {
-              from: process.env.MAIL_ENVELOPE_FROM ?? process.env.MAIL_USER ?? fromStr,
+              from:
+                process.env.MAIL_ENVELOPE_FROM ??
+                process.env.MAIL_USER ??
+                fromStr,
               to: accepted,
             },
             messageId,
@@ -71,7 +80,11 @@ export class MailerService {
     }
 
     // Warn clearly at startup so the issue is visible in Render/production logs.
-    if (!process.env.MAIL_HOST || !process.env.MAIL_USER || !process.env.MAIL_PASS) {
+    if (
+      !process.env.MAIL_HOST ||
+      !process.env.MAIL_USER ||
+      !process.env.MAIL_PASS
+    ) {
       this.logger.warn(
         'No BREVO_API_KEY and no SMTP env vars (MAIL_HOST/MAIL_USER/MAIL_PASS). ' +
           'Emails will NOT be sent. ' +
@@ -87,7 +100,8 @@ export class MailerService {
           : port === 465;
 
       const service = process.env.MAIL_SERVICE ?? undefined;
-      const tlsRejectUnauthorized = process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
+      const tlsRejectUnauthorized =
+        process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== '0';
       const debugMode = process.env.DEBUG_MAILER === '1';
 
       const baseOpts: Record<string, unknown> = {
@@ -114,14 +128,21 @@ export class MailerService {
         this.transporter
           .verify()
           .then(() => {
-            this.logger.log(`SMTP transporter ready (${host}:${port}, secure=${secure})`);
+            this.logger.log(
+              `SMTP transporter ready (${host}:${port}, secure=${secure})`,
+            );
           })
           .catch((err: unknown) => {
             const errMsg =
-              err instanceof Error ? err.message
-                : typeof err === 'string' ? err
-                : JSON.stringify(err);
-            if (errMsg.includes('535') || /BadCredentials|Invalid login/i.test(errMsg)) {
+              err instanceof Error
+                ? err.message
+                : typeof err === 'string'
+                  ? err
+                  : JSON.stringify(err);
+            if (
+              errMsg.includes('535') ||
+              /BadCredentials|Invalid login/i.test(errMsg)
+            ) {
               this.logger.warn(
                 `SMTP verify failed (${host}:${port}): auth error — check MAIL_USER / MAIL_PASS`,
               );
@@ -132,16 +153,27 @@ export class MailerService {
                   'Set BREVO_API_KEY to use the Brevo HTTP API instead (port 443, never blocked).',
               );
             } else {
-              this.logger.warn(`SMTP verify failed (${host}:${port}): ${errMsg}`);
+              this.logger.warn(
+                `SMTP verify failed (${host}:${port}): ${errMsg}`,
+              );
             }
           });
       } else {
-        this.logger.debug(`SMTP transporter configured (${host}:${port}, secure=${secure})`);
+        this.logger.debug(
+          `SMTP transporter configured (${host}:${port}, secure=${secure})`,
+        );
       }
     } catch (err: unknown) {
       const errMsg =
-        err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
-      this.logger.debug('Failed to create SMTP transporter, will log mails instead', errMsg);
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : JSON.stringify(err);
+      this.logger.debug(
+        'Failed to create SMTP transporter, will log mails instead',
+        errMsg,
+      );
       this.transporter = null;
     }
   }
@@ -233,7 +265,9 @@ export class MailerService {
     if (this.transporter) {
       try {
         const fromAddr =
-          process.env.MAIL_FROM ?? process.env.MAIL_USER ?? 'no-reply@example.com';
+          process.env.MAIL_FROM ??
+          process.env.MAIL_USER ??
+          'no-reply@example.com';
         await this.transporter.sendMail({
           from: fromAddr,
           to,
@@ -241,10 +275,24 @@ export class MailerService {
           text,
           html,
           alternatives: ics
-            ? [{ content: ics, contentType: 'text/calendar; method=REQUEST; charset=utf-8', contentTransferEncoding: '7bit' }]
+            ? [
+                {
+                  content: ics,
+                  contentType: 'text/calendar; method=REQUEST; charset=utf-8',
+                  contentTransferEncoding: '7bit',
+                },
+              ]
             : undefined,
           attachments: ics
-            ? [{ content: ics, filename: 'invite.ics', contentType: 'text/calendar; charset=utf-8', contentDisposition: 'inline', contentTransferEncoding: '7bit' }]
+            ? [
+                {
+                  content: ics,
+                  filename: 'invite.ics',
+                  contentType: 'text/calendar; charset=utf-8',
+                  contentDisposition: 'inline',
+                  contentTransferEncoding: '7bit',
+                },
+              ]
             : undefined,
           headers: ics
             ? { 'Content-class': 'urn:content-classes:calendarmessage' }
@@ -254,8 +302,14 @@ export class MailerService {
         return true;
       } catch (err: unknown) {
         const errMsg =
-          err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
-        this.logger.error(`Mailer SMTP send failed (${host}:${port}): ${errMsg}`);
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : JSON.stringify(err);
+        this.logger.error(
+          `Mailer SMTP send failed (${host}:${port}): ${errMsg}`,
+        );
       }
     }
 
@@ -273,12 +327,19 @@ export class MailerService {
         };
         if (ics) {
           body['Attachments'] = [
-            { Name: 'invite.ics', Content: Buffer.from(ics).toString('base64'), ContentType: 'text/calendar; charset=utf-8' },
+            {
+              Name: 'invite.ics',
+              Content: Buffer.from(ics).toString('base64'),
+              ContentType: 'text/calendar; charset=utf-8',
+            },
           ];
         }
         const res = await fetch('https://api.postmarkapp.com/email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Postmark-Server-Token': postmarkToken },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Postmark-Server-Token': postmarkToken,
+          },
           body: JSON.stringify(body),
         });
         if (!res.ok) {
@@ -290,7 +351,11 @@ export class MailerService {
         return true;
       } catch (err: unknown) {
         const errMsg =
-          err instanceof Error ? err.message : typeof err === 'string' ? err : JSON.stringify(err);
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+              ? err
+              : JSON.stringify(err);
         this.logger.warn(`Postmark send failed: ${errMsg}`);
       }
     }
@@ -338,7 +403,13 @@ export class MailerService {
   }
 
   async sendReminder(
-    event: { id: string; title: string; startAt: Date; endAt: Date; location: string | null },
+    event: {
+      id: string;
+      title: string;
+      startAt: Date;
+      endAt: Date;
+      location: string | null;
+    },
     toEmail: string,
     notification: { amount: number; unit: string; anchor?: string },
   ): Promise<boolean> {
