@@ -45,9 +45,10 @@ export class JwtCookieGuard implements CanActivate {
 
       if (process.env.DEBUG_AUTH === 'true') {
         try {
-          // eslint-disable-next-line no-console
           console.log('Auth debug: decoded token', decoded);
-        } catch {}
+        } catch {
+          // ignore console failures in debug logging
+        }
       }
 
       if (!isAuthUser(decoded)) {
@@ -58,10 +59,9 @@ export class JwtCookieGuard implements CanActivate {
       return true;
     } catch (err) {
       if (process.env.DEBUG_AUTH === 'true') {
-        // eslint-disable-next-line no-console
         console.error(
           'Auth debug: token verification failed',
-          err?.message ?? err,
+          err instanceof Error ? err.message : err,
         );
       }
       throw new UnauthorizedException('Invalid or expired token');

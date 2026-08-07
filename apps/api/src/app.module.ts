@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import type { IncomingMessage } from 'http';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -20,20 +21,25 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
     LoggerModule.forRoot({
       pinoHttp: {
         // Attach the request ID (set by RequestIdMiddleware) to every log line.
-        // Cast to any because nestjs-pino's IncomingMessage type doesn't include
-        // our custom `id` property — the value is always set by the middleware.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        genReqId: (req: any) => (req.id as string) ?? '',
+        // nestjs-pino's IncomingMessage type doesn't include our custom `id`
+        // property, so we type just the shape we need instead of using `any`.
+        genReqId: (req: IncomingMessage & { id?: string }) => req.id ?? '',
         // Redact sensitive headers from logs
         redact: ['req.headers.authorization', 'req.headers.cookie'],
         // Don't log favicon or health check noise
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        autoLogging: { ignore: (req: any) => req.url === '/v1/health' },
+        autoLogging: {
+          ignore: (req: IncomingMessage) => req.url === '/v1/health',
+        },
         transport:
           process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
+            ? {
+                target: 'pino-pretty',
+                options: { colorize: true, singleLine: true },
+              }
             : undefined,
-        level: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+        level:
+          process.env.LOG_LEVEL ??
+          (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
       },
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
