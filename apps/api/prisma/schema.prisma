@@ -71,6 +71,7 @@ model Event {
   recurrenceExceptions EventRecurrenceException[]
   attendees            EventAttendee[]
   invitations          Invitation[]
+  reminderDeliveries   EventReminderDelivery[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -145,4 +146,16 @@ model EventRecurrenceException {
 
   @@unique([eventId, originalStartAt])
   @@index([eventId, originalStartAt])
+}
+
+model EventReminderDelivery {
+  id             String   @id @default(cuid())
+  eventId        String
+  notificationId String // NotificationItem.id from Event.notifications
+  sentAt         DateTime @default(now())
+
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, notificationId])
+  @@index([eventId])
 }
